@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Qt Designer backup
+*.ui.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# env
+.env
+*.log
