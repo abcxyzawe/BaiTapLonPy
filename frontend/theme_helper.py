@@ -29,13 +29,13 @@ COLORS = {
 SIDEBAR_ACTIVE = (
     'QPushButton { background: rgba(0,32,96,0.08); color: #002060; '
     'border: none; border-radius: 8px; text-align: left; '
-    'padding-left: 46px; font-size: 13px; font-weight: bold; }'
+    'padding-left: 38px; font-size: 12px; font-weight: bold; }'
 )
 
 SIDEBAR_NORMAL = (
     'QPushButton { background: transparent; color: #4a5568; '
     'border: none; border-radius: 8px; text-align: left; '
-    'padding-left: 46px; font-size: 13px; } '
+    'padding-left: 38px; font-size: 12px; } '
     'QPushButton:hover { background: #edf2f7; }'
 )
 

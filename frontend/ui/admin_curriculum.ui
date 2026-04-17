@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AdminCurriculum</class>
+ <widget class="QWidget" name="AdminCurriculum">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1250</width><height>720</height></rect></property>
+  <property name="minimumSize"><size><width>1250</width><height>720</height></size></property>
+  <property name="windowTitle"><string>EAUT - Khung chuong trinh</string></property>
+  <property name="styleSheet"><string notr="true">QWidget#AdminCurriculum { background: #edf2f7; }</string></property>
+
+  <!-- SIDEBAR (bo qua boi Python) -->
+  <widget class="QFrame" name="sidebar">
+   <property name="geometry"><rect><x>0</x><y>0</y><width>230</width><height>720</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#sidebar { background: #ffffff; border-right: 1px solid #d2d6dc; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+  </widget>
+
+  <!-- CONTENT -->
+  <widget class="QFrame" name="contentArea">
+   <property name="geometry"><rect><x>230</x><y>0</y><width>1020</width><height>720</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#contentArea { background: #edf2f7; border: none; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+   <!-- Header -->
+   <widget class="QFrame" name="headerBar">
+    <property name="geometry"><rect><x>0</x><y>0</y><width>1020</width><height>56</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="lblPageTitle">
+     <property name="geometry"><rect><x>25</x><y>0</y><width>350</width><height>56</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Quản lý khung chương trình</string></property>
+     <property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property>
+    </widget>
+    <widget class="QPushButton" name="btnAddCurr">
+     <property name="geometry"><rect><x>835</x><y>12</y><width>160</width><height>32</height></rect></property>
+     <property name="styleSheet"><string notr="true">QPushButton { background: #002060; color: white; border: none; border-radius: 6px; padding: 0 14px; font-size: 12px; font-weight: bold; } QPushButton:hover { background: #001545; }</string></property>
+     <property name="text"><string>+ Thêm môn học</string></property>
+     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+    </widget>
+   </widget>
+
+   <!-- Filter Bar -->
+   <widget class="QFrame" name="filterBar">
+    <property name="geometry"><rect><x>25</x><y>68</y><width>970</width><height>50</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#filterBar { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="iconSearchCurr">
+     <property name="geometry"><rect><x>18</x><y>16</y><width>18</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+     <property name="text"><string/></property>
+     <property name="scaledContents"><bool>true</bool></property>
+    </widget>
+    <widget class="QLineEdit" name="txtSearchCurr">
+     <property name="geometry"><rect><x>40</x><y>10</y><width>220</width><height>30</height></rect></property>
+     <property name="placeholderText"><string>Tìm môn học...</string></property>
+    </widget>
+    <widget name="cboNganh" class="QComboBox">
+     <property name="geometry"><rect><x>280</x><y>10</y><width>200</width><height>30</height></rect></property>
+     <item><property name="text"><string>Tất cả ngành</string></property></item>
+     <item><property name="text"><string>Công nghệ thông tin</string></property></item>
+     <item><property name="text"><string>Kỹ thuật phần mềm</string></property></item>
+     <item><property name="text"><string>Hệ thống thông tin</string></property></item>
+    </widget>
+    <widget name="cboHocKy" class="QComboBox">
+     <property name="geometry"><rect><x>500</x><y>10</y><width>160</width><height>30</height></rect></property>
+     <item><property name="text"><string>Tất cả học kỳ</string></property></item>
+     <item><property name="text"><string>Học kỳ 1</string></property></item>
+     <item><property name="text"><string>Học kỳ 2</string></property></item>
+     <item><property name="text"><string>Học kỳ 3</string></property></item>
+     <item><property name="text"><string>Học kỳ 4</string></property></item>
+     <item><property name="text"><string>Học kỳ 5</string></property></item>
+     <item><property name="text"><string>Học kỳ 6</string></property></item>
+     <item><property name="text"><string>Học kỳ 7</string></property></item>
+     <item><property name="text"><string>Học kỳ 8</string></property></item>
+    </widget>
+    <widget name="cboLoai" class="QComboBox">
+     <property name="geometry"><rect><x>680</x><y>10</y><width>160</width><height>30</height></rect></property>
+     <item><property name="text"><string>Tất cả loại</string></property></item>
+     <item><property name="text"><string>Bắt buộc</string></property></item>
+     <item><property name="text"><string>Tự chọn</string></property></item>
+     <item><property name="text"><string>Đại cương</string></property></item>
+    </widget>
+   </widget>
+
+   <!-- Curriculum Table -->
+   <widget class="QFrame" name="currFrame">
+    <property name="geometry"><rect><x>25</x><y>130</y><width>970</width><height>570</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#currFrame { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblCurrTitle">
+     <property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Danh sách môn học trong chương trình</string></property>
+    </widget>
+
+    <widget class="QPushButton" name="btnExportCurr">
+     <property name="geometry"><rect><x>836</x><y>10</y><width>120</width><height>28</height></rect></property>
+     <property name="styleSheet"><string notr="true">QPushButton { background: white; color: #002060; border: 1px solid #002060; border-radius: 4px; padding: 4px 12px; font-size: 11px; } QPushButton:hover { background: #002060; color: white; }</string></property>
+     <property name="text"><string>Xuất Excel</string></property>
+     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+    </widget>
+
+    <widget class="QTableWidget" name="tblCurriculum">
+     <property name="geometry"><rect><x>12</x><y>44</y><width>946</width><height>510</height></rect></property>
+     <property name="alternatingRowColors"><bool>true</bool></property>
+     <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+     <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+     <property name="showGrid"><bool>false</bool></property>
+     <property name="columnCount"><number>8</number></property>
+     <column><property name="text"><string>STT</string></property></column>
+     <column><property name="text"><string>Mã HP</string></property></column>
+     <column><property name="text"><string>Tên học phần</string></property></column>
+     <column><property name="text"><string>TC</string></property></column>
+     <column><property name="text"><string>Loại</string></property></column>
+     <column><property name="text"><string>Học kỳ</string></property></column>
+     <column><property name="text"><string>Tiên quyết</string></property></column>
+     <column><property name="text"><string>Thao tác</string></property></column>
+    </widget>
+   </widget>
+
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
