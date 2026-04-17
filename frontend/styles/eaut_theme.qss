@@ -4,7 +4,11 @@
 /* nen chinh */
 QWidget#MainWindow, QWidget#DashboardStudent, QWidget#RegisterCourse, QWidget#Schedule,
 QWidget#Grades, QWidget#Tuition, QWidget#ExamSchedule,
-QWidget#Notifications, QWidget#Profile, QWidget#LoginWindow {
+QWidget#Notifications, QWidget#Profile, QWidget#LoginWindow,
+QWidget#CartPreview, QWidget#TeacherReview,
+QWidget#AdminDashboard, QWidget#AdminCourses, QWidget#AdminStudents,
+QWidget#AdminSemester, QWidget#AdminStats,
+QWidget#AdminCurriculum, QWidget#AdminAudit {
     background: #edf2f7;
     font-family: 'Segoe UI';
 }
@@ -28,7 +32,13 @@ QFrame#calendarFrame, QFrame#legendFrame, QFrame#gpaCard1,
 QFrame#gpaCard2, QFrame#gpaCard3, QFrame#avatarCard,
 QFrame#infoCard, QFrame#contactCard, QFrame#debtCard,
 QFrame#paidCard, QFrame#detailFrame, QFrame#historyFrame,
-QFrame#examFrame {
+QFrame#examFrame, QFrame#payFrame,
+QFrame#statCard1, QFrame#statCard2, QFrame#statCard3, QFrame#statCard4,
+QFrame#topCoursesFrame, QFrame#recentFrame, QFrame#semesterFrame,
+QFrame#chartFrame, QFrame#deptFrame, QFrame#classFrame,
+QFrame#summaryCard1, QFrame#summaryCard2, QFrame#summaryCard3,
+QFrame#statusCard, QFrame#previewFrame, QFrame#reviewFrame,
+QFrame#currFrame, QFrame#auditFrame {
     background: #ffffff;
     border: 1px solid #d2d6dc;
     border-radius: 10px;
