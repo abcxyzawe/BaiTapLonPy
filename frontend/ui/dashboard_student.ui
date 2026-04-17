@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DashboardStudent</class>
+ <widget class="QWidget" name="DashboardStudent">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1100</width><height>700</height></rect></property>
+  <property name="minimumSize"><size><width>1100</width><height>700</height></size></property>
+  <property name="windowTitle"><string>EAUT - Dashboard Sinh viên</string></property>
+  <property name="styleSheet"><string notr="true">QWidget#DashboardStudent { background: #edf2f7; }</string></property>
+
+  <!-- ===== SIDEBAR ===== -->
+  <widget class="QFrame" name="sidebar">
+   <property name="geometry"><rect><x>0</x><y>0</y><width>230</width><height>700</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#sidebar { background: #ffffff; border-right: 1px solid #d2d6dc; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+   <!-- Logo + ten truong -->
+   <widget class="QLabel" name="lblSidebarLogo">
+    <property name="geometry"><rect><x>20</x><y>20</y><width>42</width><height>42</height></rect></property>
+    <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+    <property name="text"><string/></property>
+    <property name="scaledContents"><bool>true</bool></property>
+   </widget>
+
+   <widget class="QLabel" name="lblSidebarSchool">
+    <property name="geometry"><rect><x>68</x><y>20</y><width>150</width><height>20</height></rect></property>
+    <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 13px; font-weight: bold; background: transparent;</string></property>
+    <property name="text"><string>EAUT</string></property>
+   </widget>
+   <widget class="QLabel" name="lblSidebarSub">
+    <property name="geometry"><rect><x>68</x><y>40</y><width>150</width><height>16</height></rect></property>
+    <property name="styleSheet"><string notr="true">color: #718096; font-size: 11px; background: transparent;</string></property>
+    <property name="text"><string>Đăng ký khóa học</string></property>
+   </widget>
+
+   <widget class="QFrame" name="sepTop">
+    <property name="geometry"><rect><x>15</x><y>74</y><width>200</width><height>1</height></rect></property>
+    <property name="styleSheet"><string notr="true">background: #d2d6dc;</string></property>
+    <property name="frameShape"><enum>QFrame::HLine</enum></property>
+   </widget>
+
+   <!-- Menu -->
+   <widget class="QPushButton" name="btnHome">
+    <property name="geometry"><rect><x>10</x><y>86</y><width>210</width><height>38</height></rect></property>
+    <property name="styleSheet"><string notr="true">QPushButton { background: rgba(0,32,96,0.08); color: #002060; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; font-weight: bold; }</string></property>
+    <property name="text"><string>Trang chủ</string></property>
+    <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+   </widget>
+   <widget class="QLabel" name="iconHome">
+    <property name="geometry"><rect><x>24</x><y>95</y><width>18</width><height>18</height></rect></property>
+    <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+    <property name="text"><string/></property>
+    <property name="scaledContents"><bool>true</bool></property>
+   </widget>
+
+   <widget class="QLabel" name="iconRegister">
+    <property name="geometry"><rect><x>24</x><y>137</y><width>18</width><height>18</height></rect></property>
+    <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+    <property name="text"><string/></property>
+    <property name="scaledContents"><bool>true</bool></property>
+   </widget>
+   <widget class="QPushButton" name="btnRegister">
+    <property name="geometry"><rect><x>10</x><y>128</y><width>210</width><height>38</height></rect></property>
+    <property name="styleSheet"><string notr="true">QPushButton { background: transparent; color: #4a5568; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; } QPushButton:hover { background: #edf2f7; }</string></property>
+    <property name="text"><string>Đăng ký khóa học</string></property>
+    <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+   </widget>
+
+   <widget class="QLabel" name="iconSchedule">
+    <property name="geometry"><rect><x>24</x><y>179</y><width>18</width><height>18</height></rect></property>
+    <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+    <property name="text"><string/></property>
+    <property name="scaledContents"><bool>true</bool></property>
+   </widget>
+   <widget class="QPushButton" name="btnSchedule">
+    <property name="geometry"><rect><x>10</x><y>170</y><width>210</width><height>38</height></rect></property>
+    <property name="styleSheet"><string notr="true">QPushButton { background: transparent; color: #4a5568; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; } QPushButton:hover { background: #edf2f7; }</string></property>
+    <property name="text"><string>Lịch học</string></property>
+    <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+   </widget>
+
+   <widget class="QLabel" name="iconGrades">
+    <property name="geometry"><rect><x>24</x><y>221</y><width>18</width><height>18</height></rect></property>
+    <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+    <property name="text"><string/></property>
+    <property name="scaledContents"><bool>true</bool></property>
+   </widget>
+   <widget class="QPushButton" name="btnGrades">
+    <property name="geometry"><rect><x>10</x><y>212</y><width>210</width><height>38</height></rect></property>
+    <property name="styleSheet"><string notr="true">QPushButton { background: transparent; color: #4a5568; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; } QPushButton:hover { background: #edf2f7; }</string></property>
+    <property name="text"><string>Xem điểm</string></property>
+    <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+   </widget>
+
+   <widget class="QLabel" name="iconProfile">
+    <property name="geometry"><rect><x>24</x><y>263</y><width>18</width><height>18</height></rect></property>
+    <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+    <property name="text"><string/></property>
+    <property name="scaledContents"><bool>true</bool></property>
+   </widget>
+   <widget class="QPushButton" name="btnProfile">
+    <property name="geometry"><rect><x>10</x><y>254</y><width>210</width><height>38</height></rect></property>
+    <property name="styleSheet"><string notr="true">QPushButton { background: transparent; color: #4a5568; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; } QPushButton:hover { background: #edf2f7; }</string></property>
+    <property name="text"><string>Thông tin cá nhân</string></property>
+    <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+   </widget>
+
+   <!-- User + logout duoi cung -->
+   <widget class="QFrame" name="sepBottom">
+    <property name="geometry"><rect><x>15</x><y>610</y><width>200</width><height>1</height></rect></property>
+    <property name="styleSheet"><string notr="true">background: #d2d6dc;</string></property>
+    <property name="frameShape"><enum>QFrame::HLine</enum></property>
+   </widget>
+
+   <widget class="QLabel" name="lblAvatar">
+    <property name="geometry"><rect><x>15</x><y>625</y><width>38</width><height>38</height></rect></property>
+    <property name="styleSheet"><string notr="true">background: rgba(0,32,96,0.08); border-radius: 19px; color: #002060; font-size: 13px; font-weight: bold;</string></property>
+    <property name="text"><string>NA</string></property>
+    <property name="alignment"><set>Qt::AlignCenter</set></property>
+   </widget>
+   <widget class="QLabel" name="lblStudentName">
+    <property name="geometry"><rect><x>60</x><y>626</y><width>110</width><height>17</height></rect></property>
+    <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 12px; font-weight: bold; background: transparent;</string></property>
+    <property name="text"><string>Nguyễn Văn A</string></property>
+   </widget>
+   <widget class="QLabel" name="lblStudentId">
+    <property name="geometry"><rect><x>60</x><y>644</y><width>110</width><height>15</height></rect></property>
+    <property name="styleSheet"><string notr="true">color: #718096; font-size: 10px; background: transparent;</string></property>
+    <property name="text"><string>MSV: 2024001</string></property>
+   </widget>
+
+   <widget class="QLabel" name="iconLogout">
+    <property name="geometry"><rect><x>191</x><y>635</y><width>18</width><height>18</height></rect></property>
+    <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+    <property name="text"><string/></property>
+    <property name="scaledContents"><bool>true</bool></property>
+   </widget>
+   <widget class="QPushButton" name="btnLogout">
+    <property name="geometry"><rect><x>183</x><y>627</y><width>34</width><height>34</height></rect></property>
+    <property name="styleSheet"><string notr="true">QPushButton { background: transparent; border: none; } QPushButton:hover { background: #fce8e6; border-radius: 8px; }</string></property>
+    <property name="text"><string/></property>
+    <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+    <property name="toolTip"><string>Đăng xuất</string></property>
+   </widget>
+  </widget>
+
+  <!-- ===== CONTENT ===== -->
+  <widget class="QFrame" name="contentArea">
+   <property name="geometry"><rect><x>230</x><y>0</y><width>870</width><height>700</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#contentArea { background: #edf2f7; border: none; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+   <!-- HEADER don gian -->
+   <widget class="QFrame" name="headerBar">
+    <property name="geometry"><rect><x>0</x><y>0</y><width>870</width><height>56</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblPageTitle">
+     <property name="geometry"><rect><x>25</x><y>0</y><width>300</width><height>56</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Trang chủ</string></property>
+     <property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property>
+    </widget>
+
+    <widget class="QLabel" name="lblSemester">
+     <property name="geometry"><rect><x>500</x><y>0</y><width>350</width><height>56</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Học kỳ 2 - Năm học 2025-2026</string></property>
+     <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
+    </widget>
+   </widget>
+
+   <!-- WELCOME -->
+   <widget class="QFrame" name="welcomeCard">
+    <property name="geometry"><rect><x>25</x><y>72</y><width>820</width><height>68</height></rect></property>
+    <property name="styleSheet">
+     <string notr="true">QFrame#welcomeCard { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string>
+    </property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblWelcome">
+     <property name="geometry"><rect><x>20</x><y>10</y><width>400</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Xin chào, Nguyễn Văn A</string></property>
+    </widget>
+
+    <widget class="QLabel" name="lblProgressLabel">
+     <property name="geometry"><rect><x>20</x><y>36</y><width>200</width><height>14</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #718096; font-size: 11px; background: transparent;</string></property>
+     <property name="text"><string>Đã đăng ký 15 / 25 tín chỉ</string></property>
+    </widget>
+
+    <widget class="QProgressBar" name="progressCredits">
+     <property name="geometry"><rect><x>20</x><y>54</y><width>200</width><height>5</height></rect></property>
+     <property name="styleSheet">
+      <string notr="true">
+       QProgressBar { background: #d2d6dc; border: none; border-radius: 2px; }
+       QProgressBar::chunk { background: #002060; border-radius: 2px; }
+      </string>
+     </property>
+     <property name="value"><number>60</number></property>
+     <property name="textVisible"><bool>false</bool></property>
+    </widget>
+   </widget>
+
+   <!-- 3 STAT CARDS -->
+   <widget class="QFrame" name="card1">
+    <property name="geometry"><rect><x>25</x><y>156</y><width>262</width><height>85</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#card1 { background: white; border: 1px solid #d2d6dc; border-radius: 12px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="iconStat1">
+     <property name="geometry"><rect><x>18</x><y>20</y><width>42</width><height>42</height></rect></property>
+     <property name="styleSheet"><string notr="true">background: rgba(0,32,96,0.08); border-radius: 10px;</string></property>
+     <property name="text"><string/></property>
+    </widget>
+    <widget class="QLabel" name="iconStat1Img">
+     <property name="geometry"><rect><x>29</x><y>31</y><width>20</width><height>20</height></rect></property>
+     <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+     <property name="text"><string/></property>
+     <property name="scaledContents"><bool>true</bool></property>
+    </widget>
+    <widget class="QLabel" name="lblStatCourses">
+     <property name="geometry"><rect><x>72</x><y>14</y><width>170</width><height>30</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 24px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>5</string></property>
+    </widget>
+    <widget class="QLabel" name="lblStatCoursesLabel">
+     <property name="geometry"><rect><x>72</x><y>48</y><width>170</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Khóa học đã đăng ký</string></property>
+    </widget>
+   </widget>
+
+   <widget class="QFrame" name="card2">
+    <property name="geometry"><rect><x>304</x><y>156</y><width>262</width><height>85</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#card2 { background: white; border: 1px solid #d2d6dc; border-radius: 12px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="iconStat2">
+     <property name="geometry"><rect><x>18</x><y>20</y><width>42</width><height>42</height></rect></property>
+     <property name="styleSheet"><string notr="true">background: #e6f4ea; border-radius: 10px;</string></property>
+     <property name="text"><string/></property>
+    </widget>
+    <widget class="QLabel" name="iconStat2Img">
+     <property name="geometry"><rect><x>29</x><y>31</y><width>20</width><height>20</height></rect></property>
+     <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+     <property name="text"><string/></property>
+     <property name="scaledContents"><bool>true</bool></property>
+    </widget>
+    <widget class="QLabel" name="lblStatCredits">
+     <property name="geometry"><rect><x>72</x><y>14</y><width>170</width><height>30</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 24px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>15</string></property>
+    </widget>
+    <widget class="QLabel" name="lblStatCreditsLabel">
+     <property name="geometry"><rect><x>72</x><y>48</y><width>170</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Tín chỉ đã đăng ký</string></property>
+    </widget>
+   </widget>
+
+   <widget class="QFrame" name="card3">
+    <property name="geometry"><rect><x>583</x><y>156</y><width>262</width><height>85</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#card3 { background: white; border: 1px solid #d2d6dc; border-radius: 12px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="iconStat3">
+     <property name="geometry"><rect><x>18</x><y>20</y><width>42</width><height>42</height></rect></property>
+     <property name="styleSheet"><string notr="true">background: #fef7e0; border-radius: 10px;</string></property>
+     <property name="text"><string/></property>
+    </widget>
+    <widget class="QLabel" name="iconStat3Img">
+     <property name="geometry"><rect><x>29</x><y>31</y><width>20</width><height>20</height></rect></property>
+     <property name="styleSheet"><string notr="true">background: transparent;</string></property>
+     <property name="text"><string/></property>
+     <property name="scaledContents"><bool>true</bool></property>
+    </widget>
+    <widget class="QLabel" name="lblStatRemaining">
+     <property name="geometry"><rect><x>72</x><y>14</y><width>170</width><height>30</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 24px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>10</string></property>
+    </widget>
+    <widget class="QLabel" name="lblStatRemainingLabel">
+     <property name="geometry"><rect><x>72</x><y>48</y><width>170</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Tín chỉ còn lại</string></property>
+    </widget>
+   </widget>
+
+   <!-- BANG -->
+   <widget class="QFrame" name="tableFrame">
+    <property name="geometry"><rect><x>25</x><y>258</y><width>820</width><height>426</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#tableFrame { background: white; border: 1px solid #d2d6dc; border-radius: 12px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblTableTitle">
+     <property name="geometry"><rect><x>22</x><y>14</y><width>300</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Khóa học đã đăng ký</string></property>
+    </widget>
+
+    <widget class="QTableWidget" name="tblCourses">
+     <property name="geometry"><rect><x>12</x><y>44</y><width>796</width><height>370</height></rect></property>
+     <property name="styleSheet">
+      <string notr="true">
+       QTableWidget { border: none; font-size: 12px; background: white; alternate-background-color: #f7fafc; selection-background-color: rgba(0,32,96,0.08); selection-color: #002060; }
+       QTableWidget::item { padding: 10px 8px; border-bottom: 1px solid #edf2f7; }
+       QHeaderView::section { background: white; color: #4a5568; font-weight: bold; padding: 10px 8px; border: none; border-bottom: 2px solid #d2d6dc; font-size: 12px; }
+      </string>
+     </property>
+     <property name="alternatingRowColors"><bool>true</bool></property>
+     <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+     <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+     <property name="showGrid"><bool>false</bool></property>
+     <property name="columnCount"><number>6</number></property>
+     <column><property name="text"><string>Mã KH</string></property></column>
+     <column><property name="text"><string>Tên khóa học</string></property></column>
+     <column><property name="text"><string>Tín chỉ</string></property></column>
+     <column><property name="text"><string>Giảng viên</string></property></column>
+     <column><property name="text"><string>Lịch học</string></property></column>
+     <column><property name="text"><string>Trạng thái</string></property></column>
+    </widget>
+   </widget>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

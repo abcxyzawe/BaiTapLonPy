@@ -1,0 +1,131 @@
+/* === EAUT Theme - Dong A University === */
+/* palette: navy #002060, gold #b8860b, green #276749, warm gray #4a5568 */
+
+/* nen chinh */
+QWidget#MainWindow, QWidget#DashboardStudent, QWidget#RegisterCourse, QWidget#Schedule,
+QWidget#Grades, QWidget#Tuition, QWidget#ExamSchedule,
+QWidget#Notifications, QWidget#Profile, QWidget#LoginWindow {
+    background: #edf2f7;
+    font-family: 'Segoe UI';
+}
+
+/* sidebar */
+QFrame#sidebar {
+    background: #ffffff;
+    border-right: 1px solid #d2d6dc;
+}
+
+/* header */
+QFrame#headerBar {
+    background: #ffffff;
+    border-bottom: 1px solid #d2d6dc;
+}
+
+/* cards chung */
+QFrame#welcomeCard, QFrame#card1, QFrame#card2, QFrame#card3,
+QFrame#tableFrame, QFrame#filterBar, QFrame#scheduleFrame,
+QFrame#calendarFrame, QFrame#legendFrame, QFrame#gpaCard1,
+QFrame#gpaCard2, QFrame#gpaCard3, QFrame#avatarCard,
+QFrame#infoCard, QFrame#contactCard, QFrame#debtCard,
+QFrame#paidCard, QFrame#detailFrame, QFrame#historyFrame,
+QFrame#examFrame {
+    background: #ffffff;
+    border: 1px solid #d2d6dc;
+    border-radius: 10px;
+}
+
+/* table chung */
+QTableWidget {
+    border: none;
+    font-size: 12px;
+    background: white;
+    alternate-background-color: #f7fafc;
+    selection-background-color: rgba(0,32,96,0.06);
+    selection-color: #002060;
+    font-family: 'Segoe UI';
+}
+
+QTableWidget::item {
+    padding: 10px 8px;
+    border-bottom: 1px solid #edf2f7;
+}
+
+QHeaderView::section {
+    background: white;
+    color: #4a5568;
+    font-weight: bold;
+    padding: 10px 8px;
+    border: none;
+    border-bottom: 2px solid #d2d6dc;
+    font-size: 12px;
+    font-family: 'Segoe UI';
+}
+
+/* combobox */
+QComboBox {
+    border: 1px solid #d2d6dc;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    background: white;
+    color: #4a5568;
+    font-family: 'Segoe UI';
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+/* input */
+QLineEdit {
+    padding: 8px 12px;
+    border: 1px solid #d2d6dc;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #f7fafc;
+    font-family: 'Segoe UI';
+}
+
+QLineEdit:focus {
+    border-color: #002060;
+    background: white;
+}
+
+/* progress bar */
+QProgressBar {
+    background: #d2d6dc;
+    border: none;
+    border-radius: 2px;
+}
+
+QProgressBar::chunk {
+    background: #002060;
+    border-radius: 2px;
+}
+
+/* calendar */
+QCalendarWidget {
+    background: white;
+    border: none;
+    font-size: 11px;
+}
+
+QCalendarWidget QToolButton {
+    color: #1a1a2e;
+    font-size: 12px;
+    font-weight: bold;
+    background: transparent;
+    border: none;
+    padding: 4px;
+}
+
+QCalendarWidget QToolButton:hover {
+    background: #edf2f7;
+    border-radius: 4px;
+}
+
+QCalendarWidget QAbstractItemView {
+    selection-background-color: #002060;
+    selection-color: white;
+    font-size: 11px;
+}

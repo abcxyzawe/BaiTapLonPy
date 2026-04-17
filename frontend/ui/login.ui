@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>LoginWindow</class>
+ <widget class="QWidget" name="LoginWindow">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>1000</width><height>600</height></rect>
+  </property>
+  <property name="minimumSize">
+   <size><width>1000</width><height>600</height></size>
+  </property>
+  <property name="maximumSize">
+   <size><width>1000</width><height>600</height></size>
+  </property>
+  <property name="windowTitle">
+   <string>EAUT - Hệ thống Đăng ký Khóa học</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QWidget#LoginWindow { background: #edf2f7; }</string>
+  </property>
+
+  <!-- ===== PANEL TRAI - Campus ===== -->
+  <widget class="QFrame" name="leftPanel">
+   <property name="geometry">
+    <rect><x>0</x><y>0</y><width>480</width><height>600</height></rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">
+     QFrame#leftPanel { background: #0d1b2a; border: none; }
+    </string>
+   </property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+   <!-- Anh campus -->
+   <widget class="QLabel" name="lblCampus">
+    <property name="geometry">
+     <rect><x>0</x><y>0</y><width>480</width><height>600</height></rect>
+    </property>
+    <property name="text"><string/></property>
+    <property name="scaledContents"><bool>true</bool></property>
+   </widget>
+
+   <!-- Overlay gradient tu duoi len -->
+   <widget class="QFrame" name="gradientOverlay">
+    <property name="geometry">
+     <rect><x>0</x><y>0</y><width>480</width><height>600</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(13,27,42,30),
+        stop:0.5 rgba(13,27,42,80),
+        stop:1 rgba(13,27,42,230));
+     </string>
+    </property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+   </widget>
+
+   <!-- Logo truong tren anh -->
+   <widget class="QLabel" name="lblLogoLeft">
+    <property name="geometry">
+     <rect><x>175</x><y>320</y><width>130</width><height>130</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">background: transparent;</string>
+    </property>
+    <property name="text"><string/></property>
+    <property name="scaledContents"><bool>true</bool></property>
+   </widget>
+
+   <!-- Ten truong -->
+   <widget class="QLabel" name="lblSchoolLeft">
+    <property name="geometry">
+     <rect><x>20</x><y>458</y><width>440</width><height>24</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      color: white; font-size: 16px; font-weight: bold; background: transparent;
+     </string>
+    </property>
+    <property name="text"><string>ĐẠI HỌC CÔNG NGHỆ ĐÔNG Á</string></property>
+    <property name="alignment"><set>Qt::AlignCenter</set></property>
+   </widget>
+
+   <widget class="QLabel" name="lblSchoolEn">
+    <property name="geometry">
+     <rect><x>20</x><y>484</y><width>440</width><height>18</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      color: rgba(255,255,255,160); font-size: 11px; background: transparent; letter-spacing: 2px;
+     </string>
+    </property>
+    <property name="text"><string>EAST ASIA UNIVERSITY OF TECHNOLOGY</string></property>
+    <property name="alignment"><set>Qt::AlignCenter</set></property>
+   </widget>
+
+   <!-- Slogan -->
+   <widget class="QLabel" name="lblSlogan">
+    <property name="geometry">
+     <rect><x>20</x><y>520</y><width>440</width><height>40</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      color: rgba(255,255,255,130); font-size: 12px; background: transparent;
+     </string>
+    </property>
+    <property name="text"><string>Hệ thống đăng ký khóa học trực tuyến
+Nhanh chóng - Tiện lợi - Chính xác</string></property>
+    <property name="alignment"><set>Qt::AlignCenter</set></property>
+   </widget>
+  </widget>
+
+  <!-- ===== PANEL PHAI - Form ===== -->
+  <widget class="QFrame" name="rightPanel">
+   <property name="geometry">
+    <rect><x>480</x><y>0</y><width>520</width><height>600</height></rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">
+     QFrame#rightPanel { background-color: #ffffff; border: none; }
+    </string>
+   </property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+   <!-- Anh nho thu vien goc tren -->
+   <widget class="QLabel" name="lblLibrary">
+    <property name="geometry">
+     <rect><x>0</x><y>0</y><width>520</width><height>140</height></rect>
+    </property>
+    <property name="text"><string/></property>
+    <property name="scaledContents"><bool>true</bool></property>
+   </widget>
+
+   <!-- Overlay nhe tren anh thu vien -->
+   <widget class="QFrame" name="libOverlay">
+    <property name="geometry">
+     <rect><x>0</x><y>0</y><width>520</width><height>140</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(255,255,255,30),
+        stop:1 rgba(255,255,255,255));
+     </string>
+    </property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+   </widget>
+
+   <!-- Tieu de -->
+   <widget class="QLabel" name="lblTitle">
+    <property name="geometry">
+     <rect><x>60</x><y>145</y><width>400</width><height>35</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      color: #1a1a2e; font-size: 24px; font-weight: bold; background: transparent;
+     </string>
+    </property>
+    <property name="text"><string>Đăng nhập</string></property>
+    <property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property>
+   </widget>
+
+   <widget class="QLabel" name="lblSubtitle">
+    <property name="geometry">
+     <rect><x>60</x><y>180</y><width>400</width><height>20</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      color: #999; font-size: 12px; background: transparent;
+     </string>
+    </property>
+    <property name="text"><string>Vui lòng đăng nhập để sử dụng hệ thống</string></property>
+   </widget>
+
+   <!-- Vai tro -->
+   <widget class="QLabel" name="lblRole">
+    <property name="geometry">
+     <rect><x>60</x><y>220</y><width>400</width><height>16</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color: #555; font-size: 12px; font-weight: bold; background: transparent;</string>
+    </property>
+    <property name="text"><string>Vai trò</string></property>
+   </widget>
+   <widget class="QComboBox" name="cboRole">
+    <property name="geometry">
+     <rect><x>60</x><y>240</y><width>400</width><height>42</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      QComboBox {
+        padding: 10px 15px; border: 2px solid #e8e8e8; border-radius: 10px;
+        font-size: 13px; background: #fafbfc; color: #333;
+      }
+      QComboBox:focus { border-color: #002060; background: #fff; }
+      QComboBox::drop-down { border: none; padding-right: 14px; }
+     </string>
+    </property>
+    <item><property name="text"><string>Sinh viên</string></property></item>
+    <item><property name="text"><string>Quản trị viên</string></property></item>
+   </widget>
+
+   <!-- Tai khoan -->
+   <widget class="QLabel" name="lblUser">
+    <property name="geometry">
+     <rect><x>60</x><y>296</y><width>400</width><height>16</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color: #555; font-size: 12px; font-weight: bold; background: transparent;</string>
+    </property>
+    <property name="text"><string>Tài khoản</string></property>
+   </widget>
+   <widget class="QLineEdit" name="txtUsername">
+    <property name="geometry">
+     <rect><x>60</x><y>316</y><width>400</width><height>42</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      QLineEdit {
+        padding: 10px 15px; border: 2px solid #e8e8e8; border-radius: 10px;
+        font-size: 13px; background: #fafbfc;
+      }
+      QLineEdit:focus { border-color: #002060; background: #fff; }
+     </string>
+    </property>
+    <property name="placeholderText"><string>Nhập mã sinh viên hoặc tài khoản</string></property>
+   </widget>
+
+   <!-- Mat khau -->
+   <widget class="QLabel" name="lblPass">
+    <property name="geometry">
+     <rect><x>60</x><y>372</y><width>400</width><height>16</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color: #555; font-size: 12px; font-weight: bold; background: transparent;</string>
+    </property>
+    <property name="text"><string>Mật khẩu</string></property>
+   </widget>
+   <widget class="QLineEdit" name="txtPassword">
+    <property name="geometry">
+     <rect><x>60</x><y>392</y><width>400</width><height>42</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      QLineEdit {
+        padding: 10px 15px; border: 2px solid #e8e8e8; border-radius: 10px;
+        font-size: 13px; background: #fafbfc;
+      }
+      QLineEdit:focus { border-color: #002060; background: #fff; }
+     </string>
+    </property>
+    <property name="echoMode"><enum>QLineEdit::Password</enum></property>
+    <property name="placeholderText"><string>Nhập mật khẩu</string></property>
+   </widget>
+
+   <!-- Nut dang nhap -->
+   <widget class="QPushButton" name="btnLogin">
+    <property name="geometry">
+     <rect><x>60</x><y>460</y><width>400</width><height>46</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">
+      QPushButton {
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #002060, stop:1 #1a3a6c);
+        color: white; border: none; border-radius: 10px;
+        font-size: 15px; font-weight: bold;
+      }
+      QPushButton:hover {
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #001a4d, stop:1 #002060);
+      }
+      QPushButton:pressed { background-color: #0a3d91; }
+     </string>
+    </property>
+    <property name="text"><string>ĐĂNG NHẬP</string></property>
+    <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+   </widget>
+
+   <!-- Thong bao loi -->
+   <widget class="QLabel" name="lblError">
+    <property name="geometry">
+     <rect><x>60</x><y>515</y><width>400</width><height>18</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color: #e53935; font-size: 12px; background: transparent;</string>
+    </property>
+    <property name="text"><string/></property>
+    <property name="alignment"><set>Qt::AlignCenter</set></property>
+   </widget>
+
+   <!-- Footer -->
+   <widget class="QLabel" name="lblFooter">
+    <property name="geometry">
+     <rect><x>60</x><y>560</y><width>400</width><height>16</height></rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">color: #bbb; font-size: 10px; background: transparent;</string>
+    </property>
+    <property name="text"><string>© 2025 EAUT - East Asia University of Technology</string></property>
+    <property name="alignment"><set>Qt::AlignCenter</set></property>
+   </widget>
+
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
