@@ -349,7 +349,7 @@ class MainWindow(QtWidgets.QWidget):
                 tbl.setCellWidget(r, 6, w)
 
             tbl.horizontalHeader().setStretchLastSection(False)
-            for c, cw in enumerate([65, 145, 28, 108, 108, 68, 160]):
+            for c, cw in enumerate([65, 140, 28, 105, 105, 80, 157]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
@@ -979,7 +979,6 @@ class AdminWindow(QtWidgets.QWidget):
                 item_ss.setTextAlignment(Qt.AlignCenter)
                 color = COLORS['red'] if pct >= 90 else COLORS['gold'] if pct >= 60 else COLORS['green']
                 item_ss.setForeground(QColor(color))
-                item_ss.setFont(QFont('Segoe UI', 11, QFont.Bold))
                 tbl.setItem(r, 5, item_ss)
                 btn_edit = QtWidgets.QPushButton('Sửa')
                 btn_edit.setCursor(Qt.PointingHandCursor)
@@ -997,7 +996,7 @@ class AdminWindow(QtWidgets.QWidget):
                 hl.addWidget(btn_edit)
                 hl.addWidget(btn_del)
                 tbl.setCellWidget(r, 6, w)
-            tbl.horizontalHeader().setStretchLastSection(False)
+            tbl.horizontalHeader().setStretchLastSection(True)
             for c, cw in enumerate([70, 180, 30, 140, 130, 110, 150]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
@@ -1040,7 +1039,7 @@ class AdminWindow(QtWidgets.QWidget):
                 hl.addWidget(btn_detail)
                 hl.addWidget(btn_del)
                 tbl.setCellWidget(r, 6, w)
-            tbl.horizontalHeader().setStretchLastSection(False)
+            tbl.horizontalHeader().setStretchLastSection(True)
             for c, cw in enumerate([75, 140, 100, 95, 90, 100, 150]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
@@ -1069,7 +1068,6 @@ class AdminWindow(QtWidgets.QWidget):
                     item_st.setForeground(QColor(COLORS['green']))
                 else:
                     item_st.setForeground(QColor(COLORS['text_light']))
-                item_st.setFont(QFont('Segoe UI', 11, QFont.Bold))
                 tbl.setItem(r, 5, item_st)
                 btn_toggle = QtWidgets.QPushButton('Đóng ĐK' if is_open else 'Mở ĐK')
                 btn_toggle.setCursor(Qt.PointingHandCursor)
@@ -1084,7 +1082,7 @@ class AdminWindow(QtWidgets.QWidget):
                 hl.setAlignment(Qt.AlignCenter)
                 hl.addWidget(btn_toggle)
                 tbl.setCellWidget(r, 6, w)
-            tbl.horizontalHeader().setStretchLastSection(False)
+            tbl.horizontalHeader().setStretchLastSection(True)
             for c, cw in enumerate([95, 90, 95, 105, 105, 95, 130]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
@@ -1123,7 +1121,6 @@ class AdminWindow(QtWidgets.QWidget):
                     item.setTextAlignment(Qt.AlignCenter if c in (0, 3, 4, 5) else Qt.AlignLeft | Qt.AlignVCenter)
                     if c == 4:
                         item.setForeground(QColor(type_colors.get(val, COLORS['text_mid'])))
-                        item.setFont(QFont('Segoe UI', 10, QFont.Bold))
                     tbl.setItem(r, c, item)
                 btn_edit = QtWidgets.QPushButton('Sửa')
                 btn_edit.setCursor(Qt.PointingHandCursor)
@@ -1143,7 +1140,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setCellWidget(r, 7, w)
             for c, cw in enumerate([32, 65, 160, 28, 95, 50, 100, 155]):
                 tbl.setColumnWidth(c, cw)
-            tbl.horizontalHeader().setStretchLastSection(False)
+            tbl.horizontalHeader().setStretchLastSection(True)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 44)
@@ -1186,7 +1183,6 @@ class AdminWindow(QtWidgets.QWidget):
                     elif c == 3:
                         color = action_colors.get(val, COLORS['text_mid'])
                         item.setForeground(QColor(color))
-                        item.setFont(QFont('Segoe UI', 10, QFont.Bold))
                     elif c == 5:
                         item.setForeground(QColor(COLORS['text_light']))
                     tbl.setItem(r, c, item)

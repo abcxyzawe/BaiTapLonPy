@@ -214,7 +214,7 @@
     </widget>
 
     <widget class="QTableWidget" name="tblAdminCourses">
-     <property name="geometry"><rect><x>0</x><y>48</y><width>970</width><height>512</height></rect></property>
+     <property name="geometry"><rect><x>12</x><y>48</y><width>946</width><height>500</height></rect></property>
      <property name="styleSheet"><string notr="true">
 QTableWidget {
     border: none;
