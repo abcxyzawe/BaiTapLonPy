@@ -1143,7 +1143,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setCellWidget(r, 7, w)
             for c, cw in enumerate([32, 65, 160, 28, 95, 50, 100, 155]):
                 tbl.setColumnWidth(c, cw)
-            tbl.horizontalHeader().setStretchLastSection(False)
+            tbl.horizontalHeader().setStretchLastSection(True)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 44)
