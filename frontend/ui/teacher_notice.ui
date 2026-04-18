@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TeacherNotice</class>
+ <widget class="QWidget" name="TeacherNotice">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1100</width><height>700</height></rect></property>
+  <property name="minimumSize"><size><width>1100</width><height>700</height></size></property>
+  <property name="windowTitle"><string>EAUT - Gui thong bao</string></property>
+  <property name="styleSheet"><string notr="true">QWidget#TeacherNotice { background: #edf2f7; }</string></property>
+
+  <widget class="QFrame" name="sidebar">
+   <property name="geometry"><rect><x>0</x><y>0</y><width>230</width><height>700</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#sidebar { background: #ffffff; border-right: 1px solid #d2d6dc; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+  </widget>
+
+  <widget class="QFrame" name="contentArea">
+   <property name="geometry"><rect><x>230</x><y>0</y><width>870</width><height>700</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#contentArea { background: #edf2f7; border: none; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+   <widget class="QFrame" name="headerBar">
+    <property name="geometry"><rect><x>0</x><y>0</y><width>870</width><height>56</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="lblPageTitle">
+     <property name="geometry"><rect><x>25</x><y>0</y><width>500</width><height>56</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Gửi thông báo</string></property>
+     <property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property>
+    </widget>
+   </widget>
+
+   <!-- Compose form -->
+   <widget class="QFrame" name="composeFrame">
+    <property name="geometry"><rect><x>25</x><y>72</y><width>500</width><height>604</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#composeFrame { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblComposeTitle">
+     <property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Soạn thông báo mới</string></property>
+    </widget>
+
+    <widget class="QLabel" name="lblToClass">
+     <property name="geometry"><rect><x>22</x><y>54</y><width>460</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #4a5568; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Gửi đến lớp</string></property>
+    </widget>
+    <widget class="QComboBox" name="cboTargetClass">
+     <property name="geometry"><rect><x>22</x><y>76</y><width>456</width><height>36</height></rect></property>
+     <item><property name="text"><string>Tất cả lớp đang dạy</string></property></item>
+    </widget>
+
+    <widget class="QLabel" name="lblSubject">
+     <property name="geometry"><rect><x>22</x><y>122</y><width>460</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #4a5568; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Tiêu đề</string></property>
+    </widget>
+    <widget class="QLineEdit" name="txtSubject">
+     <property name="geometry"><rect><x>22</x><y>144</y><width>456</width><height>36</height></rect></property>
+     <property name="placeholderText"><string>Nhập tiêu đề thông báo...</string></property>
+    </widget>
+
+    <widget class="QLabel" name="lblContent">
+     <property name="geometry"><rect><x>22</x><y>190</y><width>460</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #4a5568; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Nội dung</string></property>
+    </widget>
+    <widget class="QTextEdit" name="txtContent">
+     <property name="geometry"><rect><x>22</x><y>212</y><width>456</width><height>280</height></rect></property>
+     <property name="placeholderText"><string>Nhập nội dung thông báo...</string></property>
+    </widget>
+
+    <widget class="QPushButton" name="btnSendNotice">
+     <property name="geometry"><rect><x>22</x><y>510</y><width>220</width><height>38</height></rect></property>
+     <property name="styleSheet"><string notr="true">QPushButton { background: #002060; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; } QPushButton:hover { background: #001a50; }</string></property>
+     <property name="text"><string>Gửi thông báo</string></property>
+     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+    </widget>
+    <widget class="QPushButton" name="btnClearNotice">
+     <property name="geometry"><rect><x>252</x><y>510</y><width>120</width><height>38</height></rect></property>
+     <property name="styleSheet"><string notr="true">QPushButton { background: white; color: #4a5568; border: 1px solid #d2d6dc; border-radius: 6px; font-size: 13px; } QPushButton:hover { background: #edf2f7; }</string></property>
+     <property name="text"><string>Xóa</string></property>
+     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+    </widget>
+   </widget>
+
+   <!-- Sent list -->
+   <widget class="QFrame" name="sentFrame">
+    <property name="geometry"><rect><x>545</x><y>72</y><width>300</width><height>604</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#sentFrame { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblSentTitle">
+     <property name="geometry"><rect><x>22</x><y>14</y><width>260</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Đã gửi gần đây</string></property>
+    </widget>
+
+    <widget class="QScrollArea" name="sentScroll">
+     <property name="geometry"><rect><x>12</x><y>44</y><width>276</width><height>544</height></rect></property>
+     <property name="widgetResizable"><bool>true</bool></property>
+     <property name="styleSheet"><string notr="true">QScrollArea { background: transparent; border: none; }</string></property>
+     <widget class="QWidget" name="sentContent">
+      <property name="geometry"><rect><x>0</x><y>0</y><width>274</width><height>540</height></rect></property>
+     </widget>
+    </widget>
+   </widget>
+
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
