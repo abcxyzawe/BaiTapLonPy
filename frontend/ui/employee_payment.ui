@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>EmployeePayment</class>
+ <widget class="QWidget" name="EmployeePayment">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1100</width><height>700</height></rect></property>
+  <property name="minimumSize"><size><width>1100</width><height>700</height></size></property>
+  <property name="windowTitle"><string>EAUT - Thu hoc phi</string></property>
+  <property name="styleSheet"><string notr="true">QWidget#EmployeePayment { background: #edf2f7; }</string></property>
+
+  <widget class="QFrame" name="sidebar">
+   <property name="geometry"><rect><x>0</x><y>0</y><width>230</width><height>700</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#sidebar { background: #ffffff; border-right: 1px solid #d2d6dc; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+  </widget>
+
+  <widget class="QFrame" name="contentArea">
+   <property name="geometry"><rect><x>230</x><y>0</y><width>870</width><height>700</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#contentArea { background: #edf2f7; border: none; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+   <widget class="QFrame" name="headerBar">
+    <property name="geometry"><rect><x>0</x><y>0</y><width>870</width><height>56</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="lblPageTitle">
+     <property name="geometry"><rect><x>25</x><y>0</y><width>500</width><height>56</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Thu học phí</string></property>
+     <property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property>
+    </widget>
+   </widget>
+
+   <!-- Pending payments list (left) -->
+   <widget class="QFrame" name="pendingPayFrame">
+    <property name="geometry"><rect><x>25</x><y>72</y><width>480</width><height>604</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#pendingPayFrame { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblPayTitle">
+     <property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Đăng ký chờ thanh toán</string></property>
+    </widget>
+
+    <widget class="QLineEdit" name="txtSearchPay">
+     <property name="geometry"><rect><x>22</x><y>46</y><width>436</width><height>34</height></rect></property>
+     <property name="placeholderText"><string>Tìm theo mã đăng ký, tên học viên...</string></property>
+    </widget>
+
+    <widget class="QTableWidget" name="tblPayPending">
+     <property name="geometry"><rect><x>12</x><y>90</y><width>456</width><height>500</height></rect></property>
+     <property name="alternatingRowColors"><bool>true</bool></property>
+     <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+     <property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property>
+     <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+     <property name="showGrid"><bool>false</bool></property>
+     <property name="columnCount"><number>4</number></property>
+     <column><property name="text"><string>Mã ĐK</string></property></column>
+     <column><property name="text"><string>Học viên</string></property></column>
+     <column><property name="text"><string>Lớp</string></property></column>
+     <column><property name="text"><string>Số tiền</string></property></column>
+    </widget>
+   </widget>
+
+   <!-- Payment form (right) -->
+   <widget class="QFrame" name="payFormFrame">
+    <property name="geometry"><rect><x>525</x><y>72</y><width>320</width><height>500</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#payFormFrame { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblPayFormTitle">
+     <property name="geometry"><rect><x>22</x><y>14</y><width>280</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Thu tiền</string></property>
+    </widget>
+
+    <widget class="QLabel" name="lblPayStudent">
+     <property name="geometry"><rect><x>22</x><y>54</y><width>280</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #4a5568; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Học viên</string></property>
+    </widget>
+    <widget class="QLabel" name="valPayStudent">
+     <property name="geometry"><rect><x>22</x><y>74</y><width>280</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 13px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>—</string></property>
+    </widget>
+
+    <widget class="QLabel" name="lblPayClass">
+     <property name="geometry"><rect><x>22</x><y>106</y><width>280</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #4a5568; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Lớp đăng ký</string></property>
+    </widget>
+    <widget class="QLabel" name="valPayClass">
+     <property name="geometry"><rect><x>22</x><y>126</y><width>280</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 13px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>—</string></property>
+    </widget>
+
+    <widget class="QLabel" name="lblPayAmount">
+     <property name="geometry"><rect><x>22</x><y>158</y><width>280</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #4a5568; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Số tiền cần thu</string></property>
+    </widget>
+    <widget class="QLabel" name="valPayAmount">
+     <property name="geometry"><rect><x>22</x><y>180</y><width>280</width><height>30</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #b8860b; font-size: 22px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>— đ</string></property>
+    </widget>
+
+    <widget class="QLabel" name="lblPayMethod">
+     <property name="geometry"><rect><x>22</x><y>220</y><width>280</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #4a5568; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Hình thức thanh toán</string></property>
+    </widget>
+    <widget class="QComboBox" name="cboPayMethod">
+     <property name="geometry"><rect><x>22</x><y>242</y><width>276</width><height>34</height></rect></property>
+     <item><property name="text"><string>Tiền mặt</string></property></item>
+     <item><property name="text"><string>Chuyển khoản ngân hàng</string></property></item>
+     <item><property name="text"><string>VNPay / Momo</string></property></item>
+    </widget>
+
+    <widget class="QLabel" name="lblPayNote">
+     <property name="geometry"><rect><x>22</x><y>286</y><width>280</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #4a5568; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Ghi chú (nếu có)</string></property>
+    </widget>
+    <widget class="QLineEdit" name="txtPayNote">
+     <property name="geometry"><rect><x>22</x><y>308</y><width>276</width><height>34</height></rect></property>
+     <property name="placeholderText"><string>Ghi chú...</string></property>
+    </widget>
+
+    <widget class="QPushButton" name="btnConfirmPay">
+     <property name="geometry"><rect><x>22</x><y>364</y><width>276</width><height>44</height></rect></property>
+     <property name="styleSheet"><string notr="true">QPushButton { background: #276749; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: bold; } QPushButton:hover { background: #1e5038; }</string></property>
+     <property name="text"><string>Xác nhận đã thu</string></property>
+     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+    </widget>
+    <widget class="QPushButton" name="btnPrintReceipt">
+     <property name="geometry"><rect><x>22</x><y>420</y><width>276</width><height>38</height></rect></property>
+     <property name="styleSheet"><string notr="true">QPushButton { background: white; color: #002060; border: 1px solid #002060; border-radius: 6px; font-size: 12px; } QPushButton:hover { background: #002060; color: white; }</string></property>
+     <property name="text"><string>In biên lai</string></property>
+     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+    </widget>
+   </widget>
+
+   <!-- Today summary -->
+   <widget class="QFrame" name="todayPayFrame">
+    <property name="geometry"><rect><x>525</x><y>592</y><width>320</width><height>84</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#todayPayFrame { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="lblTodayPay">
+     <property name="geometry"><rect><x>18</x><y>12</y><width>280</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #0c4a6e; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Tổng thu hôm nay</string></property>
+    </widget>
+    <widget class="QLabel" name="valTodayPay">
+     <property name="geometry"><rect><x>18</x><y>34</y><width>280</width><height>36</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #0369a1; font-size: 22px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>25,200,000 đ</string></property>
+    </widget>
+   </widget>
+
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TeacherClasses</class>
+ <widget class="QWidget" name="TeacherClasses">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1100</width><height>700</height></rect></property>
+  <property name="minimumSize"><size><width>1100</width><height>700</height></size></property>
+  <property name="windowTitle"><string>EAUT - Lop cua toi</string></property>
+  <property name="styleSheet"><string notr="true">QWidget#TeacherClasses { background: #edf2f7; }</string></property>
+
+  <widget class="QFrame" name="sidebar">
+   <property name="geometry"><rect><x>0</x><y>0</y><width>230</width><height>700</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#sidebar { background: #ffffff; border-right: 1px solid #d2d6dc; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+  </widget>
+
+  <widget class="QFrame" name="contentArea">
+   <property name="geometry"><rect><x>230</x><y>0</y><width>870</width><height>700</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#contentArea { background: #edf2f7; border: none; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+   <widget class="QFrame" name="headerBar">
+    <property name="geometry"><rect><x>0</x><y>0</y><width>870</width><height>56</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="lblPageTitle">
+     <property name="geometry"><rect><x>25</x><y>0</y><width>500</width><height>56</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Lớp của tôi</string></property>
+     <property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property>
+    </widget>
+   </widget>
+
+   <widget class="QFrame" name="classFrame">
+    <property name="geometry"><rect><x>25</x><y>72</y><width>820</width><height>604</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#classFrame { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblClassTitle">
+     <property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Danh sách lớp đang phụ trách</string></property>
+    </widget>
+
+    <widget class="QTableWidget" name="tblTeacherClasses">
+     <property name="geometry"><rect><x>12</x><y>44</y><width>796</width><height>544</height></rect></property>
+     <property name="alternatingRowColors"><bool>true</bool></property>
+     <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+     <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+     <property name="showGrid"><bool>false</bool></property>
+     <property name="columnCount"><number>7</number></property>
+     <column><property name="text"><string>Mã lớp</string></property></column>
+     <column><property name="text"><string>Tên môn</string></property></column>
+     <column><property name="text"><string>Sĩ số</string></property></column>
+     <column><property name="text"><string>Lịch học</string></property></column>
+     <column><property name="text"><string>Phòng</string></property></column>
+     <column><property name="text"><string>Học phí</string></property></column>
+     <column><property name="text"><string>Thao tác</string></property></column>
+    </widget>
+   </widget>
+
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
