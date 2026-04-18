@@ -997,7 +997,7 @@ class AdminWindow(QtWidgets.QWidget):
                 hl.addWidget(btn_edit)
                 hl.addWidget(btn_del)
                 tbl.setCellWidget(r, 6, w)
-            tbl.horizontalHeader().setStretchLastSection(False)
+            tbl.horizontalHeader().setStretchLastSection(True)
             for c, cw in enumerate([70, 180, 30, 140, 130, 110, 150]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
@@ -1040,7 +1040,7 @@ class AdminWindow(QtWidgets.QWidget):
                 hl.addWidget(btn_detail)
                 hl.addWidget(btn_del)
                 tbl.setCellWidget(r, 6, w)
-            tbl.horizontalHeader().setStretchLastSection(False)
+            tbl.horizontalHeader().setStretchLastSection(True)
             for c, cw in enumerate([75, 140, 100, 95, 90, 100, 150]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
@@ -1084,7 +1084,7 @@ class AdminWindow(QtWidgets.QWidget):
                 hl.setAlignment(Qt.AlignCenter)
                 hl.addWidget(btn_toggle)
                 tbl.setCellWidget(r, 6, w)
-            tbl.horizontalHeader().setStretchLastSection(False)
+            tbl.horizontalHeader().setStretchLastSection(True)
             for c, cw in enumerate([95, 90, 95, 105, 105, 95, 130]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
