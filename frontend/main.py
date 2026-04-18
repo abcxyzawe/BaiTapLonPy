@@ -10,10 +10,10 @@ UI = os.path.join(BASE, 'ui')
 RES = os.path.join(BASE, 'resources')
 ICONS = os.path.join(RES, 'icons')
 
-# mock data
+# mock data - 4 role
 MOCK_USER = {
-    'username': 'user', 'password': 'passuser', 'role': 'Sinh viên',
-    'name': 'Đào Viết Quang Huy', 'msv': '2024001', 'lop': 'CNTT-K20A',
+    'username': 'user', 'password': 'passuser', 'role': 'Học viên',
+    'name': 'Đào Viết Quang Huy', 'msv': 'HV2024001', 'lop': 'IT001-A',
     'khoa': 'Công nghệ thông tin', 'ngaysinh': '15/03/2004', 'gioitinh': 'Nam',
     'nienkhoa': '2024 - 2028', 'hedt': 'Chính quy',
     'email': 'quanghuy@sv.eaut.edu.vn', 'sdt': '0912345678',
@@ -25,11 +25,113 @@ MOCK_ADMIN = {
     'name': 'Admin', 'role': 'Quản trị viên', 'initials': 'AD',
 }
 
-# admin pages
+MOCK_TEACHER = {
+    'username': 'teacher', 'password': 'passtea', 'role': 'Giảng viên',
+    'id': 'GV001', 'name': 'Nguyễn Đức Thiện', 'initials': 'NT',
+    'khoa': 'Công nghệ thông tin', 'hocvi': 'Tiến sĩ',
+    'email': 'thien@eaut.edu.vn', 'sdt': '0901234567',
+}
+
+MOCK_EMPLOYEE = {
+    'username': 'employee', 'password': 'passemp', 'role': 'Nhân viên',
+    'id': 'NV001', 'name': 'Trần Thu Hương', 'initials': 'TH',
+    'chucvu': 'Nhân viên đăng ký',
+    'email': 'huongtt@eaut.edu.vn', 'sdt': '0987654321',
+}
+
+# mock classes - mỗi môn có nhiều lớp với giá khác nhau
+MOCK_COURSES = [
+    ('IT001', 'Lập trình Python'),
+    ('IT002', 'Cơ sở dữ liệu'),
+    ('IT003', 'Mạng máy tính'),
+    ('IT004', 'Trí tuệ nhân tạo'),
+    ('MA001', 'Toán rời rạc'),
+]
+
+MOCK_CLASSES = [
+    # (ma_lop, ma_mon, ten_mon, gv, lich, phong, sisoMax, siso, gia)
+    ('IT001-A', 'IT001', 'Lập trình Python', 'Nguyễn Đức Thiện', 'T3, T5 (7:00-9:30)', 'P.A301', 40, 35, 2500000),
+    ('IT001-B', 'IT001', 'Lập trình Python', 'Lê Trung Thực', 'T4, T6 (13:00-15:30)', 'P.B205', 40, 28, 1800000),
+    ('IT001-C', 'IT001', 'Lập trình Python', 'Ngô Thảo Anh', 'T2, T7 (15:40-18:10)', 'P.C102', 35, 35, 2000000),
+    ('IT002-A', 'IT002', 'Cơ sở dữ liệu', 'Lê Thị C', 'T5 (7:00-9:30)', 'P.A202', 40, 35, 2200000),
+    ('IT002-B', 'IT002', 'Cơ sở dữ liệu', 'Phạm Văn K', 'T3 (13:00-15:30)', 'P.B108', 40, 22, 1800000),
+    ('IT003-A', 'IT003', 'Mạng máy tính', 'Phạm Văn D', 'T6 (7:00-9:30)', 'P.A105', 30, 18, 2000000),
+    ('IT004-A', 'IT004', 'Trí tuệ nhân tạo', 'Nguyễn Đức Thiện', 'T3 (7:00-9:30)', 'P.A301', 40, 28, 2800000),
+    ('IT004-B', 'IT004', 'Trí tuệ nhân tạo', 'Hoàng Minh Tuấn', 'T5 (13:00-15:30)', 'P.B301', 35, 20, 2200000),
+    ('MA001-A', 'MA001', 'Toán rời rạc', 'Nguyễn Thị E', 'T2 (9:30-12:00)', 'P.A203', 40, 30, 1500000),
+    ('MA001-B', 'MA001', 'Toán rời rạc', 'Lê Văn M', 'T4 (9:30-12:00)', 'P.B204', 40, 25, 1200000),
+]
+
+
+# STUDENT pages
+PAGES = [
+    ('btnHome', 'dashboard_student.ui'),
+    ('btnSchedule', 'schedule.ui'),
+    ('btnExam', 'exam_schedule.ui'),
+    ('btnGrades', 'grades.ui'),
+    ('btnReview', 'teacher_review.ui'),
+    ('btnNotice', 'notifications.ui'),
+    ('btnProfile', 'profile.ui'),
+]
+
+MENU_ITEMS = [
+    ('btnHome', 'iconHome', 'home', 'Trang chủ'),
+    ('btnSchedule', 'iconSchedule', 'calendar', 'Lịch học'),
+    ('btnExam', 'iconExam', 'clipboard', 'Lịch thi'),
+    ('btnGrades', 'iconGrades', 'bar-chart', 'Xem điểm'),
+    ('btnReview', 'iconReview', 'star', 'Đánh giá giảng viên'),
+    ('btnNotice', 'iconNotice', 'bell', 'Thông báo'),
+    ('btnProfile', 'iconProfile', 'user', 'Thông tin cá nhân'),
+]
+
+# TEACHER pages
+TEACHER_PAGES = [
+    ('btnTeaDash', 'teacher_dashboard.ui'),
+    ('btnTeaSchedule', 'schedule.ui'),
+    ('btnTeaClasses', 'teacher_classes.ui'),
+    ('btnTeaStudents', 'teacher_students.ui'),
+    ('btnTeaNotice', 'teacher_notice.ui'),
+    ('btnTeaGrades', 'teacher_grades.ui'),
+    ('btnTeaProfile', 'profile.ui'),
+]
+
+TEACHER_MENU = [
+    ('btnTeaDash', 'iconTeaDash', 'home', 'Tổng quan'),
+    ('btnTeaSchedule', 'iconTeaSchedule', 'calendar', 'Lịch dạy'),
+    ('btnTeaClasses', 'iconTeaClasses', 'layers', 'Lớp của tôi'),
+    ('btnTeaStudents', 'iconTeaStudents', 'users', 'Học viên'),
+    ('btnTeaNotice', 'iconTeaNotice', 'bell', 'Gửi thông báo'),
+    ('btnTeaGrades', 'iconTeaGrades', 'edit', 'Nhập điểm'),
+    ('btnTeaProfile', 'iconTeaProfile', 'user', 'Thông tin cá nhân'),
+]
+
+# EMPLOYEE pages
+EMPLOYEE_PAGES = [
+    ('btnEmpDash', 'employee_dashboard.ui'),
+    ('btnEmpRegister', 'employee_register.ui'),
+    ('btnEmpRegList', 'employee_registrations.ui'),
+    ('btnEmpPay', 'employee_payment.ui'),
+    ('btnEmpClasses', 'employee_classes.ui'),
+    ('btnEmpProfile', 'profile.ui'),
+]
+
+EMPLOYEE_MENU = [
+    ('btnEmpDash', 'iconEmpDash', 'home', 'Tổng quan'),
+    ('btnEmpRegister', 'iconEmpRegister', 'edit', 'Đăng ký cho HV'),
+    ('btnEmpRegList', 'iconEmpRegList', 'file-text', 'DS đăng ký'),
+    ('btnEmpPay', 'iconEmpPay', 'credit-card', 'Thu học phí'),
+    ('btnEmpClasses', 'iconEmpClasses', 'layers', 'Quản lý lớp'),
+    ('btnEmpProfile', 'iconEmpProfile', 'user', 'Thông tin cá nhân'),
+]
+
+# ADMIN pages
 ADMIN_PAGES = [
     ('btnAdminDash', 'admin_dashboard.ui'),
     ('btnAdminCourse', 'admin_courses.ui'),
+    ('btnAdminClasses', 'admin_classes.ui'),
     ('btnAdminStudent', 'admin_students.ui'),
+    ('btnAdminTeacher', 'admin_teachers.ui'),
+    ('btnAdminEmployee', 'admin_employees.ui'),
     ('btnAdminSemester', 'admin_semester.ui'),
     ('btnAdminCurriculum', 'admin_curriculum.ui'),
     ('btnAdminAudit', 'admin_audit.ui'),
@@ -38,39 +140,15 @@ ADMIN_PAGES = [
 
 ADMIN_MENU = [
     ('btnAdminDash', 'iconAdminDash', 'grid', 'Tổng quan'),
-    ('btnAdminCourse', 'iconAdminCourse', 'database', 'Quản lý khóa học'),
-    ('btnAdminStudent', 'iconAdminStudent', 'users', 'Quản lý sinh viên'),
+    ('btnAdminCourse', 'iconAdminCourse', 'database', 'Quản lý môn học'),
+    ('btnAdminClasses', 'iconAdminClasses', 'layers', 'Quản lý lớp'),
+    ('btnAdminStudent', 'iconAdminStudent', 'users', 'Quản lý học viên'),
+    ('btnAdminTeacher', 'iconAdminTeacher', 'user-check', 'Quản lý giảng viên'),
+    ('btnAdminEmployee', 'iconAdminEmployee', 'briefcase', 'Quản lý nhân viên'),
     ('btnAdminSemester', 'iconAdminSemester', 'sliders', 'Quản lý học kỳ'),
     ('btnAdminCurriculum', 'iconAdminCurriculum', 'file-text', 'Khung chương trình'),
     ('btnAdminAudit', 'iconAdminAudit', 'shield', 'Nhật ký hệ thống'),
     ('btnAdminStats', 'iconAdminStats', 'pie-chart', 'Thống kê'),
-]
-
-# danh sach trang
-PAGES = [
-    ('btnHome', 'dashboard_student.ui'),
-    ('btnRegister', 'register_course.ui'),
-    ('btnCart', 'cart_preview.ui'),
-    ('btnSchedule', 'schedule.ui'),
-    ('btnExam', 'exam_schedule.ui'),
-    ('btnGrades', 'grades.ui'),
-    ('btnTuition', 'tuition.ui'),
-    ('btnReview', 'teacher_review.ui'),
-    ('btnNotice', 'notifications.ui'),
-    ('btnProfile', 'profile.ui'),
-]
-
-MENU_ITEMS = [
-    ('btnHome', 'iconHome', 'home', 'Trang chủ'),
-    ('btnRegister', 'iconRegister', 'book-open', 'Đăng ký khóa học'),
-    ('btnCart', 'iconCart', 'shopping-cart', 'Giỏ hàng đăng ký'),
-    ('btnSchedule', 'iconSchedule', 'calendar', 'Lịch học'),
-    ('btnExam', 'iconExam', 'clipboard', 'Lịch thi'),
-    ('btnGrades', 'iconGrades', 'bar-chart', 'Xem điểm'),
-    ('btnTuition', 'iconTuition', 'credit-card', 'Thanh toán học phí'),
-    ('btnReview', 'iconReview', 'star', 'Đánh giá giảng viên'),
-    ('btnNotice', 'iconNotice', 'bell', 'Thông báo'),
-    ('btnProfile', 'iconProfile', 'user', 'Thông tin cá nhân'),
 ]
 
 
@@ -217,9 +295,8 @@ class MainWindow(QtWidgets.QWidget):
         self._switch_page(index)
         if not self.pages_filled[index]:
             fill_methods = [
-                self._fill_dashboard, self._fill_register, self._fill_cart,
-                self._fill_schedule, self._fill_exam, self._fill_grades,
-                self._fill_tuition, self._fill_review,
+                self._fill_dashboard, self._fill_schedule, self._fill_exam,
+                self._fill_grades, self._fill_review,
                 self._fill_notifications, self._fill_profile,
             ]
             if fill_methods[index]:
@@ -303,133 +380,8 @@ class MainWindow(QtWidgets.QWidget):
             tbl.setColumnWidth(4, 125)
             tbl.verticalHeader().setVisible(False)
 
-    def _fill_register(self):
-        page = self.page_widgets[1]
-
-        # search icon
-        si = page.findChild(QtWidgets.QLabel, 'iconSearch')
-        if si:
-            si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-
-        data = [
-            ['IT004', 'Trí tuệ nhân tạo', '3', 'Nguyễn Văn G', 'T3 (7:00-9:30)', '12/40', 'ok'],
-            ['IT005', 'Phát triển web', '3', 'Trần Thị H', 'T5 (13:00-15:30)', '8/35', 'ok'],
-            ['IT006', 'An toàn thông tin', '3', 'Lê Văn K', 'T2 (7:00-9:30)', '40/40', 'full'],
-            ['MA002', 'Xác suất thống kê', '3', 'Phạm Thị L', 'T4 (9:30-12:00)', '20/40', 'ok'],
-            ['IT007', 'Kiểm thử phần mềm', '2', 'Hoàng Văn M', 'T6 (7:00-9:00)', '5/30', 'ok'],
-            ['EN002', 'TA chuyên ngành', '2', 'Vũ Thị N', 'T3 (13:00-15:00)', '15/35', 'ok'],
-            ['IT008', 'Lập trình di động', '3', 'Đỗ Văn P', 'T4 (13:00-15:30)', '32/40', 'ok'],
-            ['MA003', 'Giải tích 2', '3', 'Trần Thị Q', 'T2 (9:30-12:00)', '18/40', 'ok'],
-        ]
-        tbl = page.findChild(QtWidgets.QTableWidget, 'tblCourses')
-        if tbl:
-            tbl.setRowCount(len(data))
-            for r, row in enumerate(data):
-                for c in range(6):
-                    item = QtWidgets.QTableWidgetItem(row[c])
-                    if c == 5:
-                        item.setForeground(QColor(COLORS['red'] if row[6] == 'full' else COLORS['green']))
-                    tbl.setItem(r, c, item)
-
-                if row[6] == 'full':
-                    btn_act = QtWidgets.QPushButton('Đăng ký chờ')
-                    btn_act.setCursor(Qt.PointingHandCursor)
-                    btn_act.setFixedSize(118, 31)
-                    btn_act.setStyleSheet(f'QPushButton {{ background: white; color: {COLORS["orange"]}; border: 1px solid {COLORS["orange"]}; border-radius: 6px; font-size: 12px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["orange"]}; color: white; }}')
-                else:
-                    btn_act = QtWidgets.QPushButton('Đăng ký')
-                    btn_act.setCursor(Qt.PointingHandCursor)
-                    btn_act.setFixedSize(100, 31)
-                    btn_act.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
-                w = QtWidgets.QWidget()
-                hl = QtWidgets.QHBoxLayout(w)
-                hl.setContentsMargins(0, 0, 0, 0)
-                hl.setAlignment(Qt.AlignCenter)
-                hl.addWidget(btn_act)
-                tbl.setCellWidget(r, 6, w)
-
-            tbl.horizontalHeader().setStretchLastSection(False)
-            for c, cw in enumerate([65, 140, 28, 105, 105, 80, 157]):
-                tbl.setColumnWidth(c, cw)
-            tbl.verticalHeader().setVisible(False)
-            for r in range(len(data)):
-                tbl.setRowHeight(r, 48)
-
-    def _fill_cart(self):
-        page = self.page_widgets[2]
-        cart_data = [
-            ['IT004', 'Trí tuệ nhân tạo', '3', 'Nguyễn Văn G', 'T3 (7:00-9:30)', '1,800,000'],
-            ['IT005', 'Phát triển web', '3', 'Trần Thị H', 'T5 (13:00-15:30)', '1,800,000'],
-            ['MA002', 'Xác suất thống kê', '3', 'Phạm Thị L', 'T4 (9:30-12:00)', '1,800,000'],
-            ['IT007', 'Kiểm thử phần mềm', '2', 'Hoàng Văn M', 'T6 (7:00-9:00)', '1,200,000'],
-        ]
-        tbl = page.findChild(QtWidgets.QTableWidget, 'tblCart')
-        if tbl:
-            tbl.setRowCount(len(cart_data))
-            for r, row in enumerate(cart_data):
-                for c, val in enumerate(row):
-                    item = QtWidgets.QTableWidgetItem(val)
-                    if c == 5:
-                        item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                    tbl.setItem(r, c, item)
-                btn_del = QtWidgets.QPushButton('Xóa')
-                btn_del.setCursor(Qt.PointingHandCursor)
-                btn_del.setFixedSize(62, 24)
-                btn_del.setStyleSheet(f'QPushButton {{ background: white; color: {COLORS["red"]}; border: 1px solid {COLORS["red"]}; border-radius: 5px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["red"]}; color: white; }}')
-                w_act = QtWidgets.QWidget()
-                hl_act = QtWidgets.QHBoxLayout(w_act)
-                hl_act.setContentsMargins(0, 0, 0, 0)
-                hl_act.setAlignment(Qt.AlignCenter)
-                hl_act.addWidget(btn_del)
-                tbl.setCellWidget(r, 6, w_act)
-            for c, cw in enumerate([65, 150, 28, 115, 110, 95, 100]):
-                tbl.setColumnWidth(c, cw)
-            tbl.horizontalHeader().setStretchLastSection(False)
-            tbl.verticalHeader().setVisible(False)
-            for r in range(len(cart_data)):
-                tbl.setRowHeight(r, 50)
-
-        # summary
-        total_tc = sum(int(r[2]) for r in cart_data)
-        total_fee = sum(int(r[5].replace(',', '')) for r in cart_data)
-        for attr, val in [('lblCartCount', str(len(cart_data))),
-                          ('lblCartCredits', str(total_tc)),
-                          ('lblCartFee', f'{total_fee:,} đ'.replace(',', '.'))]:
-            w = page.findChild(QtWidgets.QLabel, attr)
-            if w:
-                w.setText(val)
-
-        # preview schedule
-        tbl2 = page.findChild(QtWidgets.QTableWidget, 'tblPreview')
-        if tbl2:
-            hours = ['7:00-9:30', '9:30-12:00', '13:00-15:30', '15:40-18:10', '18:30-20:00', '20:00-21:30']
-            tbl2.setRowCount(len(hours))
-            tbl2.setColumnWidth(0, 90)
-            for i in range(1, 7):
-                tbl2.setColumnWidth(i, 112)
-            for r, h in enumerate(hours):
-                item = QtWidgets.QTableWidgetItem(h)
-                item.setForeground(QColor('#718096'))
-                item.setFont(QFont('Segoe UI', 9))
-                tbl2.setItem(r, 0, item)
-                tbl2.setRowHeight(r, 28)
-            # dat mon vao lich
-            preview = [
-                (0, 3, 'Trí tuệ NH', COLORS['gold']),
-                (1, 4, 'Xác suất TK', COLORS['green']),
-                (2, 5, 'Phát triển web', COLORS['navy']),
-                (0, 6, 'Kiểm thử PM', COLORS['orange']),
-            ]
-            for row, col, name, color in preview:
-                item = QtWidgets.QTableWidgetItem(name)
-                item.setForeground(QColor(color))
-                item.setFont(QFont('Segoe UI', 9, QFont.Bold))
-                item.setTextAlignment(Qt.AlignCenter)
-                tbl2.setItem(row, col, item)
-            tbl2.verticalHeader().setVisible(False)
-
     def _fill_schedule(self):
-        page = self.page_widgets[3]
+        page = self.page_widgets[1]
 
         # dieu chinh kich thuoc schedule
         sf = page.findChild(QtWidgets.QFrame, 'scheduleFrame')
@@ -507,7 +459,7 @@ class MainWindow(QtWidgets.QWidget):
             tbl.setSpan(rs, col, span, 1)
 
     def _fill_exam(self):
-        page = self.page_widgets[4]
+        page = self.page_widgets[2]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblExam')
         if not tbl:
             return
@@ -530,7 +482,7 @@ class MainWindow(QtWidgets.QWidget):
             tbl.setRowHeight(r, 40)
 
     def _fill_grades(self):
-        page = self.page_widgets[5]
+        page = self.page_widgets[3]
         data = [
             ['IT001', 'Nhập môn lập trình', '3', '8.5', '7.0', '7.5', 'B+'],
             ['IT002', 'Cấu trúc dữ liệu', '3', '9.0', '8.5', '8.7', 'A'],
@@ -584,64 +536,8 @@ class MainWindow(QtWidgets.QWidget):
             btn_export.setStyleSheet(f'QPushButton {{ background: white; color: {COLORS["navy"]}; border: 1px solid {COLORS["navy"]}; border-radius: 4px; padding: 4px 12px; font-size: 11px; }} QPushButton:hover {{ background: {COLORS["navy"]}; color: white; }}')
             btn_export.show()
 
-    def _fill_tuition(self):
-        page = self.page_widgets[6]
-        detail = [
-            ['Học phí tín chỉ (15 TC x 600,000)', '9,000,000', '9,000,000', '0'],
-            ['Bảo hiểm y tế', '563,000', '563,000', '0'],
-            ['Phí ký túc xá', '3,600,000', '3,600,000', '0'],
-            ['Phí hoạt động ngoại khóa', '337,000', '337,000', '0'],
-            ['Học phí bổ sung (3 TC)', '1,800,000', '0', '1,800,000'],
-            ['Lệ phí thi lại', '2,700,000', '0', '2,700,000'],
-        ]
-        tbl = page.findChild(QtWidgets.QTableWidget, 'tblDetail')
-        if tbl:
-            tbl.setRowCount(len(detail))
-            for r, row in enumerate(detail):
-                for c, val in enumerate(row):
-                    item = QtWidgets.QTableWidgetItem(val)
-                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter if c > 0 else Qt.AlignLeft | Qt.AlignVCenter)
-                    if c == 3 and val != '0':
-                        item.setForeground(QColor(COLORS['red']))
-                    elif c == 2 and val != '0':
-                        item.setForeground(QColor(COLORS['green']))
-                    tbl.setItem(r, c, item)
-            tbl.horizontalHeader().setStretchLastSection(True)
-            tbl.setColumnWidth(0, 320)
-            tbl.setColumnWidth(1, 140)
-            tbl.setColumnWidth(2, 140)
-            tbl.verticalHeader().setVisible(False)
-
-        # QR payment - them vao payFrame (giu nguyen kich thuoc goc)
-        pf = page.findChild(QtWidgets.QFrame, 'payFrame')
-        if pf:
-            btn_qr = QtWidgets.QPushButton('Quét mã QR', pf)
-            btn_qr.setGeometry(15, 56, 180, 24)
-            btn_qr.setCursor(Qt.PointingHandCursor)
-            btn_qr.setStyleSheet(f'QPushButton {{ background: transparent; color: {COLORS["navy"]}; border: 1px solid {COLORS["navy"]}; border-radius: 4px; font-size: 11px; }} QPushButton:hover {{ background: {COLORS["navy"]}; color: white; }}')
-
-        history = [
-            ['15/01/2026', 'Đợt 1 - HK2 2025-2026', '9,000,000', 'Chuyển khoản NH'],
-            ['15/01/2026', 'BHYT + Ngoại khóa', '900,000', 'Chuyển khoản NH'],
-            ['20/08/2025', 'Đợt 1 - HK1 2025-2026', '9,000,000', 'Chuyển khoản NH'],
-            ['01/09/2025', 'Ký túc xá HK1', '3,600,000', 'Tiền mặt'],
-        ]
-        tbl2 = page.findChild(QtWidgets.QTableWidget, 'tblHistory')
-        if tbl2:
-            tbl2.setRowCount(len(history))
-            for r, row in enumerate(history):
-                for c, val in enumerate(row):
-                    item = QtWidgets.QTableWidgetItem(val)
-                    item.setTextAlignment(Qt.AlignCenter if c != 1 else Qt.AlignLeft | Qt.AlignVCenter)
-                    tbl2.setItem(r, c, item)
-            tbl2.horizontalHeader().setStretchLastSection(True)
-            tbl2.setColumnWidth(0, 120)
-            tbl2.setColumnWidth(1, 300)
-            tbl2.setColumnWidth(2, 140)
-            tbl2.verticalHeader().setVisible(False)
-
     def _fill_review(self):
-        page = self.page_widgets[7]
+        page = self.page_widgets[4]
         si = page.findChild(QtWidgets.QLabel, 'iconSearchReview')
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -687,16 +583,16 @@ class MainWindow(QtWidgets.QWidget):
                 tbl.setRowHeight(r, 50)
 
     def _fill_notifications(self):
-        page = self.page_widgets[8]
+        page = self.page_widgets[5]
         # fix scroll - set minimum height cho scrollContent
         sc = page.findChild(QtWidgets.QWidget, 'scrollContent')
         if sc:
             sc.setMinimumHeight(760)
 
     def _fill_profile(self):
-        page = self.page_widgets[9]
+        page = self.page_widgets[6]
         u = MOCK_USER
-        for attr, val in [('lblProfileName', u['name']), ('lblProfileRole', f"Sinh viên - Khoa {u['khoa']}"),
+        for attr, val in [('lblProfileName', u['name']), ('lblProfileRole', f"Học viên - Lớp {u['lop']}"),
                           ('lblProfileAvatar', u['initials']), ('valMaSV', u['msv']), ('valHoTen', u['name']),
                           ('valNgaySinh', u['ngaysinh']), ('valGioiTinh', u['gioitinh']), ('valLop', u['lop']),
                           ('valKhoa', u['khoa']), ('valNienKhoa', u['nienkhoa']), ('valHeDT', u['hedt'])]:
@@ -836,9 +732,10 @@ class AdminWindow(QtWidgets.QWidget):
         self._switch_page(index)
         if not self.pages_filled[index]:
             fill = [self._fill_admin_dashboard, self._fill_admin_courses,
-                    self._fill_admin_students, self._fill_admin_semester,
-                    self._fill_admin_curriculum, self._fill_admin_audit,
-                    self._fill_admin_stats]
+                    self._fill_admin_classes, self._fill_admin_students,
+                    self._fill_admin_teachers, self._fill_admin_employees,
+                    self._fill_admin_semester, self._fill_admin_curriculum,
+                    self._fill_admin_audit, self._fill_admin_stats]
             fill[index]()
             self.pages_filled[index] = True
 
@@ -1004,7 +901,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setRowHeight(r, 44)
 
     def _fill_admin_students(self):
-        page = self.page_widgets[2]
+        page = self.page_widgets[3]
         si = page.findChild(QtWidgets.QLabel, 'iconSearchStudent')
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -1047,7 +944,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setRowHeight(r, 44)
 
     def _fill_admin_semester(self):
-        page = self.page_widgets[3]
+        page = self.page_widgets[6]
         data = [
             ['HK2-2526', 'Học kỳ 2', '2025-2026', '01/01/2026', '30/06/2026', 'Đang mở'],
             ['HK1-2526', 'Học kỳ 1', '2025-2026', '01/08/2025', '31/12/2025', 'Đã đóng'],
@@ -1090,7 +987,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setRowHeight(r, 44)
 
     def _fill_admin_curriculum(self):
-        page = self.page_widgets[4]
+        page = self.page_widgets[7]
         si = page.findChild(QtWidgets.QLabel, 'iconSearchCurr')
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -1146,7 +1043,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setRowHeight(r, 44)
 
     def _fill_admin_audit(self):
-        page = self.page_widgets[5]
+        page = self.page_widgets[8]
         si = page.findChild(QtWidgets.QLabel, 'iconSearchAudit')
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -1194,7 +1091,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setRowHeight(r, 36)
 
     def _fill_admin_stats(self):
-        page = self.page_widgets[6]
+        page = self.page_widgets[9]
         # chart data voi progress bar
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblChartData')
         if tbl:
@@ -1250,6 +1147,944 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl3.setColumnWidth(c, w)
             tbl3.verticalHeader().setVisible(False)
 
+    def _fill_admin_classes(self):
+        page = self.page_widgets[2]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmClasses')
+        if not tbl:
+            return
+        type_colors = {'Còn chỗ': COLORS['green'], 'Đầy': COLORS['red']}
+        tbl.setRowCount(len(MOCK_CLASSES))
+        for r, cls in enumerate(MOCK_CLASSES):
+            ma, mmon, tmon, gv, lich, phong, smax, siso, gia = cls
+            for c, val in enumerate([ma, tmon, gv, lich, phong]):
+                item = QtWidgets.QTableWidgetItem(val)
+                item.setTextAlignment(Qt.AlignCenter if c == 0 else Qt.AlignLeft | Qt.AlignVCenter)
+                tbl.setItem(r, c, item)
+            # si so
+            siso_item = QtWidgets.QTableWidgetItem(f'{siso}/{smax}')
+            siso_item.setTextAlignment(Qt.AlignCenter)
+            pct = int(siso / smax * 100)
+            siso_item.setForeground(QColor(COLORS['red'] if pct >= 95 else COLORS['gold'] if pct >= 70 else COLORS['green']))
+            tbl.setItem(r, 5, siso_item)
+            # gia
+            gia_item = QtWidgets.QTableWidgetItem(f'{gia:,}'.replace(',', '.') + ' đ')
+            gia_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            gia_item.setForeground(QColor(COLORS['gold']))
+            tbl.setItem(r, 6, gia_item)
+            # thao tac
+            btn_edit = QtWidgets.QPushButton('Sửa')
+            btn_edit.setCursor(Qt.PointingHandCursor)
+            btn_edit.setFixedSize(50, 24)
+            btn_edit.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            btn_del = QtWidgets.QPushButton('Xóa')
+            btn_del.setCursor(Qt.PointingHandCursor)
+            btn_del.setFixedSize(50, 24)
+            btn_del.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            w = QtWidgets.QWidget()
+            hl = QtWidgets.QHBoxLayout(w)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setSpacing(6)
+            hl.setAlignment(Qt.AlignCenter)
+            hl.addWidget(btn_edit)
+            hl.addWidget(btn_del)
+            tbl.setCellWidget(r, 7, w)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        for c, cw in enumerate([85, 155, 140, 150, 75, 75, 115, 130]):
+            tbl.setColumnWidth(c, cw)
+        tbl.verticalHeader().setVisible(False)
+        for r in range(len(MOCK_CLASSES)):
+            tbl.setRowHeight(r, 44)
+
+    def _fill_admin_teachers(self):
+        page = self.page_widgets[4]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmTeachers')
+        if not tbl:
+            return
+        data = [
+            ['GV001', 'Nguyễn Đức Thiện', 'CNTT', 'Tiến sĩ', '0901234567', 3, 4.6],
+            ['GV002', 'Lê Thị C', 'CNTT', 'Thạc sĩ', '0901234568', 2, 4.3],
+            ['GV003', 'Phạm Văn D', 'CNTT', 'Thạc sĩ', '0901234569', 2, 4.1],
+            ['GV004', 'Ngô Thảo Anh', 'CNTT', 'Tiến sĩ', '0901234570', 1, 4.5],
+            ['GV005', 'Lê Trung Thực', 'CNTT', 'Thạc sĩ', '0901234571', 1, 4.2],
+            ['GV006', 'Hoàng Minh Tuấn', 'CNTT', 'Tiến sĩ', '0901234572', 1, 4.7],
+            ['GV007', 'Nguyễn Thị E', 'Toán', 'Phó giáo sư', '0901234573', 1, 4.8],
+            ['GV008', 'Lê Văn M', 'Toán', 'Tiến sĩ', '0901234574', 1, 4.0],
+        ]
+        tbl.setRowCount(len(data))
+        for r, row in enumerate(data):
+            for c, val in enumerate(row[:5]):
+                item = QtWidgets.QTableWidgetItem(str(val))
+                item.setTextAlignment(Qt.AlignCenter if c in (0, 3) else Qt.AlignLeft | Qt.AlignVCenter)
+                tbl.setItem(r, c, item)
+            # so lop
+            item_lop = QtWidgets.QTableWidgetItem(str(row[5]))
+            item_lop.setTextAlignment(Qt.AlignCenter)
+            tbl.setItem(r, 5, item_lop)
+            # danh gia
+            diem = row[6]
+            item_dg = QtWidgets.QTableWidgetItem(f'{diem:.1f} ⭐')
+            item_dg.setTextAlignment(Qt.AlignCenter)
+            item_dg.setForeground(QColor(COLORS['green'] if diem >= 4.5 else COLORS['navy'] if diem >= 4.0 else COLORS['orange']))
+            tbl.setItem(r, 6, item_dg)
+            # thao tac
+            btn_edit = QtWidgets.QPushButton('Chi tiết')
+            btn_edit.setCursor(Qt.PointingHandCursor)
+            btn_edit.setFixedSize(62, 24)
+            btn_edit.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            btn_del = QtWidgets.QPushButton('Xóa')
+            btn_del.setCursor(Qt.PointingHandCursor)
+            btn_del.setFixedSize(50, 24)
+            btn_del.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            w = QtWidgets.QWidget()
+            hl = QtWidgets.QHBoxLayout(w)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setSpacing(6)
+            hl.setAlignment(Qt.AlignCenter)
+            hl.addWidget(btn_edit)
+            hl.addWidget(btn_del)
+            tbl.setCellWidget(r, 7, w)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        for c, cw in enumerate([75, 170, 140, 110, 115, 70, 90, 140]):
+            tbl.setColumnWidth(c, cw)
+        tbl.verticalHeader().setVisible(False)
+        for r in range(len(data)):
+            tbl.setRowHeight(r, 44)
+
+    def _fill_admin_employees(self):
+        page = self.page_widgets[5]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmEmployees')
+        if not tbl:
+            return
+        data = [
+            ['NV001', 'Trần Thu Hương', 'Nhân viên đăng ký', '0987654321', 'huongtt@eaut.edu.vn', 'Đang làm'],
+            ['NV002', 'Lê Minh Đức', 'Nhân viên thu ngân', '0987654322', 'ducm@eaut.edu.vn', 'Đang làm'],
+            ['NV003', 'Phạm Quỳnh Anh', 'Nhân viên đăng ký', '0987654323', 'anhpq@eaut.edu.vn', 'Đang làm'],
+            ['NV004', 'Nguyễn Hoài Linh', 'Quản lý', '0987654324', 'linh@eaut.edu.vn', 'Đang làm'],
+            ['NV005', 'Vũ Thanh Tùng', 'Nhân viên thu ngân', '0987654325', 'tungvt@eaut.edu.vn', 'Nghỉ phép'],
+        ]
+        tbl.setRowCount(len(data))
+        for r, row in enumerate(data):
+            for c, val in enumerate(row[:5]):
+                item = QtWidgets.QTableWidgetItem(val)
+                item.setTextAlignment(Qt.AlignCenter if c == 0 else Qt.AlignLeft | Qt.AlignVCenter)
+                tbl.setItem(r, c, item)
+            # trang thai
+            item_st = QtWidgets.QTableWidgetItem(row[5])
+            item_st.setTextAlignment(Qt.AlignCenter)
+            item_st.setForeground(QColor(COLORS['green'] if row[5] == 'Đang làm' else COLORS['orange']))
+            tbl.setItem(r, 5, item_st)
+            # thao tac
+            btn_edit = QtWidgets.QPushButton('Chi tiết')
+            btn_edit.setCursor(Qt.PointingHandCursor)
+            btn_edit.setFixedSize(62, 24)
+            btn_edit.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            btn_del = QtWidgets.QPushButton('Xóa')
+            btn_del.setCursor(Qt.PointingHandCursor)
+            btn_del.setFixedSize(50, 24)
+            btn_del.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            w = QtWidgets.QWidget()
+            hl = QtWidgets.QHBoxLayout(w)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setSpacing(6)
+            hl.setAlignment(Qt.AlignCenter)
+            hl.addWidget(btn_edit)
+            hl.addWidget(btn_del)
+            tbl.setCellWidget(r, 6, w)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        for c, cw in enumerate([75, 170, 170, 115, 195, 90, 140]):
+            tbl.setColumnWidth(c, cw)
+        tbl.verticalHeader().setVisible(False)
+        for r in range(len(data)):
+            tbl.setRowHeight(r, 44)
+
+
+class TeacherWindow(QtWidgets.QWidget):
+    def __init__(self, app_ref):
+        super().__init__()
+        self.app_ref = app_ref
+        self.setObjectName('MainWindow')
+        self.setWindowTitle('EAUT - Hệ thống giảng viên')
+        self.setFixedSize(1100, 700)
+        self.setWindowIcon(QIcon(os.path.join(RES, 'logo.png')))
+
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.sidebar = self._build_sidebar()
+        layout.addWidget(self.sidebar)
+
+        self.stack = QtWidgets.QStackedWidget()
+        layout.addWidget(self.stack)
+
+        self.page_widgets = []
+        self.pages_filled = [False] * len(TEACHER_PAGES)
+        for btn_name, ui_file in TEACHER_PAGES:
+            page = self._load_page(ui_file)
+            self.page_widgets.append(page)
+            self.stack.addWidget(page)
+
+        self._switch_page(0)
+        self._fill_tea_dashboard()
+        self.pages_filled[0] = True
+
+    def _build_sidebar(self):
+        sidebar = QtWidgets.QFrame()
+        sidebar.setObjectName('sidebar')
+        sidebar.setFixedWidth(230)
+        sidebar.setStyleSheet('QFrame#sidebar { background: #ffffff; border-right: 1px solid #d2d6dc; }')
+
+        lbl_logo = QtWidgets.QLabel(sidebar)
+        lbl_logo.setGeometry(20, 20, 42, 42)
+        lbl_logo.setScaledContents(True)
+        logo_path = os.path.join(RES, 'logo.png')
+        if os.path.exists(logo_path):
+            lbl_logo.setPixmap(QPixmap(logo_path).scaled(42, 42, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+        lbl_school = QtWidgets.QLabel('EAUT', sidebar)
+        lbl_school.setGeometry(68, 20, 150, 20)
+        lbl_school.setStyleSheet(f'color: {COLORS["navy"]}; font-size: 13px; font-weight: bold; background: transparent;')
+        lbl_sub = QtWidgets.QLabel('Giảng viên', sidebar)
+        lbl_sub.setGeometry(68, 40, 150, 16)
+        lbl_sub.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 11px; background: transparent;')
+
+        sep = QtWidgets.QFrame(sidebar)
+        sep.setGeometry(15, 74, 200, 1)
+        sep.setStyleSheet(f'background: {COLORS["border"]};')
+
+        y = 86
+        for btn_name, icon_name, icon_file, label in TEACHER_MENU:
+            btn = QtWidgets.QPushButton(label, sidebar)
+            btn.setObjectName(btn_name)
+            btn.setGeometry(10, y, 210, 36)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(SIDEBAR_NORMAL)
+            setattr(self, btn_name, btn)
+
+            icon_lbl = QtWidgets.QLabel(sidebar)
+            icon_lbl.setObjectName(icon_name)
+            icon_lbl.setGeometry(20, y + 9, 16, 16)
+            icon_lbl.setScaledContents(True)
+            icon_lbl.setStyleSheet('background: transparent;')
+            icon_path = os.path.join(ICONS, f'{icon_file}.png')
+            if os.path.exists(icon_path):
+                icon_lbl.setPixmap(QPixmap(icon_path).scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            setattr(self, icon_name, icon_lbl)
+            y += 38
+
+        for i, (btn_name, _) in enumerate(TEACHER_PAGES):
+            btn = getattr(self, btn_name)
+            btn.clicked.connect(lambda checked, idx=i: self._on_nav(idx))
+
+        sep2 = QtWidgets.QFrame(sidebar)
+        sep2.setGeometry(15, 610, 200, 1)
+        sep2.setStyleSheet(f'background: {COLORS["border"]};')
+
+        lbl_av = QtWidgets.QLabel(MOCK_TEACHER['initials'], sidebar)
+        lbl_av.setGeometry(15, 625, 38, 38)
+        lbl_av.setAlignment(Qt.AlignCenter)
+        lbl_av.setStyleSheet(f'background: {COLORS["active_bg"]}; border-radius: 19px; color: {COLORS["navy"]}; font-size: 13px; font-weight: bold;')
+
+        lbl_name = QtWidgets.QLabel(MOCK_TEACHER['name'], sidebar)
+        lbl_name.setGeometry(60, 626, 130, 17)
+        lbl_name.setStyleSheet(f'color: {COLORS["text_dark"]}; font-size: 12px; font-weight: bold; background: transparent;')
+        lbl_role = QtWidgets.QLabel('Giảng viên', sidebar)
+        lbl_role.setGeometry(60, 644, 110, 15)
+        lbl_role.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 10px; background: transparent;')
+
+        icon_lo = QtWidgets.QLabel(sidebar)
+        icon_lo.setGeometry(191, 635, 18, 18)
+        icon_lo.setScaledContents(True)
+        icon_lo.setStyleSheet('background: transparent;')
+        lo_path = os.path.join(ICONS, 'log-out.png')
+        if os.path.exists(lo_path):
+            icon_lo.setPixmap(QPixmap(lo_path).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        btn_lo = QtWidgets.QPushButton(sidebar)
+        btn_lo.setGeometry(183, 627, 34, 34)
+        btn_lo.setCursor(Qt.PointingHandCursor)
+        btn_lo.setToolTip('Đăng xuất')
+        btn_lo.setStyleSheet('QPushButton { background: transparent; border: none; } QPushButton:hover { background: #fce8e6; border-radius: 8px; }')
+        btn_lo.clicked.connect(self._on_logout)
+
+        return sidebar
+
+    def _load_page(self, ui_file):
+        temp = uic.loadUi(os.path.join(UI, ui_file))
+        content = temp.findChild(QtWidgets.QFrame, 'contentArea')
+        if content:
+            content.setParent(None)
+            content.setFixedSize(870, 700)
+            return content
+        return temp
+
+    def _on_nav(self, index):
+        self._switch_page(index)
+        if not self.pages_filled[index]:
+            fill = [self._fill_tea_dashboard, self._fill_tea_schedule,
+                    self._fill_tea_classes, self._fill_tea_students,
+                    self._fill_tea_notice, self._fill_tea_grades,
+                    self._fill_tea_profile]
+            fill[index]()
+            self.pages_filled[index] = True
+
+    def _switch_page(self, index):
+        self.stack.setCurrentIndex(index)
+        active = TEACHER_PAGES[index][0]
+        for btn_name, _ in TEACHER_PAGES:
+            btn = getattr(self, btn_name)
+            icon = getattr(self, btn_name.replace('btn', 'icon'))
+            if btn_name == active:
+                btn.setStyleSheet(SIDEBAR_ACTIVE)
+                icon.raise_()
+            else:
+                btn.setStyleSheet(SIDEBAR_NORMAL)
+
+    def _on_logout(self):
+        self.close()
+        self.app_ref.show_login()
+
+    # === TEACHER DATA FILL ===
+
+    def _fill_tea_dashboard(self):
+        page = self.page_widgets[0]
+        w = page.findChild(QtWidgets.QLabel, 'lblWelcome')
+        if w:
+            w.setText(f"Xin chào, thầy {MOCK_TEACHER['name']}")
+
+        # Today schedule
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblToday')
+        if tbl:
+            data = [
+                ['7:00-9:30', 'IT001-A (Python)', 'P.A301'],
+                ['13:00-15:30', 'IT004-A (AI)', 'P.A301'],
+                ['15:40-18:10', 'IT001-C (Python)', 'P.C102'],
+            ]
+            tbl.setRowCount(len(data))
+            for r, row in enumerate(data):
+                for c, val in enumerate(row):
+                    item = QtWidgets.QTableWidgetItem(val)
+                    item.setTextAlignment(Qt.AlignCenter if c != 1 else Qt.AlignLeft | Qt.AlignVCenter)
+                    tbl.setItem(r, c, item)
+            tbl.horizontalHeader().setStretchLastSection(True)
+            tbl.setColumnWidth(0, 100)
+            tbl.setColumnWidth(1, 180)
+            tbl.verticalHeader().setVisible(False)
+            for r in range(len(data)):
+                tbl.setRowHeight(r, 38)
+
+        # Activity
+        tbl2 = page.findChild(QtWidgets.QTableWidget, 'tblActivity')
+        if tbl2:
+            data = [
+                ('30 phút trước', 'Nhận đánh giá mới từ lớp IT001-A'),
+                ('2 giờ trước', 'Lớp IT004-A có 2 học viên mới'),
+                ('Hôm qua', 'Đã gửi thông báo cho lớp IT001-C'),
+                ('2 ngày trước', 'Cập nhật điểm giữa kỳ IT001-A'),
+                ('3 ngày trước', 'Admin thông báo: họp khoa CNTT 25/04'),
+            ]
+            tbl2.setRowCount(len(data))
+            for r, (t, c) in enumerate(data):
+                ti = QtWidgets.QTableWidgetItem(t)
+                ti.setForeground(QColor(COLORS['text_light']))
+                ti.setFont(QFont('Segoe UI', 9))
+                tbl2.setItem(r, 0, ti)
+                tbl2.setItem(r, 1, QtWidgets.QTableWidgetItem(c))
+            tbl2.horizontalHeader().setStretchLastSection(True)
+            tbl2.setColumnWidth(0, 110)
+            tbl2.verticalHeader().setVisible(False)
+            for r in range(len(data)):
+                tbl2.setRowHeight(r, 38)
+
+    def _fill_tea_schedule(self):
+        # tái sử dụng schedule.ui giống HV nhưng lịch của GV
+        page = self.page_widgets[1]
+        sf = page.findChild(QtWidgets.QFrame, 'scheduleFrame')
+        if sf:
+            sf.setGeometry(15, 68, 610, 618)
+        cf = page.findChild(QtWidgets.QFrame, 'calendarFrame')
+        if cf:
+            cf.setGeometry(638, 68, 220, 230)
+        lf = page.findChild(QtWidgets.QFrame, 'legendFrame')
+        if lf:
+            lf.setGeometry(638, 310, 220, 180)
+
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblSchedule')
+        if not tbl:
+            return
+        hours = ['7:00','8:00','9:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00']
+        tbl.setRowCount(len(hours))
+        tbl.verticalHeader().setVisible(False)
+
+        today = QDate.currentDate()
+        monday = today.addDays(-(today.dayOfWeek() - 1))
+        days_vn = ['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7']
+        for i in range(6):
+            d = monday.addDays(i)
+            tbl.horizontalHeaderItem(i+1).setText(f'{d.toString("dd/MM/yyyy")}\n{days_vn[i]}')
+        tbl.setColumnWidth(0, 45)
+        for i in range(1, 7):
+            tbl.setColumnWidth(i, 92)
+        for r in range(len(hours)):
+            tbl.setRowHeight(r, 45)
+            item = QtWidgets.QTableWidgetItem(hours[r])
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignTop)
+            item.setForeground(QColor('#718096'))
+            item.setFont(QFont('Segoe UI', 8))
+            tbl.setItem(r, 0, item)
+        for r in range(len(hours)):
+            for c in range(1, 7):
+                if not tbl.item(r, c) and not tbl.cellWidget(r, c):
+                    tbl.setItem(r, c, QtWidgets.QTableWidgetItem(''))
+
+        def mk(ten, ts, toa, phong, ss, color):
+            f = QtWidgets.QFrame()
+            f.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #d2d6dc; border-radius: 4px; border-top: 3px solid {color}; margin: 1px; }}')
+            vb = QtWidgets.QVBoxLayout(f)
+            vb.setContentsMargins(4, 3, 4, 3)
+            vb.setSpacing(1)
+            for txt, st in [(ten, f'color: {color}; font-size: 9px; font-weight: bold; border: none;'),
+                            (ts, 'color: #4a5568; font-size: 8px; border: none;'),
+                            (f'Tòa {toa} - {phong}', 'color: #718096; font-size: 8px; border: none;'),
+                            (ss, 'color: #4a5568; font-size: 8px; border: none;')]:
+                l = QtWidgets.QLabel(txt)
+                l.setStyleSheet(st)
+                l.setWordWrap(True)
+                vb.addWidget(l)
+            vb.addStretch()
+            return f
+
+        # lich day GV
+        sched = [
+            (0, 3, 2, 'IT001-A Python', '07:00-09:30', 'EAUT', 'P.301', '35 HV', '#002060'),
+            (0, 3, 4, 'IT001-A Python', '07:00-09:30', 'EAUT', 'P.301', '35 HV', '#002060'),
+            (6, 3, 2, 'IT004-A AI', '13:00-15:30', 'EAUT', 'P.301', '28 HV', '#c68a1e'),
+            (9, 3, 1, 'IT001-C Python', '15:40-18:10', 'EAUT', 'P.102', '35 HV', '#276749'),
+            (9, 3, 3, 'IT001-C Python', '15:40-18:10', 'EAUT', 'P.102', '35 HV', '#276749'),
+        ]
+        for rs, span, col, ten, ts, toa, phong, ss, color in sched:
+            tbl.setCellWidget(rs, col, mk(ten, ts, toa, phong, ss, color))
+            tbl.setSpan(rs, col, span, 1)
+
+    def _fill_tea_classes(self):
+        page = self.page_widgets[2]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherClasses')
+        if not tbl:
+            return
+        # lớp của GV Nguyễn Đức Thiện (GV001)
+        my_classes = [c for c in MOCK_CLASSES if c[3] == 'Nguyễn Đức Thiện']
+        tbl.setRowCount(len(my_classes))
+        for r, cls in enumerate(my_classes):
+            ma, mmon, tmon, gv, lich, phong, smax, siso, gia = cls
+            for c, val in enumerate([ma, tmon]):
+                item = QtWidgets.QTableWidgetItem(val)
+                item.setTextAlignment(Qt.AlignCenter if c == 0 else Qt.AlignLeft | Qt.AlignVCenter)
+                tbl.setItem(r, c, item)
+            # siso
+            siso_item = QtWidgets.QTableWidgetItem(f'{siso}/{smax}')
+            siso_item.setTextAlignment(Qt.AlignCenter)
+            pct = int(siso / smax * 100)
+            siso_item.setForeground(QColor(COLORS['red'] if pct >= 95 else COLORS['gold'] if pct >= 70 else COLORS['green']))
+            tbl.setItem(r, 2, siso_item)
+            # lich, phong
+            tbl.setItem(r, 3, QtWidgets.QTableWidgetItem(lich))
+            item_p = QtWidgets.QTableWidgetItem(phong)
+            item_p.setTextAlignment(Qt.AlignCenter)
+            tbl.setItem(r, 4, item_p)
+            # gia
+            gia_item = QtWidgets.QTableWidgetItem(f'{gia:,}'.replace(',', '.') + ' đ')
+            gia_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            gia_item.setForeground(QColor(COLORS['gold']))
+            tbl.setItem(r, 5, gia_item)
+            # action: xem chi tiết
+            btn = QtWidgets.QPushButton('Chi tiết')
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setFixedSize(76, 26)
+            btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            w = QtWidgets.QWidget()
+            hl = QtWidgets.QHBoxLayout(w)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setAlignment(Qt.AlignCenter)
+            hl.addWidget(btn)
+            tbl.setCellWidget(r, 6, w)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        for c, cw in enumerate([100, 180, 80, 160, 80, 120, 96]):
+            tbl.setColumnWidth(c, cw)
+        tbl.verticalHeader().setVisible(False)
+        for r in range(len(my_classes)):
+            tbl.setRowHeight(r, 44)
+
+    def _fill_tea_students(self):
+        page = self.page_widgets[3]
+        # populate class filter
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboClass')
+        if cbo:
+            cbo.clear()
+            cbo.addItem('Tất cả lớp')
+            for cls in MOCK_CLASSES:
+                if cls[3] == 'Nguyễn Đức Thiện':
+                    cbo.addItem(cls[0])
+
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblStudents')
+        if not tbl:
+            return
+        data = [
+            ['1', 'HV2024001', 'Đào Viết Quang Huy', 'IT001-A', '0912345678', 'Đang học'],
+            ['2', 'HV2024002', 'Trần Thị Bích', 'IT001-A', '0923456789', 'Đang học'],
+            ['3', 'HV2024003', 'Lê Văn Cường', 'IT001-A', '0934567890', 'Đang học'],
+            ['4', 'HV2024010', 'Phạm Thị Dung', 'IT001-A', '0945678901', 'Tạm nghỉ'],
+            ['5', 'HV2024015', 'Hoàng Văn Em', 'IT001-A', '0956789012', 'Đang học'],
+            ['6', 'HV2024020', 'Vũ Thị Phương', 'IT004-A', '0967890123', 'Đang học'],
+            ['7', 'HV2024025', 'Nguyễn Thanh Giang', 'IT004-A', '0978901234', 'Đang học'],
+            ['8', 'HV2024030', 'Bùi Thị Hồng', 'IT001-C', '0989012345', 'Đang học'],
+        ]
+        tbl.setRowCount(len(data))
+        for r, row in enumerate(data):
+            for c, val in enumerate(row[:5]):
+                item = QtWidgets.QTableWidgetItem(val)
+                item.setTextAlignment(Qt.AlignCenter if c in (0, 3) else Qt.AlignLeft | Qt.AlignVCenter)
+                tbl.setItem(r, c, item)
+            item_st = QtWidgets.QTableWidgetItem(row[5])
+            item_st.setTextAlignment(Qt.AlignCenter)
+            item_st.setForeground(QColor(COLORS['green'] if row[5] == 'Đang học' else COLORS['orange']))
+            tbl.setItem(r, 5, item_st)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        for c, cw in enumerate([45, 100, 200, 90, 130, 110]):
+            tbl.setColumnWidth(c, cw)
+        tbl.verticalHeader().setVisible(False)
+        for r in range(len(data)):
+            tbl.setRowHeight(r, 40)
+
+    def _fill_tea_notice(self):
+        page = self.page_widgets[4]
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboTargetClass')
+        if cbo:
+            cbo.clear()
+            cbo.addItem('Tất cả lớp đang dạy')
+            for cls in MOCK_CLASSES:
+                if cls[3] == 'Nguyễn Đức Thiện':
+                    cbo.addItem(cls[0])
+
+        # populate sent list
+        sc = page.findChild(QtWidgets.QWidget, 'sentContent')
+        if sc:
+            sc.setMinimumHeight(500)
+            vlay = QtWidgets.QVBoxLayout(sc)
+            vlay.setContentsMargins(4, 4, 4, 4)
+            vlay.setSpacing(8)
+            sent = [
+                ('IT001-A', 'Nghỉ học ngày 20/04', '2 ngày trước'),
+                ('IT004-A', 'Bài tập tuần 8', '3 ngày trước'),
+                ('Tất cả', 'Thông báo kiểm tra giữa kỳ', '1 tuần trước'),
+                ('IT001-C', 'Đổi phòng học', '1 tuần trước'),
+            ]
+            for to, subj, t in sent:
+                card = QtWidgets.QFrame()
+                card.setFixedHeight(82)
+                card.setStyleSheet('QFrame { background: #f7fafc; border-radius: 6px; border-left: 3px solid #002060; }')
+                vb = QtWidgets.QVBoxLayout(card)
+                vb.setContentsMargins(10, 8, 10, 8)
+                vb.setSpacing(3)
+                l1 = QtWidgets.QLabel(f'→ {to}')
+                l1.setStyleSheet(f'color: {COLORS["navy"]}; font-size: 11px; font-weight: bold; background: transparent; border: none;')
+                l2 = QtWidgets.QLabel(subj)
+                l2.setStyleSheet('color: #1a1a2e; font-size: 12px; background: transparent; border: none;')
+                l3 = QtWidgets.QLabel(t)
+                l3.setStyleSheet(f'color: {COLORS["text_light"]}; font-size: 10px; background: transparent; border: none;')
+                vb.addWidget(l1)
+                vb.addWidget(l2)
+                vb.addWidget(l3)
+                vlay.addWidget(card)
+            vlay.addStretch()
+
+    def _fill_tea_grades(self):
+        page = self.page_widgets[5]
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboGradeClass')
+        if cbo:
+            cbo.clear()
+            cbo.addItem('-- Chọn lớp để nhập điểm --')
+            for cls in MOCK_CLASSES:
+                if cls[3] == 'Nguyễn Đức Thiện':
+                    cbo.addItem(cls[0])
+
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherGrades')
+        if not tbl:
+            return
+        data = [
+            ['1', 'HV2024001', 'Đào Viết Quang Huy', '8.5', '7.5', '7.8', 'B+'],
+            ['2', 'HV2024002', 'Trần Thị Bích', '9.0', '8.5', '8.7', 'A'],
+            ['3', 'HV2024003', 'Lê Văn Cường', '7.0', '6.5', '6.7', 'C+'],
+            ['4', 'HV2024010', 'Phạm Thị Dung', '8.0', '7.5', '7.7', 'B'],
+            ['5', 'HV2024015', 'Hoàng Văn Em', '9.5', '9.0', '9.2', 'A+'],
+            ['6', 'HV2024018', 'Đinh Văn Khánh', '7.5', '7.0', '7.2', 'B'],
+            ['7', 'HV2024022', 'Lâm Thị Nga', '8.5', '8.0', '8.2', 'B+'],
+            ['8', 'HV2024028', 'Trịnh Minh Quân', '6.0', '6.5', '6.4', 'C'],
+        ]
+        grade_colors = {'A+': COLORS['green'], 'A': COLORS['green'], 'B+': COLORS['navy'], 'B': COLORS['navy'], 'C+': COLORS['orange'], 'C': COLORS['orange']}
+        tbl.setRowCount(len(data))
+        for r, row in enumerate(data):
+            for c, val in enumerate(row):
+                item = QtWidgets.QTableWidgetItem(val)
+                item.setTextAlignment(Qt.AlignCenter if c != 2 else Qt.AlignLeft | Qt.AlignVCenter)
+                if c == 6:
+                    item.setForeground(QColor(grade_colors.get(val, COLORS['text_mid'])))
+                tbl.setItem(r, c, item)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        for c, cw in enumerate([45, 110, 210, 90, 90, 95, 100]):
+            tbl.setColumnWidth(c, cw)
+        tbl.verticalHeader().setVisible(False)
+        for r in range(len(data)):
+            tbl.setRowHeight(r, 42)
+
+    def _fill_tea_profile(self):
+        page = self.page_widgets[6]
+        u = MOCK_TEACHER
+        for attr, val in [('lblProfileName', u['name']), ('lblProfileRole', f"Giảng viên - Khoa {u['khoa']}"),
+                          ('lblProfileAvatar', u['initials']), ('valMaSV', u['id']), ('valHoTen', u['name']),
+                          ('valLop', u['hocvi']), ('valKhoa', u['khoa'])]:
+            w = page.findChild(QtWidgets.QLabel, attr)
+            if w:
+                w.setText(val)
+        for attr, val in [('txtEmail', u['email']), ('txtPhone', u['sdt'])]:
+            w = page.findChild(QtWidgets.QLineEdit, attr)
+            if w:
+                w.setText(val)
+
+
+class EmployeeWindow(QtWidgets.QWidget):
+    def __init__(self, app_ref):
+        super().__init__()
+        self.app_ref = app_ref
+        self.setObjectName('MainWindow')
+        self.setWindowTitle('EAUT - Hệ thống nhân viên')
+        self.setFixedSize(1100, 700)
+        self.setWindowIcon(QIcon(os.path.join(RES, 'logo.png')))
+
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.sidebar = self._build_sidebar()
+        layout.addWidget(self.sidebar)
+
+        self.stack = QtWidgets.QStackedWidget()
+        layout.addWidget(self.stack)
+
+        self.page_widgets = []
+        self.pages_filled = [False] * len(EMPLOYEE_PAGES)
+        for btn_name, ui_file in EMPLOYEE_PAGES:
+            page = self._load_page(ui_file)
+            self.page_widgets.append(page)
+            self.stack.addWidget(page)
+
+        self._switch_page(0)
+        self._fill_emp_dashboard()
+        self.pages_filled[0] = True
+
+    def _build_sidebar(self):
+        sidebar = QtWidgets.QFrame()
+        sidebar.setObjectName('sidebar')
+        sidebar.setFixedWidth(230)
+        sidebar.setStyleSheet('QFrame#sidebar { background: #ffffff; border-right: 1px solid #d2d6dc; }')
+
+        lbl_logo = QtWidgets.QLabel(sidebar)
+        lbl_logo.setGeometry(20, 20, 42, 42)
+        lbl_logo.setScaledContents(True)
+        logo_path = os.path.join(RES, 'logo.png')
+        if os.path.exists(logo_path):
+            lbl_logo.setPixmap(QPixmap(logo_path).scaled(42, 42, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+        lbl_school = QtWidgets.QLabel('EAUT', sidebar)
+        lbl_school.setGeometry(68, 20, 150, 20)
+        lbl_school.setStyleSheet(f'color: {COLORS["navy"]}; font-size: 13px; font-weight: bold; background: transparent;')
+        lbl_sub = QtWidgets.QLabel('Nhân viên', sidebar)
+        lbl_sub.setGeometry(68, 40, 150, 16)
+        lbl_sub.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 11px; background: transparent;')
+
+        sep = QtWidgets.QFrame(sidebar)
+        sep.setGeometry(15, 74, 200, 1)
+        sep.setStyleSheet(f'background: {COLORS["border"]};')
+
+        y = 86
+        for btn_name, icon_name, icon_file, label in EMPLOYEE_MENU:
+            btn = QtWidgets.QPushButton(label, sidebar)
+            btn.setObjectName(btn_name)
+            btn.setGeometry(10, y, 210, 36)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(SIDEBAR_NORMAL)
+            setattr(self, btn_name, btn)
+
+            icon_lbl = QtWidgets.QLabel(sidebar)
+            icon_lbl.setObjectName(icon_name)
+            icon_lbl.setGeometry(20, y + 9, 16, 16)
+            icon_lbl.setScaledContents(True)
+            icon_lbl.setStyleSheet('background: transparent;')
+            icon_path = os.path.join(ICONS, f'{icon_file}.png')
+            if os.path.exists(icon_path):
+                icon_lbl.setPixmap(QPixmap(icon_path).scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            setattr(self, icon_name, icon_lbl)
+            y += 38
+
+        for i, (btn_name, _) in enumerate(EMPLOYEE_PAGES):
+            btn = getattr(self, btn_name)
+            btn.clicked.connect(lambda checked, idx=i: self._on_nav(idx))
+
+        sep2 = QtWidgets.QFrame(sidebar)
+        sep2.setGeometry(15, 610, 200, 1)
+        sep2.setStyleSheet(f'background: {COLORS["border"]};')
+
+        lbl_av = QtWidgets.QLabel(MOCK_EMPLOYEE['initials'], sidebar)
+        lbl_av.setGeometry(15, 625, 38, 38)
+        lbl_av.setAlignment(Qt.AlignCenter)
+        lbl_av.setStyleSheet(f'background: {COLORS["active_bg"]}; border-radius: 19px; color: {COLORS["navy"]}; font-size: 13px; font-weight: bold;')
+
+        lbl_name = QtWidgets.QLabel(MOCK_EMPLOYEE['name'], sidebar)
+        lbl_name.setGeometry(60, 626, 130, 17)
+        lbl_name.setStyleSheet(f'color: {COLORS["text_dark"]}; font-size: 12px; font-weight: bold; background: transparent;')
+        lbl_role = QtWidgets.QLabel('Nhân viên', sidebar)
+        lbl_role.setGeometry(60, 644, 110, 15)
+        lbl_role.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 10px; background: transparent;')
+
+        icon_lo = QtWidgets.QLabel(sidebar)
+        icon_lo.setGeometry(191, 635, 18, 18)
+        icon_lo.setScaledContents(True)
+        icon_lo.setStyleSheet('background: transparent;')
+        lo_path = os.path.join(ICONS, 'log-out.png')
+        if os.path.exists(lo_path):
+            icon_lo.setPixmap(QPixmap(lo_path).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        btn_lo = QtWidgets.QPushButton(sidebar)
+        btn_lo.setGeometry(183, 627, 34, 34)
+        btn_lo.setCursor(Qt.PointingHandCursor)
+        btn_lo.setToolTip('Đăng xuất')
+        btn_lo.setStyleSheet('QPushButton { background: transparent; border: none; } QPushButton:hover { background: #fce8e6; border-radius: 8px; }')
+        btn_lo.clicked.connect(self._on_logout)
+
+        return sidebar
+
+    def _load_page(self, ui_file):
+        temp = uic.loadUi(os.path.join(UI, ui_file))
+        content = temp.findChild(QtWidgets.QFrame, 'contentArea')
+        if content:
+            content.setParent(None)
+            content.setFixedSize(870, 700)
+            return content
+        return temp
+
+    def _on_nav(self, index):
+        self._switch_page(index)
+        if not self.pages_filled[index]:
+            fill = [self._fill_emp_dashboard, self._fill_emp_register,
+                    self._fill_emp_reglist, self._fill_emp_payment,
+                    self._fill_emp_classes, self._fill_emp_profile]
+            fill[index]()
+            self.pages_filled[index] = True
+
+    def _switch_page(self, index):
+        self.stack.setCurrentIndex(index)
+        active = EMPLOYEE_PAGES[index][0]
+        for btn_name, _ in EMPLOYEE_PAGES:
+            btn = getattr(self, btn_name)
+            icon = getattr(self, btn_name.replace('btn', 'icon'))
+            if btn_name == active:
+                btn.setStyleSheet(SIDEBAR_ACTIVE)
+                icon.raise_()
+            else:
+                btn.setStyleSheet(SIDEBAR_NORMAL)
+
+    def _on_logout(self):
+        self.close()
+        self.app_ref.show_login()
+
+    # === EMPLOYEE DATA FILL ===
+
+    def _fill_emp_dashboard(self):
+        page = self.page_widgets[0]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblPending')
+        if tbl:
+            data = [
+                ('Đào Viết Quang Huy', 'IT001-A', 'Chờ thanh toán'),
+                ('Trần Thị Bích', 'IT002-A', 'Chờ thanh toán'),
+                ('Lê Văn Cường', 'IT004-B', 'Chờ thanh toán'),
+            ]
+            tbl.setRowCount(len(data))
+            for r, (n, cls, st) in enumerate(data):
+                tbl.setItem(r, 0, QtWidgets.QTableWidgetItem(n))
+                item_cls = QtWidgets.QTableWidgetItem(cls)
+                item_cls.setTextAlignment(Qt.AlignCenter)
+                tbl.setItem(r, 1, item_cls)
+                item_st = QtWidgets.QTableWidgetItem(st)
+                item_st.setForeground(QColor(COLORS['orange']))
+                item_st.setTextAlignment(Qt.AlignCenter)
+                tbl.setItem(r, 2, item_st)
+            tbl.horizontalHeader().setStretchLastSection(True)
+            tbl.setColumnWidth(0, 150)
+            tbl.setColumnWidth(1, 90)
+            tbl.verticalHeader().setVisible(False)
+            for r in range(len(data)):
+                tbl.setRowHeight(r, 38)
+
+        tbl2 = page.findChild(QtWidgets.QTableWidget, 'tblActivityEmp')
+        if tbl2:
+            data = [
+                ('10:30 hôm nay', 'Đăng ký mới: Đào Viết Quang Huy - IT001-A'),
+                ('10:15 hôm nay', 'Thu học phí: Hoàng Văn Em - 2.500.000đ'),
+                ('09:45 hôm nay', 'Đăng ký mới: Trần Thị Bích - IT002-A'),
+                ('09:20 hôm nay', 'Thu học phí: Nguyễn Thanh Giang - 1.800.000đ'),
+                ('08:50 hôm nay', 'Đăng ký mới: Vũ Thị Phương - IT004-A'),
+            ]
+            tbl2.setRowCount(len(data))
+            for r, (t, c) in enumerate(data):
+                ti = QtWidgets.QTableWidgetItem(t)
+                ti.setForeground(QColor(COLORS['text_light']))
+                ti.setFont(QFont('Segoe UI', 9))
+                tbl2.setItem(r, 0, ti)
+                tbl2.setItem(r, 1, QtWidgets.QTableWidgetItem(c))
+            tbl2.horizontalHeader().setStretchLastSection(True)
+            tbl2.setColumnWidth(0, 110)
+            tbl2.verticalHeader().setVisible(False)
+            for r in range(len(data)):
+                tbl2.setRowHeight(r, 38)
+
+    def _fill_emp_register(self):
+        page = self.page_widgets[1]
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboCourse')
+        if cbo_c:
+            cbo_c.clear()
+            cbo_c.addItem('-- Chọn môn học --')
+            for code, name in MOCK_COURSES:
+                cbo_c.addItem(f'{code} - {name}')
+        cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboClassEmp')
+        if cbo_cls:
+            cbo_cls.clear()
+            cbo_cls.addItem('-- Chọn lớp --')
+            for cls in MOCK_CLASSES:
+                cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({cls[8]:,}đ)'.replace(',', '.'))
+
+    def _fill_emp_reglist(self):
+        page = self.page_widgets[2]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblRegistrations')
+        if not tbl:
+            return
+        data = [
+            ['DK001', '18/04/2026', 'Đào Viết Quang Huy', 'IT001-A', '2.500.000', 'Chờ thanh toán'],
+            ['DK002', '18/04/2026', 'Trần Thị Bích', 'IT002-A', '2.200.000', 'Chờ thanh toán'],
+            ['DK003', '18/04/2026', 'Hoàng Văn Em', 'IT001-B', '1.800.000', 'Đã thanh toán'],
+            ['DK004', '17/04/2026', 'Nguyễn Thanh Giang', 'IT001-B', '1.800.000', 'Đã thanh toán'],
+            ['DK005', '17/04/2026', 'Vũ Thị Phương', 'IT004-A', '2.800.000', 'Đã thanh toán'],
+            ['DK006', '17/04/2026', 'Phạm Thị Dung', 'MA001-A', '1.500.000', 'Đã thanh toán'],
+            ['DK007', '16/04/2026', 'Lê Văn Cường', 'IT004-B', '2.200.000', 'Chờ thanh toán'],
+            ['DK008', '16/04/2026', 'Bùi Thị Hồng', 'IT001-C', '2.000.000', 'Đã thanh toán'],
+            ['DK009', '15/04/2026', 'Đinh Văn Khánh', 'IT001-A', '2.500.000', 'Đã thanh toán'],
+            ['DK010', '15/04/2026', 'Lâm Thị Nga', 'IT002-B', '1.800.000', 'Đã hủy'],
+        ]
+        tbl.setRowCount(len(data))
+        for r, row in enumerate(data):
+            for c, val in enumerate(row[:5]):
+                item = QtWidgets.QTableWidgetItem(val)
+                item.setTextAlignment(Qt.AlignCenter if c in (0, 1, 3) else
+                                       Qt.AlignRight | Qt.AlignVCenter if c == 4 else
+                                       Qt.AlignLeft | Qt.AlignVCenter)
+                tbl.setItem(r, c, item)
+            # trang thai
+            st = row[5]
+            item_st = QtWidgets.QTableWidgetItem(st)
+            item_st.setTextAlignment(Qt.AlignCenter)
+            color = COLORS['green'] if st == 'Đã thanh toán' else COLORS['orange'] if st == 'Chờ thanh toán' else COLORS['red']
+            item_st.setForeground(QColor(color))
+            tbl.setItem(r, 5, item_st)
+            # action
+            btn = QtWidgets.QPushButton('Chi tiết')
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setFixedSize(76, 26)
+            btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            w = QtWidgets.QWidget()
+            hl = QtWidgets.QHBoxLayout(w)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setAlignment(Qt.AlignCenter)
+            hl.addWidget(btn)
+            tbl.setCellWidget(r, 6, w)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        for c, cw in enumerate([70, 95, 195, 90, 110, 125, 96]):
+            tbl.setColumnWidth(c, cw)
+        tbl.verticalHeader().setVisible(False)
+        for r in range(len(data)):
+            tbl.setRowHeight(r, 40)
+
+    def _fill_emp_payment(self):
+        page = self.page_widgets[3]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblPayPending')
+        if not tbl:
+            return
+        data = [
+            ['DK001', 'Đào Viết Quang Huy', 'IT001-A', '2.500.000'],
+            ['DK002', 'Trần Thị Bích', 'IT002-A', '2.200.000'],
+            ['DK007', 'Lê Văn Cường', 'IT004-B', '2.200.000'],
+            ['DK011', 'Phạm Minh Hòa', 'IT003-A', '2.000.000'],
+            ['DK012', 'Ngô Thị Kim', 'MA001-B', '1.200.000'],
+        ]
+        tbl.setRowCount(len(data))
+        for r, row in enumerate(data):
+            for c, val in enumerate(row):
+                item = QtWidgets.QTableWidgetItem(val)
+                if c == 0 or c == 2:
+                    item.setTextAlignment(Qt.AlignCenter)
+                elif c == 3:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    item.setForeground(QColor(COLORS['gold']))
+                tbl.setItem(r, c, item)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        for c, cw in enumerate([70, 170, 90, 110]):
+            tbl.setColumnWidth(c, cw)
+        tbl.verticalHeader().setVisible(False)
+        for r in range(len(data)):
+            tbl.setRowHeight(r, 40)
+
+    def _fill_emp_classes(self):
+        page = self.page_widgets[4]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblEmpClasses')
+        if not tbl:
+            return
+        tbl.setRowCount(len(MOCK_CLASSES))
+        for r, cls in enumerate(MOCK_CLASSES):
+            ma, mmon, tmon, gv, lich, phong, smax, siso, gia = cls
+            for c, val in enumerate([ma, tmon, gv, lich]):
+                item = QtWidgets.QTableWidgetItem(val)
+                item.setTextAlignment(Qt.AlignCenter if c == 0 else Qt.AlignLeft | Qt.AlignVCenter)
+                tbl.setItem(r, c, item)
+            siso_item = QtWidgets.QTableWidgetItem(f'{siso}/{smax}')
+            siso_item.setTextAlignment(Qt.AlignCenter)
+            pct = int(siso / smax * 100)
+            siso_item.setForeground(QColor(COLORS['red'] if pct >= 95 else COLORS['gold'] if pct >= 70 else COLORS['green']))
+            tbl.setItem(r, 4, siso_item)
+            gia_item = QtWidgets.QTableWidgetItem(f'{gia:,}'.replace(',', '.') + ' đ')
+            gia_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            gia_item.setForeground(QColor(COLORS['gold']))
+            tbl.setItem(r, 5, gia_item)
+            trang_thai = 'Đầy' if pct >= 100 else 'Còn chỗ'
+            item_tt = QtWidgets.QTableWidgetItem(trang_thai)
+            item_tt.setTextAlignment(Qt.AlignCenter)
+            item_tt.setForeground(QColor(COLORS['red'] if trang_thai == 'Đầy' else COLORS['green']))
+            tbl.setItem(r, 6, item_tt)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        for c, cw in enumerate([85, 155, 135, 145, 70, 110, 96]):
+            tbl.setColumnWidth(c, cw)
+        tbl.verticalHeader().setVisible(False)
+        for r in range(len(MOCK_CLASSES)):
+            tbl.setRowHeight(r, 40)
+
+    def _fill_emp_profile(self):
+        page = self.page_widgets[5]
+        u = MOCK_EMPLOYEE
+        for attr, val in [('lblProfileName', u['name']), ('lblProfileRole', f"Nhân viên - {u['chucvu']}"),
+                          ('lblProfileAvatar', u['initials']), ('valMaSV', u['id']), ('valHoTen', u['name']),
+                          ('valLop', u['chucvu'])]:
+            w = page.findChild(QtWidgets.QLabel, attr)
+            if w:
+                w.setText(val)
+        for attr, val in [('txtEmail', u['email']), ('txtPhone', u['sdt'])]:
+            w = page.findChild(QtWidgets.QLineEdit, attr)
+            if w:
+                w.setText(val)
+
 
 class App:
     def __init__(self):
@@ -1283,6 +2118,14 @@ class App:
             elif u == MOCK_ADMIN['username'] and p == MOCK_ADMIN['password']:
                 self.login_win.close()
                 self.main_win = AdminWindow(self)
+                self.main_win.show()
+            elif u == MOCK_TEACHER['username'] and p == MOCK_TEACHER['password']:
+                self.login_win.close()
+                self.main_win = TeacherWindow(self)
+                self.main_win.show()
+            elif u == MOCK_EMPLOYEE['username'] and p == MOCK_EMPLOYEE['password']:
+                self.login_win.close()
+                self.main_win = EmployeeWindow(self)
                 self.main_win.show()
             else:
                 self.login_win.lblError.setText('Sai tài khoản hoặc mật khẩu!')
