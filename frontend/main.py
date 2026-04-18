@@ -979,7 +979,6 @@ class AdminWindow(QtWidgets.QWidget):
                 item_ss.setTextAlignment(Qt.AlignCenter)
                 color = COLORS['red'] if pct >= 90 else COLORS['gold'] if pct >= 60 else COLORS['green']
                 item_ss.setForeground(QColor(color))
-                item_ss.setFont(QFont('Segoe UI', 11, QFont.Bold))
                 tbl.setItem(r, 5, item_ss)
                 btn_edit = QtWidgets.QPushButton('Sửa')
                 btn_edit.setCursor(Qt.PointingHandCursor)
@@ -1069,7 +1068,6 @@ class AdminWindow(QtWidgets.QWidget):
                     item_st.setForeground(QColor(COLORS['green']))
                 else:
                     item_st.setForeground(QColor(COLORS['text_light']))
-                item_st.setFont(QFont('Segoe UI', 11, QFont.Bold))
                 tbl.setItem(r, 5, item_st)
                 btn_toggle = QtWidgets.QPushButton('Đóng ĐK' if is_open else 'Mở ĐK')
                 btn_toggle.setCursor(Qt.PointingHandCursor)
@@ -1123,7 +1121,6 @@ class AdminWindow(QtWidgets.QWidget):
                     item.setTextAlignment(Qt.AlignCenter if c in (0, 3, 4, 5) else Qt.AlignLeft | Qt.AlignVCenter)
                     if c == 4:
                         item.setForeground(QColor(type_colors.get(val, COLORS['text_mid'])))
-                        item.setFont(QFont('Segoe UI', 10, QFont.Bold))
                     tbl.setItem(r, c, item)
                 btn_edit = QtWidgets.QPushButton('Sửa')
                 btn_edit.setCursor(Qt.PointingHandCursor)
@@ -1186,7 +1183,6 @@ class AdminWindow(QtWidgets.QWidget):
                     elif c == 3:
                         color = action_colors.get(val, COLORS['text_mid'])
                         item.setForeground(QColor(color))
-                        item.setFont(QFont('Segoe UI', 10, QFont.Bold))
                     elif c == 5:
                         item.setForeground(QColor(COLORS['text_light']))
                     tbl.setItem(r, c, item)
