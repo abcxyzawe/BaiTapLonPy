@@ -349,7 +349,7 @@ class MainWindow(QtWidgets.QWidget):
                 tbl.setCellWidget(r, 6, w)
 
             tbl.horizontalHeader().setStretchLastSection(False)
-            for c, cw in enumerate([65, 145, 28, 108, 108, 68, 160]):
+            for c, cw in enumerate([65, 140, 28, 105, 105, 80, 157]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
