@@ -5,6 +5,55 @@ from PyQt5.QtCore import Qt, QDate
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
 
+
+# ===== helpers popup =====
+def msg_info(parent, title, text):
+    QtWidgets.QMessageBox.information(parent, title, text)
+
+
+def msg_warn(parent, title, text):
+    QtWidgets.QMessageBox.warning(parent, title, text)
+
+
+def msg_confirm(parent, title, text):
+    ans = QtWidgets.QMessageBox.question(
+        parent, title, text,
+        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+        QtWidgets.QMessageBox.No,
+    )
+    return ans == QtWidgets.QMessageBox.Yes
+
+
+def msg_input(parent, title, label, default=''):
+    text, ok = QtWidgets.QInputDialog.getText(parent, title, label, text=default)
+    return text.strip() if ok else None
+
+
+def norm(s):
+    """bo dau + lower cho search"""
+    if not s:
+        return ''
+    import unicodedata
+    s = unicodedata.normalize('NFD', str(s))
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    return s.lower().replace('đ', 'd').replace('Đ', 'd')
+
+
+def table_filter(tbl, keyword, cols=None):
+    """an row khong match keyword - check cac cot cho phep"""
+    kw = norm(keyword)
+    if cols is None:
+        cols = range(tbl.columnCount())
+    for r in range(tbl.rowCount()):
+        show = not kw
+        if kw:
+            for c in cols:
+                it = tbl.item(r, c)
+                if it and kw in norm(it.text()):
+                    show = True
+                    break
+        tbl.setRowHidden(r, not show)
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 UI = os.path.join(BASE, 'ui')
 RES = os.path.join(BASE, 'resources')
@@ -481,6 +530,10 @@ class MainWindow(QtWidgets.QWidget):
         for r in range(len(data)):
             tbl.setRowHeight(r, 40)
 
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboSemester')
+        if cbo:
+            cbo.currentIndexChanged.connect(lambda idx: msg_info(self, 'Lịch thi', f'Hiển thị lịch thi của kỳ: {cbo.currentText()}'))
+
     def _fill_grades(self):
         page = self.page_widgets[3]
         data = [
@@ -535,6 +588,26 @@ class MainWindow(QtWidgets.QWidget):
             btn_export.setCursor(Qt.PointingHandCursor)
             btn_export.setStyleSheet(f'QPushButton {{ background: white; color: {COLORS["navy"]}; border: 1px solid {COLORS["navy"]}; border-radius: 4px; padding: 4px 12px; font-size: 11px; }} QPushButton:hover {{ background: {COLORS["navy"]}; color: white; }}')
             btn_export.show()
+            btn_export.clicked.connect(lambda: msg_info(self, 'Xuất PDF', 'Đã xuất bảng điểm ra file PDF (tinh.nang.demo)'))
+
+        # loc theo hoc ky
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboSemester')
+        if cbo:
+            cbo.currentIndexChanged.connect(lambda idx: self._filter_grades_sem(idx))
+
+    def _filter_grades_sem(self, idx):
+        page = self.page_widgets[3]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblGrades')
+        if not tbl:
+            return
+        # idx 0 = tat ca, 1 = HK2 (odd rows), 2 = HK1 (even rows)
+        for r in range(tbl.rowCount()):
+            if idx == 0:
+                tbl.setRowHidden(r, False)
+            elif idx == 1:
+                tbl.setRowHidden(r, r % 2 == 1)
+            else:
+                tbl.setRowHidden(r, r % 2 == 0)
 
     def _fill_review(self):
         page = self.page_widgets[4]
@@ -581,6 +654,59 @@ class MainWindow(QtWidgets.QWidget):
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 50)
+            # connect nut danh gia
+            for r, row in enumerate(data):
+                w = tbl.cellWidget(r, 5)
+                if w:
+                    b = w.findChild(QtWidgets.QPushButton)
+                    if b:
+                        gv_name = row[1]
+                        b.clicked.connect(lambda ch, gv=gv_name: self._open_review_dialog(gv))
+
+        # search + filter
+        txt_s = page.findChild(QtWidgets.QLineEdit, 'txtSearchReview')
+        if txt_s:
+            txt_s.textChanged.connect(lambda t: table_filter(tbl, t, cols=[1, 2]) if tbl else None)
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboDept')
+        if cbo_d:
+            cbo_d.currentIndexChanged.connect(lambda: self._apply_review_filter())
+        cbo_s = page.findChild(QtWidgets.QComboBox, 'cboSubject')
+        if cbo_s:
+            cbo_s.currentIndexChanged.connect(lambda: self._apply_review_filter())
+
+    def _apply_review_filter(self):
+        page = self.page_widgets[4]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblReview')
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboDept')
+        if not tbl or not cbo_d:
+            return
+        dept_map = {0: None, 1: 'CNTT', 2: 'Toán', 3: 'Ngoại ngữ'}
+        want = dept_map.get(cbo_d.currentIndex())
+        for r in range(tbl.rowCount()):
+            it = tbl.item(r, 2)
+            if not want:
+                tbl.setRowHidden(r, False)
+            else:
+                tbl.setRowHidden(r, it.text() != want if it else False)
+
+    def _open_review_dialog(self, gv_name):
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle('Đánh giá giảng viên')
+        dlg.setFixedSize(420, 320)
+        lay = QtWidgets.QVBoxLayout(dlg)
+        lay.addWidget(QtWidgets.QLabel(f'<b>Giảng viên:</b> {gv_name}'))
+        lay.addWidget(QtWidgets.QLabel('Chấm điểm (1-5):'))
+        sp = QtWidgets.QSpinBox(); sp.setRange(1, 5); sp.setValue(4)
+        lay.addWidget(sp)
+        lay.addWidget(QtWidgets.QLabel('Nhận xét:'))
+        ta = QtWidgets.QTextEdit()
+        lay.addWidget(ta)
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        lay.addWidget(btns)
+        if dlg.exec_() == QtWidgets.QDialog.Accepted:
+            msg_info(self, 'Đánh giá', f'Đã gửi đánh giá {sp.value()}/5 cho {gv_name}')
 
     def _fill_notifications(self):
         page = self.page_widgets[5]
@@ -603,6 +729,47 @@ class MainWindow(QtWidgets.QWidget):
             w = page.findChild(QtWidgets.QLineEdit, attr)
             if w:
                 w.setText(val)
+
+        btn_save = page.findChild(QtWidgets.QPushButton, 'btnSave')
+        if btn_save:
+            btn_save.clicked.connect(self._save_profile)
+        btn_cp = page.findChild(QtWidgets.QPushButton, 'btnChangePass')
+        if btn_cp:
+            btn_cp.clicked.connect(self._change_pass)
+
+    def _save_profile(self):
+        page = self.page_widgets[6]
+        for attr, key in [('txtEmail', 'email'), ('txtPhone', 'sdt'), ('txtAddress', 'diachi')]:
+            w = page.findChild(QtWidgets.QLineEdit, attr)
+            if w:
+                MOCK_USER[key] = w.text().strip()
+        msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
+
+    def _change_pass(self):
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle('Đổi mật khẩu')
+        dlg.setFixedSize(380, 220)
+        form = QtWidgets.QFormLayout(dlg)
+        old = QtWidgets.QLineEdit(); old.setEchoMode(QtWidgets.QLineEdit.Password)
+        new1 = QtWidgets.QLineEdit(); new1.setEchoMode(QtWidgets.QLineEdit.Password)
+        new2 = QtWidgets.QLineEdit(); new2.setEchoMode(QtWidgets.QLineEdit.Password)
+        form.addRow('Mật khẩu cũ:', old)
+        form.addRow('Mật khẩu mới:', new1)
+        form.addRow('Nhập lại:', new2)
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if old.text() != MOCK_USER['password']:
+            msg_warn(self, 'Lỗi', 'Sai mật khẩu cũ')
+            return
+        if not new1.text() or new1.text() != new2.text():
+            msg_warn(self, 'Lỗi', 'Mật khẩu mới không khớp')
+            return
+        MOCK_USER['password'] = new1.text()
+        msg_info(self, 'Thành công', 'Đổi mật khẩu thành công')
 
 
 class AdminWindow(QtWidgets.QWidget):
@@ -899,6 +1066,87 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 44)
+            # wire edit/del each row
+            for r, row in enumerate(data):
+                w = tbl.cellWidget(r, 6)
+                if w:
+                    btns = w.findChildren(QtWidgets.QPushButton)
+                    if len(btns) >= 2:
+                        btns[0].clicked.connect(lambda ch, ma=row[0], nm=row[1]: self._admin_edit_course(ma, nm))
+                        btns[1].clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'môn học'))
+
+        # wire search / filter / add
+        txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCourse')
+        if txt:
+            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1, 3]))
+        btn_s = page.findChild(QtWidgets.QPushButton, 'btnSearchCourse')
+        if btn_s and txt:
+            btn_s.clicked.connect(lambda: table_filter(tbl, txt.text(), cols=[0, 1, 3]))
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboFilterDept')
+        if cbo:
+            cbo.currentIndexChanged.connect(lambda idx: msg_info(self, 'Lọc khoa', f'Đã lọc theo: {cbo.currentText()}'))
+        btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddCourse')
+        if btn_add:
+            btn_add.clicked.connect(self._admin_add_course)
+
+    def _admin_add_course(self):
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle('Thêm môn học')
+        dlg.setFixedSize(380, 260)
+        form = QtWidgets.QFormLayout(dlg)
+        txt_code = QtWidgets.QLineEdit()
+        txt_name = QtWidgets.QLineEdit()
+        txt_tc = QtWidgets.QLineEdit('3')
+        txt_gv = QtWidgets.QLineEdit()
+        form.addRow('Mã môn:', txt_code)
+        form.addRow('Tên môn:', txt_name)
+        form.addRow('Tín chỉ:', txt_tc)
+        form.addRow('GV phụ trách:', txt_gv)
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if not txt_code.text().strip() or not txt_name.text().strip():
+            msg_warn(self, 'Thiếu', 'Mã môn và tên môn không được trống')
+            return
+        tbl = self.page_widgets[1].findChild(QtWidgets.QTableWidget, 'tblAdminCourses')
+        if tbl:
+            r = tbl.rowCount()
+            tbl.insertRow(r)
+            vals = [txt_code.text().upper(), txt_name.text(), txt_tc.text() or '3', txt_gv.text() or '—', '—']
+            for c, v in enumerate(vals):
+                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(v))
+            item_ss = QtWidgets.QTableWidgetItem('0/40')
+            item_ss.setTextAlignment(Qt.AlignCenter)
+            item_ss.setForeground(QColor(COLORS['green']))
+            tbl.setItem(r, 5, item_ss)
+            tbl.setRowHeight(r, 44)
+        # them vao MOCK_COURSES
+        MOCK_COURSES.append((txt_code.text().upper(), txt_name.text()))
+        msg_info(self, 'Thành công', f'Đã thêm môn {txt_code.text()} - {txt_name.text()}')
+
+    def _admin_edit_course(self, ma, nm):
+        new_name = msg_input(self, 'Sửa môn học', f'Tên mới cho {ma}:', nm)
+        if new_name:
+            tbl = self.page_widgets[1].findChild(QtWidgets.QTableWidget, 'tblAdminCourses')
+            if tbl:
+                for r in range(tbl.rowCount()):
+                    it = tbl.item(r, 0)
+                    if it and it.text() == ma:
+                        tbl.setItem(r, 1, QtWidgets.QTableWidgetItem(new_name))
+                        break
+            msg_info(self, 'Đã sửa', f'Đã cập nhật {ma} thành: {new_name}')
+
+    def _admin_del_row(self, tbl, ma, nm, loai):
+        if not msg_confirm(self, 'Xác nhận xóa', f'Xóa {loai} {ma} - {nm}?'):
+            return
+        for r in range(tbl.rowCount()):
+            it = tbl.item(r, 0)
+            if it and it.text() == ma:
+                tbl.removeRow(r)
+                break
+        msg_info(self, 'Đã xóa', f'Đã xóa {loai}: {ma}')
 
     def _fill_admin_students(self):
         page = self.page_widgets[3]
@@ -942,6 +1190,82 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 44)
+            # wire buttons
+            for r, row in enumerate(data):
+                w = tbl.cellWidget(r, 6)
+                if w:
+                    btns = w.findChildren(QtWidgets.QPushButton)
+                    if len(btns) >= 2:
+                        btns[0].clicked.connect(lambda ch, rd=row: msg_info(
+                            self, 'Chi tiết học viên',
+                            f"MSV: {rd[0]}\nHọ tên: {rd[1]}\nLớp: {rd[2]}\nKhoa: {rd[3]}\nSDT: {rd[4]}\nSố môn đăng ký: {rd[5]}"))
+                        btns[1].clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'học viên'))
+
+        # search / filter / add
+        txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchStudent')
+        if txt:
+            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1]))
+        btn_s = page.findChild(QtWidgets.QPushButton, 'btnSearchStudent')
+        if btn_s and txt:
+            btn_s.clicked.connect(lambda: table_filter(tbl, txt.text(), cols=[0, 1]))
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
+        if cbo_c:
+            cbo_c.currentIndexChanged.connect(lambda: self._admin_filter_students())
+        if cbo_d:
+            cbo_d.currentIndexChanged.connect(lambda: self._admin_filter_students())
+        btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddStudent')
+        if btn_add:
+            btn_add.clicked.connect(self._admin_add_student)
+
+    def _admin_filter_students(self):
+        page = self.page_widgets[3]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdminStudents')
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
+        if not tbl:
+            return
+        lop_sel = cbo_c.currentText() if cbo_c and cbo_c.currentIndex() > 0 else None
+        khoa_sel = cbo_d.currentText() if cbo_d and cbo_d.currentIndex() > 0 else None
+        for r in range(tbl.rowCount()):
+            it_lop = tbl.item(r, 2)
+            it_khoa = tbl.item(r, 3)
+            show = True
+            if lop_sel and it_lop and lop_sel not in it_lop.text():
+                show = False
+            if khoa_sel and it_khoa and khoa_sel not in it_khoa.text():
+                show = False
+            tbl.setRowHidden(r, not show)
+
+    def _admin_add_student(self):
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle('Thêm học viên')
+        dlg.setFixedSize(380, 280)
+        form = QtWidgets.QFormLayout(dlg)
+        fields = [('MSV', 'msv'), ('Họ tên', 'ten'), ('Lớp', 'lop'), ('Khoa', 'khoa'), ('SDT', 'sdt')]
+        widgets = {}
+        for label, key in fields:
+            w = QtWidgets.QLineEdit()
+            form.addRow(label + ':', w)
+            widgets[key] = w
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if not widgets['msv'].text().strip() or not widgets['ten'].text().strip():
+            msg_warn(self, 'Thiếu', 'MSV và họ tên không được trống')
+            return
+        tbl = self.page_widgets[3].findChild(QtWidgets.QTableWidget, 'tblAdminStudents')
+        if tbl:
+            r = tbl.rowCount()
+            tbl.insertRow(r)
+            vals = [widgets['msv'].text(), widgets['ten'].text(), widgets['lop'].text() or '—',
+                    widgets['khoa'].text() or '—', widgets['sdt'].text() or '—', '0']
+            for c, v in enumerate(vals):
+                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(v))
+            tbl.setRowHeight(r, 44)
+        msg_info(self, 'Thành công', f'Đã thêm học viên {widgets["msv"].text()}')
 
     def _fill_admin_semester(self):
         page = self.page_widgets[6]
@@ -985,6 +1309,59 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 44)
+            # wire toggle button
+            for r, row in enumerate(data):
+                w = tbl.cellWidget(r, 6)
+                if w:
+                    btn = w.findChild(QtWidgets.QPushButton)
+                    if btn:
+                        btn.clicked.connect(lambda ch, ma=row[0], b=btn: self._admin_toggle_sem(ma, b))
+
+        btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddSemester')
+        if btn_add:
+            btn_add.clicked.connect(self._admin_add_semester)
+
+    def _admin_toggle_sem(self, ma, btn):
+        current = btn.text()
+        is_open = 'Đóng' in current
+        new_state = 'mở' if not is_open else 'đóng'
+        if not msg_confirm(self, 'Xác nhận', f'{"Đóng" if is_open else "Mở"} đăng ký cho {ma}?'):
+            return
+        btn.setText('Mở ĐK' if is_open else 'Đóng ĐK')
+        msg_info(self, 'Thành công', f'Đã {new_state} đăng ký cho {ma}')
+
+    def _admin_add_semester(self):
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle('Thêm học kỳ')
+        dlg.setFixedSize(360, 260)
+        form = QtWidgets.QFormLayout(dlg)
+        ma = QtWidgets.QLineEdit('HK?-????')
+        ten = QtWidgets.QLineEdit('Học kỳ ?')
+        nam = QtWidgets.QLineEdit('2026-2027')
+        bd = QtWidgets.QLineEdit('01/08/2026')
+        kt = QtWidgets.QLineEdit('31/12/2026')
+        form.addRow('Mã HK:', ma)
+        form.addRow('Tên HK:', ten)
+        form.addRow('Năm học:', nam)
+        form.addRow('Bắt đầu:', bd)
+        form.addRow('Kết thúc:', kt)
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        tbl = self.page_widgets[6].findChild(QtWidgets.QTableWidget, 'tblSemesters')
+        if tbl:
+            r = tbl.rowCount()
+            tbl.insertRow(r)
+            for c, v in enumerate([ma.text(), ten.text(), nam.text(), bd.text(), kt.text()]):
+                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(v))
+            st = QtWidgets.QTableWidgetItem('Đang mở')
+            st.setTextAlignment(Qt.AlignCenter)
+            st.setForeground(QColor(COLORS['green']))
+            tbl.setItem(r, 5, st)
+            tbl.setRowHeight(r, 44)
+        msg_info(self, 'Thành công', f'Đã thêm học kỳ {ma.text()}')
 
     def _fill_admin_curriculum(self):
         page = self.page_widgets[7]
@@ -1041,6 +1418,30 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 44)
+            # wire action
+            for r, row in enumerate(data):
+                w = tbl.cellWidget(r, 7)
+                if w:
+                    btns = w.findChildren(QtWidgets.QPushButton)
+                    if len(btns) >= 2:
+                        btns[0].clicked.connect(lambda ch, rd=row: msg_info(self, 'Sửa môn',
+                            f"Mã môn: {rd[1]}\nTên: {rd[2]}\nTín chỉ: {rd[3]}\nLoại: {rd[4]}\nHK: {rd[5]}"))
+                        btns[1].clicked.connect(lambda ch, ma=row[1], nm=row[2], t=tbl: self._admin_del_row(t, ma, nm, 'môn trong CT'))
+
+        txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCurr')
+        if txt:
+            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[1, 2]))
+        for nm in ('cboNganh', 'cboLoai', 'cboHocKy'):
+            cbo = page.findChild(QtWidgets.QComboBox, nm)
+            if cbo:
+                cbo.currentIndexChanged.connect(lambda idx, n=nm, c=cbo:
+                    msg_info(self, 'Bộ lọc', f'Đã áp dụng: {c.currentText()}') if idx > 0 else None)
+        btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddCurr')
+        if btn_add:
+            btn_add.clicked.connect(lambda: msg_info(self, 'Thêm môn', 'Đã mở hộp thoại thêm môn vào khung CT (demo)'))
+        btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportCurr')
+        if btn_exp:
+            btn_exp.clicked.connect(lambda: msg_info(self, 'Xuất CTĐT', 'Đã xuất khung chương trình ra PDF'))
 
     def _fill_admin_audit(self):
         page = self.page_widgets[8]
@@ -1089,6 +1490,19 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 36)
+
+        # search + filter
+        txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchAudit')
+        if txt:
+            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[1, 3, 4]))
+        for nm in ('cboAuditUser', 'cboAuditAction', 'cboAuditDate'):
+            cbo = page.findChild(QtWidgets.QComboBox, nm)
+            if cbo:
+                cbo.currentIndexChanged.connect(lambda idx, c=cbo:
+                    msg_info(self, 'Lọc log', f'Đã lọc: {c.currentText()}') if idx > 0 else None)
+        btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportAudit')
+        if btn_exp:
+            btn_exp.clicked.connect(lambda: msg_info(self, 'Xuất log', 'Đã xuất nhật ký hệ thống ra CSV'))
 
     def _fill_admin_stats(self):
         page = self.page_widgets[9]
@@ -1147,6 +1561,11 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl3.setColumnWidth(c, w)
             tbl3.verticalHeader().setVisible(False)
 
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboStatSemester')
+        if cbo:
+            cbo.currentIndexChanged.connect(lambda idx:
+                msg_info(self, 'Thống kê', f'Hiển thị thống kê kỳ: {cbo.currentText()}'))
+
     def _fill_admin_classes(self):
         page = self.page_widgets[2]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmClasses')
@@ -1188,12 +1607,70 @@ class AdminWindow(QtWidgets.QWidget):
             hl.addWidget(btn_edit)
             hl.addWidget(btn_del)
             tbl.setCellWidget(r, 7, w)
+            # wire
+            btn_edit.clicked.connect(lambda ch, cls_ma=ma, cls_mon=tmon, cls_gv=gv: msg_info(
+                self, 'Sửa lớp', f'Mở form sửa lớp {cls_ma} - {cls_mon} (GV: {cls_gv})'))
+            btn_del.clicked.connect(lambda ch, cls_ma=ma, cls_mon=tmon, t=tbl: self._admin_del_row(t, cls_ma, cls_mon, 'lớp'))
         tbl.horizontalHeader().setStretchLastSection(True)
         for c, cw in enumerate([85, 155, 140, 150, 75, 75, 115, 130]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(MOCK_CLASSES)):
             tbl.setRowHeight(r, 44)
+
+        # search / filter / add
+        txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCls')
+        if txt:
+            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1, 2]))
+        for nm in ('cboAdmClsCourse', 'cboAdmClsTeacher', 'cboAdmClsStatus'):
+            cbo = page.findChild(QtWidgets.QComboBox, nm)
+            if cbo:
+                cbo.currentIndexChanged.connect(lambda idx, c=cbo:
+                    msg_info(self, 'Lọc lớp', f'Lọc: {c.currentText()}') if idx > 0 else None)
+        btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddClass')
+        if btn_add:
+            btn_add.clicked.connect(self._admin_add_class)
+
+    def _admin_add_class(self):
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle('Thêm lớp')
+        dlg.setFixedSize(400, 320)
+        form = QtWidgets.QFormLayout(dlg)
+        ma = QtWidgets.QLineEdit()
+        mon = QtWidgets.QLineEdit()
+        gv = QtWidgets.QLineEdit()
+        lich = QtWidgets.QLineEdit('T2 (7:00-9:30)')
+        phong = QtWidgets.QLineEdit('P.?')
+        smax = QtWidgets.QLineEdit('40')
+        gia = QtWidgets.QLineEdit('2000000')
+        form.addRow('Mã lớp:', ma)
+        form.addRow('Môn:', mon)
+        form.addRow('GV:', gv)
+        form.addRow('Lịch:', lich)
+        form.addRow('Phòng:', phong)
+        form.addRow('Sĩ số max:', smax)
+        form.addRow('Học phí:', gia)
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if not ma.text().strip() or not mon.text().strip():
+            msg_warn(self, 'Thiếu', 'Mã lớp và môn không được trống')
+            return
+        try:
+            smax_n = int(smax.text())
+            gia_n = int(gia.text())
+        except ValueError:
+            msg_warn(self, 'Sai dữ liệu', 'Sĩ số và học phí phải là số')
+            return
+        MOCK_CLASSES.append((ma.text().upper(), '???', mon.text(), gv.text() or '—',
+                             lich.text(), phong.text(), smax_n, 0, gia_n))
+        # re-fill
+        self.pages_filled[2] = False
+        self._fill_admin_classes()
+        self.pages_filled[2] = True
+        msg_info(self, 'Thành công', f'Đã thêm lớp {ma.text()}')
 
     def _fill_admin_teachers(self):
         page = self.page_widgets[4]
@@ -1243,12 +1720,57 @@ class AdminWindow(QtWidgets.QWidget):
             hl.addWidget(btn_edit)
             hl.addWidget(btn_del)
             tbl.setCellWidget(r, 7, w)
+            btn_edit.clicked.connect(lambda ch, rd=row: msg_info(
+                self, 'Chi tiết GV',
+                f"Mã: {rd[0]}\nHọ tên: {rd[1]}\nKhoa: {rd[2]}\nHọc vị: {rd[3]}\nSDT: {rd[4]}\nSố lớp: {rd[5]}\nĐiểm đánh giá: {rd[6]:.1f}/5"))
+            btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'giảng viên'))
         tbl.horizontalHeader().setStretchLastSection(True)
         for c, cw in enumerate([75, 170, 140, 110, 115, 70, 90, 140]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
             tbl.setRowHeight(r, 44)
+
+        # search / filter / add
+        txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchTea')
+        if txt:
+            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1]))
+        for nm in ('cboTeaKhoa', 'cboTeaHocVi'):
+            cbo = page.findChild(QtWidgets.QComboBox, nm)
+            if cbo:
+                cbo.currentIndexChanged.connect(lambda idx, c=cbo:
+                    msg_info(self, 'Lọc GV', f'Lọc: {c.currentText()}') if idx > 0 else None)
+        btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddTeacher')
+        if btn_add:
+            btn_add.clicked.connect(lambda: self._admin_add_user('giảng viên', 4, 'tblAdmTeachers',
+                                                                  ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']))
+
+    def _admin_add_user(self, role_name, page_idx, tbl_name, fields):
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle(f'Thêm {role_name}')
+        dlg.setFixedSize(380, 300)
+        form = QtWidgets.QFormLayout(dlg)
+        widgets = []
+        for label in fields:
+            w = QtWidgets.QLineEdit()
+            form.addRow(label + ':', w)
+            widgets.append(w)
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if not widgets[0].text().strip() or not widgets[1].text().strip():
+            msg_warn(self, 'Thiếu', f'{fields[0]} và {fields[1]} không được trống')
+            return
+        tbl = self.page_widgets[page_idx].findChild(QtWidgets.QTableWidget, tbl_name)
+        if tbl:
+            r = tbl.rowCount()
+            tbl.insertRow(r)
+            for c, w in enumerate(widgets):
+                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(w.text()))
+            tbl.setRowHeight(r, 44)
+        msg_info(self, 'Thành công', f'Đã thêm {role_name}: {widgets[1].text()}')
 
     def _fill_admin_employees(self):
         page = self.page_widgets[5]
@@ -1290,12 +1812,30 @@ class AdminWindow(QtWidgets.QWidget):
             hl.addWidget(btn_edit)
             hl.addWidget(btn_del)
             tbl.setCellWidget(r, 6, w)
+            btn_edit.clicked.connect(lambda ch, rd=row: msg_info(
+                self, 'Chi tiết NV',
+                f"Mã: {rd[0]}\nHọ tên: {rd[1]}\nChức vụ: {rd[2]}\nSDT: {rd[3]}\nEmail: {rd[4]}\nTrạng thái: {rd[5]}"))
+            btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'nhân viên'))
         tbl.horizontalHeader().setStretchLastSection(True)
         for c, cw in enumerate([75, 170, 170, 115, 195, 90, 140]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
             tbl.setRowHeight(r, 44)
+
+        # search / filter / add
+        txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchEmp')
+        if txt:
+            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1]))
+        for nm in ('cboEmpRole', 'cboEmpStatus'):
+            cbo = page.findChild(QtWidgets.QComboBox, nm)
+            if cbo:
+                cbo.currentIndexChanged.connect(lambda idx, c=cbo:
+                    msg_info(self, 'Lọc NV', f'Lọc: {c.currentText()}') if idx > 0 else None)
+        btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddEmp')
+        if btn_add:
+            btn_add.clicked.connect(lambda: self._admin_add_user('nhân viên', 5, 'tblAdmEmployees',
+                                                                  ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']))
 
 
 class TeacherWindow(QtWidgets.QWidget):
@@ -1600,6 +2140,9 @@ class TeacherWindow(QtWidgets.QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             btn.setFixedSize(76, 26)
             btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            btn.clicked.connect(lambda ch, m=ma, n=tmon, s=siso, mx=smax, p=phong, l=lich:
+                msg_info(self, 'Chi tiết lớp',
+                         f'Mã lớp: {m}\nMôn: {n}\nLịch: {l}\nPhòng: {p}\nSĩ số: {s}/{mx}'))
             w = QtWidgets.QWidget()
             hl = QtWidgets.QHBoxLayout(w)
             hl.setContentsMargins(0, 0, 0, 0)
@@ -1654,6 +2197,30 @@ class TeacherWindow(QtWidgets.QWidget):
         for r in range(len(data)):
             tbl.setRowHeight(r, 40)
 
+        # filter + search
+        txt_s = page.findChild(QtWidgets.QLineEdit, 'txtSearchStudent')
+        if txt_s:
+            txt_s.textChanged.connect(lambda t: table_filter(tbl, t, cols=[1, 2]))
+        if cbo:
+            cbo.currentIndexChanged.connect(lambda: self._filter_tea_students())
+        btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportStudents')
+        if btn_exp:
+            btn_exp.clicked.connect(lambda: msg_info(self, 'Xuất danh sách', 'Đã xuất danh sách học viên ra Excel'))
+
+    def _filter_tea_students(self):
+        page = self.page_widgets[3]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblStudents')
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboClass')
+        if not tbl or not cbo:
+            return
+        sel = cbo.currentText()
+        for r in range(tbl.rowCount()):
+            it = tbl.item(r, 3)
+            if cbo.currentIndex() == 0:
+                tbl.setRowHidden(r, False)
+            else:
+                tbl.setRowHidden(r, it.text() != sel if it else False)
+
     def _fill_tea_notice(self):
         page = self.page_widgets[4]
         cbo = page.findChild(QtWidgets.QComboBox, 'cboTargetClass')
@@ -1696,6 +2263,39 @@ class TeacherWindow(QtWidgets.QWidget):
                 vlay.addWidget(card)
             vlay.addStretch()
 
+        # nut gui / clear
+        btn_send = page.findChild(QtWidgets.QPushButton, 'btnSendNotice')
+        if btn_send:
+            btn_send.clicked.connect(self._tea_send_notice)
+        btn_clear = page.findChild(QtWidgets.QPushButton, 'btnClearNotice')
+        if btn_clear:
+            btn_clear.clicked.connect(self._tea_clear_notice)
+
+    def _tea_send_notice(self):
+        page = self.page_widgets[4]
+        subj = page.findChild(QtWidgets.QLineEdit, 'txtSubject')
+        content = page.findChild(QtWidgets.QTextEdit, 'txtContent')
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboTargetClass')
+        if not subj or not content or not cbo:
+            return
+        if not subj.text().strip():
+            msg_warn(self, 'Thiếu dữ liệu', 'Hãy nhập tiêu đề')
+            return
+        if not content.toPlainText().strip():
+            msg_warn(self, 'Thiếu dữ liệu', 'Hãy nhập nội dung')
+            return
+        target = cbo.currentText()
+        msg_info(self, 'Gửi thông báo', f'Đã gửi thông báo đến: {target}\nTiêu đề: {subj.text()}')
+        subj.clear(); content.clear()
+
+    def _tea_clear_notice(self):
+        page = self.page_widgets[4]
+        for name in ('txtSubject',):
+            w = page.findChild(QtWidgets.QLineEdit, name)
+            if w: w.clear()
+        w = page.findChild(QtWidgets.QTextEdit, 'txtContent')
+        if w: w.clear()
+
     def _fill_tea_grades(self):
         page = self.page_widgets[5]
         cbo = page.findChild(QtWidgets.QComboBox, 'cboGradeClass')
@@ -1727,6 +2327,9 @@ class TeacherWindow(QtWidgets.QWidget):
                 item.setTextAlignment(Qt.AlignCenter if c != 2 else Qt.AlignLeft | Qt.AlignVCenter)
                 if c == 6:
                     item.setForeground(QColor(grade_colors.get(val, COLORS['text_mid'])))
+                # chi cho edit cot 3 (diem qt), 4 (diem thi)
+                if c not in (3, 4):
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 tbl.setItem(r, c, item)
         tbl.horizontalHeader().setStretchLastSection(True)
         for c, cw in enumerate([45, 110, 210, 90, 90, 95, 100]):
@@ -1734,6 +2337,62 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
             tbl.setRowHeight(r, 42)
+
+        # setEditTriggers de cho nhap dc
+        tbl.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked | QtWidgets.QAbstractItemView.EditKeyPressed)
+        tbl.itemChanged.connect(self._recalc_grade_row)
+        self._grades_recalc_lock = False
+
+        # save button
+        btn = page.findChild(QtWidgets.QPushButton, 'btnSaveGrades')
+        if btn:
+            btn.clicked.connect(self._save_tea_grades)
+        if cbo:
+            cbo.currentIndexChanged.connect(lambda idx:
+                msg_info(self, 'Chọn lớp', f'Đang nhập điểm cho lớp: {cbo.currentText()}') if idx > 0 else None)
+
+    def _recalc_grade_row(self, item):
+        if getattr(self, '_grades_recalc_lock', False):
+            return
+        c = item.column()
+        if c not in (3, 4):
+            return
+        page = self.page_widgets[5]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherGrades')
+        if not tbl:
+            return
+        r = item.row()
+        try:
+            qt = float(tbl.item(r, 3).text().replace(',', '.')) if tbl.item(r, 3) else 0
+            thi = float(tbl.item(r, 4).text().replace(',', '.')) if tbl.item(r, 4) else 0
+        except Exception:
+            return
+        total = round(qt * 0.3 + thi * 0.7, 2)
+        if total >= 9: letter = 'A+'
+        elif total >= 8.5: letter = 'A'
+        elif total >= 8: letter = 'B+'
+        elif total >= 6.5: letter = 'B'
+        elif total >= 5.5: letter = 'C+'
+        elif total >= 5: letter = 'C'
+        elif total >= 4: letter = 'D'
+        else: letter = 'F'
+        self._grades_recalc_lock = True
+        it_tot = QtWidgets.QTableWidgetItem(f'{total:.1f}')
+        it_tot.setTextAlignment(Qt.AlignCenter)
+        it_tot.setFlags(it_tot.flags() & ~Qt.ItemIsEditable)
+        tbl.setItem(r, 5, it_tot)
+        grade_colors = {'A+': COLORS['green'], 'A': COLORS['green'], 'B+': COLORS['navy'], 'B': COLORS['navy'],
+                        'C+': COLORS['orange'], 'C': COLORS['orange'], 'D': COLORS['red'], 'F': COLORS['red']}
+        it_let = QtWidgets.QTableWidgetItem(letter)
+        it_let.setTextAlignment(Qt.AlignCenter)
+        it_let.setForeground(QColor(grade_colors.get(letter, COLORS['text_mid'])))
+        it_let.setFlags(it_let.flags() & ~Qt.ItemIsEditable)
+        tbl.setItem(r, 6, it_let)
+        self._grades_recalc_lock = False
+
+    def _save_tea_grades(self):
+        if msg_confirm(self, 'Lưu điểm', 'Xác nhận lưu điểm cho tất cả học viên trong bảng?'):
+            msg_info(self, 'Thành công', 'Đã lưu điểm thành công!')
 
     def _fill_tea_profile(self):
         page = self.page_widgets[6]
@@ -1748,6 +2407,23 @@ class TeacherWindow(QtWidgets.QWidget):
             w = page.findChild(QtWidgets.QLineEdit, attr)
             if w:
                 w.setText(val)
+
+        btn_save = page.findChild(QtWidgets.QPushButton, 'btnSave')
+        if btn_save:
+            btn_save.clicked.connect(lambda: (
+                MOCK_TEACHER.__setitem__('email', page.findChild(QtWidgets.QLineEdit, 'txtEmail').text().strip()),
+                MOCK_TEACHER.__setitem__('sdt', page.findChild(QtWidgets.QLineEdit, 'txtPhone').text().strip()),
+                msg_info(self, 'Thành công', 'Đã lưu thông tin.')
+            ))
+        btn_cp = page.findChild(QtWidgets.QPushButton, 'btnChangePass')
+        if btn_cp:
+            btn_cp.clicked.connect(lambda: self._tea_change_pass())
+
+    def _tea_change_pass(self):
+        new = msg_input(self, 'Đổi mật khẩu', 'Nhập mật khẩu mới:')
+        if new:
+            MOCK_TEACHER['password'] = new
+            msg_info(self, 'Thành công', 'Đổi mật khẩu thành công.')
 
 
 class EmployeeWindow(QtWidgets.QWidget):
@@ -1952,12 +2628,96 @@ class EmployeeWindow(QtWidgets.QWidget):
             cbo_c.addItem('-- Chọn môn học --')
             for code, name in MOCK_COURSES:
                 cbo_c.addItem(f'{code} - {name}')
+            cbo_c.currentIndexChanged.connect(self._emp_filter_classes)
         cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboClassEmp')
         if cbo_cls:
             cbo_cls.clear()
             cbo_cls.addItem('-- Chọn lớp --')
             for cls in MOCK_CLASSES:
                 cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({cls[8]:,}đ)'.replace(',', '.'))
+
+        # buttons
+        btn_lk = page.findChild(QtWidgets.QPushButton, 'btnLookup')
+        if btn_lk:
+            btn_lk.clicked.connect(self._emp_lookup_student)
+        btn_rg = page.findChild(QtWidgets.QPushButton, 'btnConfirmReg')
+        if btn_rg:
+            btn_rg.clicked.connect(self._emp_do_register)
+        btn_rs = page.findChild(QtWidgets.QPushButton, 'btnResetReg')
+        if btn_rs:
+            btn_rs.clicked.connect(self._emp_reset_form)
+
+    def _emp_filter_classes(self, idx):
+        page = self.page_widgets[1]
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboCourse')
+        cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboClassEmp')
+        if not cbo_c or not cbo_cls:
+            return
+        cbo_cls.clear()
+        cbo_cls.addItem('-- Chọn lớp --')
+        if idx == 0:
+            for cls in MOCK_CLASSES:
+                cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({cls[8]:,}đ)'.replace(',', '.'))
+            return
+        mon_code = MOCK_COURSES[idx - 1][0]
+        for cls in MOCK_CLASSES:
+            if cls[1] == mon_code:
+                cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({cls[8]:,}đ)'.replace(',', '.'))
+
+    def _emp_lookup_student(self):
+        page = self.page_widgets[1]
+        txt_msv = page.findChild(QtWidgets.QLineEdit, 'txtMSV')
+        if not txt_msv or not txt_msv.text().strip():
+            msg_warn(self, 'Thiếu MSV', 'Hãy nhập MSV để tra cứu')
+            return
+        # mock data
+        db = {
+            'HV2024001': ('Đào Viết Quang Huy', 'quanghuy@sv.eaut.edu.vn', '0912345678'),
+            'HV2024002': ('Trần Thị Bích', 'bich@sv.eaut.edu.vn', '0923456789'),
+            'HV2024003': ('Lê Văn Cường', 'cuong@sv.eaut.edu.vn', '0934567890'),
+        }
+        msv = txt_msv.text().strip().upper()
+        if msv not in db:
+            msg_warn(self, 'Không tìm thấy', f'Không tìm thấy học viên với MSV: {msv}')
+            return
+        ten, email, sdt = db[msv]
+        for attr, val in [('txtHoTen', ten), ('txtEmail', email), ('txtSDT', sdt)]:
+            w = page.findChild(QtWidgets.QLineEdit, attr)
+            if w:
+                w.setText(val)
+        msg_info(self, 'Tra cứu', f'Đã tìm thấy: {ten}')
+
+    def _emp_do_register(self):
+        page = self.page_widgets[1]
+        msv = page.findChild(QtWidgets.QLineEdit, 'txtMSV')
+        hoten = page.findChild(QtWidgets.QLineEdit, 'txtHoTen')
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboCourse')
+        cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboClassEmp')
+        if not msv or not msv.text().strip():
+            msg_warn(self, 'Thiếu', 'Hãy nhập MSV')
+            return
+        if not hoten or not hoten.text().strip():
+            msg_warn(self, 'Thiếu', 'Hãy nhập họ tên')
+            return
+        if cbo_c.currentIndex() == 0:
+            msg_warn(self, 'Thiếu', 'Hãy chọn môn học')
+            return
+        if cbo_cls.currentIndex() == 0:
+            msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
+            return
+        if not msg_confirm(self, 'Xác nhận', f'Đăng ký {hoten.text()} vào lớp {cbo_cls.currentText()}?'):
+            return
+        msg_info(self, 'Thành công', f'Đã đăng ký thành công cho {hoten.text()}')
+        self._emp_reset_form()
+
+    def _emp_reset_form(self):
+        page = self.page_widgets[1]
+        for nm in ('txtMSV', 'txtHoTen', 'txtEmail', 'txtSDT'):
+            w = page.findChild(QtWidgets.QLineEdit, nm)
+            if w: w.clear()
+        for nm in ('cboCourse', 'cboClassEmp'):
+            w = page.findChild(QtWidgets.QComboBox, nm)
+            if w: w.setCurrentIndex(0)
 
     def _fill_emp_reglist(self):
         page = self.page_widgets[2]
@@ -1996,6 +2756,9 @@ class EmployeeWindow(QtWidgets.QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             btn.setFixedSize(76, 26)
             btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            btn.clicked.connect(lambda ch, rdata=row: msg_info(
+                self, 'Chi tiết đăng ký',
+                f'Mã: {rdata[0]}\nNgày: {rdata[1]}\nHọc viên: {rdata[2]}\nLớp: {rdata[3]}\nHọc phí: {rdata[4]} đ\nTrạng thái: {rdata[5]}'))
             w = QtWidgets.QWidget()
             hl = QtWidgets.QHBoxLayout(w)
             hl.setContentsMargins(0, 0, 0, 0)
@@ -2008,6 +2771,32 @@ class EmployeeWindow(QtWidgets.QWidget):
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
             tbl.setRowHeight(r, 40)
+
+        # search + filter + export
+        txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchReg')
+        if txt:
+            txt.textChanged.connect(lambda t: table_filter(tbl, t, cols=[0, 2, 3]))
+        for nm in ('cboRegStatus', 'cboRegDate'):
+            cbo = page.findChild(QtWidgets.QComboBox, nm)
+            if cbo:
+                cbo.currentIndexChanged.connect(lambda idx, n=nm: self._emp_filter_reg(n))
+        btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportReg')
+        if btn_exp:
+            btn_exp.clicked.connect(lambda: msg_info(self, 'Xuất báo cáo', 'Đã xuất danh sách đăng ký ra Excel'))
+
+    def _emp_filter_reg(self, which):
+        page = self.page_widgets[2]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblRegistrations')
+        cbo_st = page.findChild(QtWidgets.QComboBox, 'cboRegStatus')
+        if not tbl or not cbo_st:
+            return
+        st_text = cbo_st.currentText()
+        for r in range(tbl.rowCount()):
+            it = tbl.item(r, 5)
+            show = True
+            if cbo_st.currentIndex() > 0 and it:
+                show = st_text.lower() in it.text().lower()
+            tbl.setRowHidden(r, not show)
 
     def _fill_emp_payment(self):
         page = self.page_widgets[3]
@@ -2037,6 +2826,46 @@ class EmployeeWindow(QtWidgets.QWidget):
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
             tbl.setRowHeight(r, 40)
+        tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+
+        # buttons
+        btn_p = page.findChild(QtWidgets.QPushButton, 'btnConfirmPay')
+        if btn_p:
+            btn_p.clicked.connect(lambda: self._emp_confirm_pay(tbl))
+        btn_r = page.findChild(QtWidgets.QPushButton, 'btnPrintReceipt')
+        if btn_r:
+            btn_r.clicked.connect(lambda: self._emp_print_receipt(tbl))
+        txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchPay')
+        if txt:
+            txt.textChanged.connect(lambda t: table_filter(tbl, t, cols=[0, 1]))
+
+    def _emp_confirm_pay(self, tbl):
+        rows = tbl.selectionModel().selectedRows() if tbl else []
+        if not rows:
+            msg_warn(self, 'Chưa chọn', 'Hãy chọn 1 dòng đăng ký cần xác nhận')
+            return
+        page = self.page_widgets[3]
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboPayMethod')
+        note = page.findChild(QtWidgets.QLineEdit, 'txtPayNote')
+        method = cbo.currentText() if cbo else ''
+        r = rows[0].row()
+        ma = tbl.item(r, 0).text() if tbl.item(r, 0) else '?'
+        ten = tbl.item(r, 1).text() if tbl.item(r, 1) else '?'
+        gia = tbl.item(r, 3).text() if tbl.item(r, 3) else '?'
+        if not msg_confirm(self, 'Xác nhận thu tiền', f'Thu {gia} đ từ {ten} ({ma}) - {method}?'):
+            return
+        tbl.removeRow(r)
+        if note: note.clear()
+        msg_info(self, 'Thành công', f'Đã xác nhận thanh toán {gia} đ cho {ten}')
+
+    def _emp_print_receipt(self, tbl):
+        rows = tbl.selectionModel().selectedRows() if tbl else []
+        if not rows:
+            msg_warn(self, 'Chưa chọn', 'Hãy chọn 1 dòng để in biên lai')
+            return
+        r = rows[0].row()
+        ma = tbl.item(r, 0).text() if tbl.item(r, 0) else '?'
+        msg_info(self, 'In biên lai', f'Đã in biên lai cho {ma}')
 
     def _fill_emp_classes(self):
         page = self.page_widgets[4]
@@ -2071,6 +2900,36 @@ class EmployeeWindow(QtWidgets.QWidget):
         for r in range(len(MOCK_CLASSES)):
             tbl.setRowHeight(r, 40)
 
+        # search + filter
+        txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchEmpCls')
+        if txt:
+            txt.textChanged.connect(lambda t: table_filter(tbl, t, cols=[0, 1, 2]))
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboEmpClsCourse')
+        if cbo_c:
+            cbo_c.currentIndexChanged.connect(lambda: self._emp_filter_cls())
+        cbo_s = page.findChild(QtWidgets.QComboBox, 'cboEmpClsStatus')
+        if cbo_s:
+            cbo_s.currentIndexChanged.connect(lambda: self._emp_filter_cls())
+
+    def _emp_filter_cls(self):
+        page = self.page_widgets[4]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblEmpClasses')
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboEmpClsCourse')
+        cbo_s = page.findChild(QtWidgets.QComboBox, 'cboEmpClsStatus')
+        if not tbl:
+            return
+        course_sel = cbo_c.currentText() if cbo_c and cbo_c.currentIndex() > 0 else None
+        st_sel = cbo_s.currentText() if cbo_s and cbo_s.currentIndex() > 0 else None
+        for r in range(tbl.rowCount()):
+            it_mon = tbl.item(r, 1)
+            it_st = tbl.item(r, 6)
+            show = True
+            if course_sel and it_mon and course_sel not in it_mon.text():
+                show = False
+            if st_sel and it_st and st_sel.lower() not in it_st.text().lower():
+                show = False
+            tbl.setRowHidden(r, not show)
+
     def _fill_emp_profile(self):
         page = self.page_widgets[5]
         u = MOCK_EMPLOYEE
@@ -2084,6 +2943,23 @@ class EmployeeWindow(QtWidgets.QWidget):
             w = page.findChild(QtWidgets.QLineEdit, attr)
             if w:
                 w.setText(val)
+
+        btn_save = page.findChild(QtWidgets.QPushButton, 'btnSave')
+        if btn_save:
+            btn_save.clicked.connect(lambda: (
+                MOCK_EMPLOYEE.__setitem__('email', page.findChild(QtWidgets.QLineEdit, 'txtEmail').text().strip()),
+                MOCK_EMPLOYEE.__setitem__('sdt', page.findChild(QtWidgets.QLineEdit, 'txtPhone').text().strip()),
+                msg_info(self, 'Thành công', 'Đã lưu thông tin.')
+            ))
+        btn_cp = page.findChild(QtWidgets.QPushButton, 'btnChangePass')
+        if btn_cp:
+            btn_cp.clicked.connect(lambda: self._emp_change_pass())
+
+    def _emp_change_pass(self):
+        new = msg_input(self, 'Đổi mật khẩu', 'Nhập mật khẩu mới:')
+        if new:
+            MOCK_EMPLOYEE['password'] = new
+            msg_info(self, 'Thành công', 'Đổi mật khẩu thành công.')
 
 
 class App:
