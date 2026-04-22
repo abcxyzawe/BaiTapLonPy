@@ -1,9 +1,32 @@
 import sys, os
+# them root vao path de import backend
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtGui import QPixmap, QIcon, QColor, QFont
 from PyQt5.QtCore import Qt, QDate
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
+
+# thu ket noi DB - fallback MOCK neu khong co docker
+DB_AVAILABLE = False
+try:
+    from backend.database.db import db
+    from backend.services.auth_service import AuthService
+    from backend.services.course_service import CourseService
+    from backend.services.registration_service import RegistrationService
+    from backend.services.grade_service import GradeService
+    from backend.services.notification_service import NotificationService
+    from backend.services.user_service import (StudentService, TeacherService,
+                                                EmployeeService, ReviewService)
+    from backend.services.stats_service import StatsService
+    DB_AVAILABLE = db.is_connected()
+    if DB_AVAILABLE:
+        print('[DB] Ket noi PostgreSQL OK - dung du lieu that')
+    else:
+        print('[DB] Khong ket noi duoc - fallback MOCK data')
+except Exception as _e:
+    print(f'[DB] Khong load duoc backend ({_e}) - fallback MOCK data')
 
 
 # ===== helpers popup =====
@@ -76,6 +99,109 @@ class _GradeEditorDelegate(QtWidgets.QStyledItemDelegate):
         x = rect.x() - (w - rect.width()) // 2
         y = rect.y() - (h - rect.height()) // 2
         editor.setGeometry(x, y, w, h)
+
+
+def show_detail_dialog(parent, title, fields, avatar_text=None, subtitle=None):
+    """Dialog chi tiet co header navy + avatar + danh sach field dep"""
+    # mau EAUT tu module-level COLORS
+    navy = '#002060'
+    navy_hover = '#1a3a6c'
+    text_dark = '#1a1a2e'
+    text_mid = '#4a5568'
+    text_light = '#718096'
+    border = '#d2d6dc'
+
+    dlg = QtWidgets.QDialog(parent)
+    dlg.setWindowTitle(title)
+    dlg.setFixedSize(440, 540)
+    dlg.setStyleSheet('QDialog { background: white; }')
+
+    lay = QtWidgets.QVBoxLayout(dlg)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(0)
+
+    # header navy voi avatar
+    header = QtWidgets.QFrame()
+    header.setFixedHeight(140)
+    header.setStyleSheet(f'QFrame {{ background: {navy}; border: none; }}')
+    hv = QtWidgets.QVBoxLayout(header)
+    hv.setContentsMargins(20, 22, 20, 18)
+    hv.setSpacing(6)
+    hv.setAlignment(Qt.AlignCenter)
+
+    if avatar_text:
+        av = QtWidgets.QLabel(avatar_text[:2].upper())
+        av.setFixedSize(56, 56)
+        av.setAlignment(Qt.AlignCenter)
+        av.setStyleSheet('QLabel { background: rgba(255,255,255,0.18); '
+                         'border-radius: 28px; color: white; '
+                         'font-size: 18px; font-weight: bold; }')
+        wrap = QtWidgets.QHBoxLayout()
+        wrap.setAlignment(Qt.AlignCenter)
+        wrap.addWidget(av)
+        hv.addLayout(wrap)
+
+    lbl_title = QtWidgets.QLabel(title)
+    lbl_title.setAlignment(Qt.AlignCenter)
+    lbl_title.setStyleSheet('color: white; font-size: 15px; font-weight: bold; background: transparent;')
+    hv.addWidget(lbl_title)
+
+    if subtitle:
+        lbl_sub = QtWidgets.QLabel(subtitle)
+        lbl_sub.setAlignment(Qt.AlignCenter)
+        lbl_sub.setStyleSheet('color: rgba(255,255,255,0.75); font-size: 11px; background: transparent;')
+        hv.addWidget(lbl_sub)
+
+    lay.addWidget(header)
+
+    # body voi cac field
+    body = QtWidgets.QScrollArea()
+    body.setWidgetResizable(True)
+    body.setStyleSheet('QScrollArea { border: none; background: white; }')
+    inner = QtWidgets.QWidget()
+    form = QtWidgets.QVBoxLayout(inner)
+    form.setContentsMargins(28, 22, 28, 22)
+    form.setSpacing(14)
+
+    for label, val in fields:
+        row = QtWidgets.QFrame()
+        row.setStyleSheet(f'QFrame {{ border: none; border-bottom: 1px solid #edf2f7; background: transparent; }}')
+        rl = QtWidgets.QVBoxLayout(row)
+        rl.setContentsMargins(0, 0, 0, 10)
+        rl.setSpacing(4)
+        lbl_k = QtWidgets.QLabel(str(label))
+        lbl_k.setStyleSheet(f'color: {text_light}; font-size: 10px; font-weight: bold; '
+                            f'text-transform: uppercase; letter-spacing: 0.5px; background: transparent; border: none;')
+        lbl_v = QtWidgets.QLabel(str(val) if val is not None and val != '' else '—')
+        lbl_v.setStyleSheet(f'color: {text_dark}; font-size: 13px; font-weight: 500; '
+                            f'background: transparent; border: none;')
+        lbl_v.setWordWrap(True)
+        rl.addWidget(lbl_k)
+        rl.addWidget(lbl_v)
+        form.addWidget(row)
+
+    form.addStretch()
+    body.setWidget(inner)
+    lay.addWidget(body, 1)
+
+    # footer nut dong
+    footer = QtWidgets.QFrame()
+    footer.setFixedHeight(60)
+    footer.setStyleSheet(f'QFrame {{ background: #f7fafc; border-top: 1px solid {border}; }}')
+    fl = QtWidgets.QHBoxLayout(footer)
+    fl.setContentsMargins(20, 10, 20, 10)
+    fl.setAlignment(Qt.AlignRight)
+    btn = QtWidgets.QPushButton('Đóng')
+    btn.setFixedSize(110, 36)
+    btn.setCursor(Qt.PointingHandCursor)
+    btn.setStyleSheet(f'QPushButton {{ background: {navy}; color: white; border: none; '
+                      f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                      f'QPushButton:hover {{ background: {navy_hover}; }}')
+    btn.clicked.connect(dlg.accept)
+    fl.addWidget(btn)
+    lay.addWidget(footer)
+
+    dlg.exec_()
 
 
 def widen_search(page, txt_name, new_width, shift_after=None):
@@ -609,7 +735,21 @@ class MainWindow(QtWidgets.QWidget):
 
         cbo = page.findChild(QtWidgets.QComboBox, 'cboSemester')
         if cbo:
-            cbo.currentIndexChanged.connect(lambda idx: msg_info(self, 'Lịch thi', f'Hiển thị lịch thi của kỳ: {cbo.currentText()}'))
+            cbo.currentIndexChanged.connect(lambda idx: self._filter_exam_sem(idx))
+
+    def _filter_exam_sem(self, idx):
+        page = self.page_widgets[2]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblExam')
+        if not tbl:
+            return
+        # idx 0 = tat ca, 1 = HK2 (3 dong dau), 2 = HK1 (2 dong cuoi)
+        for r in range(tbl.rowCount()):
+            if idx == 0:
+                tbl.setRowHidden(r, False)
+            elif idx == 1:
+                tbl.setRowHidden(r, r >= 3)
+            else:
+                tbl.setRowHidden(r, r < 3)
 
     def _fill_grades(self):
         page = self.page_widgets[3]
@@ -783,8 +923,31 @@ class MainWindow(QtWidgets.QWidget):
         btns.accepted.connect(dlg.accept)
         btns.rejected.connect(dlg.reject)
         lay.addWidget(btns)
-        if dlg.exec_() == QtWidgets.QDialog.Accepted:
-            msg_info(self, 'Đánh giá', f'Đã gửi đánh giá {sp.value()}/5 cho {gv_name}')
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        # ghi DB
+        if DB_AVAILABLE:
+            try:
+                hv_id = MOCK_USER.get('id')
+                gv_row = db.fetch_one(
+                    "SELECT id FROM users WHERE full_name = %s AND role = 'teacher'",
+                    (gv_name,)
+                )
+                if hv_id and gv_row:
+                    # lay 1 lop bat ky ma HV + GV cung co
+                    lop = db.fetch_one(
+                        """SELECT r.lop_id FROM registrations r
+                             JOIN classes c ON c.ma_lop = r.lop_id
+                            WHERE r.hv_id = %s AND c.gv_id = %s LIMIT 1""",
+                        (hv_id, gv_row['id'])
+                    )
+                    lop_id = lop['lop_id'] if lop else 'NA'
+                    ReviewService.submit_review(hv_id, gv_row['id'], lop_id,
+                                                sp.value(), ta.toPlainText().strip())
+                    print(f'[REVIEW] da ghi DB: {sp.value()}/5 cho {gv_name}')
+            except Exception as e:
+                print(f'[REVIEW] loi: {e}')
+        msg_info(self, 'Đánh giá', f'Đã gửi đánh giá {sp.value()}/5 cho {gv_name}')
 
     def _fill_notifications(self):
         page = self.page_widgets[5]
@@ -847,6 +1010,12 @@ class MainWindow(QtWidgets.QWidget):
             msg_warn(self, 'Lỗi', 'Mật khẩu mới không khớp')
             return
         MOCK_USER['password'] = new1.text()
+        if DB_AVAILABLE and MOCK_USER.get('id'):
+            try:
+                AuthService.change_password(MOCK_USER['id'], new1.text())
+                print('[AUTH] da doi mk trong DB')
+            except Exception as e:
+                print(f'[AUTH] loi doi mk: {e}')
         msg_info(self, 'Thành công', 'Đổi mật khẩu thành công')
 
 
@@ -1030,10 +1199,31 @@ class AdminWindow(QtWidgets.QWidget):
 
     def _fill_admin_dashboard(self):
         page = self.page_widgets[0]
+        # lay du lieu that neu co DB, khong thi dung mock
+        top_data = None
+        recent_data = None
+        if DB_AVAILABLE:
+            try:
+                rows = StatsService.top_classes(limit=5)
+                top_data = [(r.get('ten_mon', r.get('ma_lop', '?')),
+                             int(r.get('siso_hien_tai') or 0),
+                             int(r.get('siso_max') or 40)) for r in rows]
+            except Exception as e:
+                print(f'[STATS] top_classes loi: {e}')
+            try:
+                acts = StatsService.recent_activity(limit=5)
+                recent_data = []
+                for a in acts:
+                    t_str = 'Vừa xong' if not a.get('thoi_gian') else str(a['thoi_gian'])[:16]
+                    color = COLORS['green'] if a.get('loai') == 'reg' else COLORS['gold']
+                    recent_data.append((t_str, a.get('noi_dung', ''), color))
+            except Exception as e:
+                print(f'[STATS] recent loi: {e}')
+
         # top courses voi progress bar
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblTopCourses')
         if tbl:
-            data = [('Lập trình Python', 40, 40), ('Cơ sở dữ liệu', 35, 40),
+            data = top_data or [('Lập trình Python', 40, 40), ('Cơ sở dữ liệu', 35, 40),
                     ('Trí tuệ nhân tạo', 28, 40), ('Phát triển web', 22, 35),
                     ('Mạng máy tính', 18, 30)]
             tbl.setRowCount(len(data))
@@ -1059,7 +1249,7 @@ class AdminWindow(QtWidgets.QWidget):
         # recent voi badge loai
         tbl2 = page.findChild(QtWidgets.QTableWidget, 'tblRecent')
         if tbl2:
-            data = [('2 phút trước', 'Trần Văn B đăng ký IT003', COLORS['green']),
+            data = recent_data or [('2 phút trước', 'Trần Văn B đăng ký IT003', COLORS['green']),
                     ('15 phút trước', 'Lê Thị C hủy MA002', COLORS['red']),
                     ('1 giờ trước', 'Phạm Văn D đăng ký IT005', COLORS['green']),
                     ('3 giờ trước', 'Nguyễn Thị E đăng ký EN001', COLORS['green']),
@@ -1163,10 +1353,30 @@ class AdminWindow(QtWidgets.QWidget):
             btn_s.clicked.connect(lambda: table_filter(tbl, txt.text(), cols=[0, 1, 3]))
         cbo = page.findChild(QtWidgets.QComboBox, 'cboFilterDept')
         if cbo:
-            cbo.currentIndexChanged.connect(lambda idx: msg_info(self, 'Lọc khoa', f'Đã lọc theo: {cbo.currentText()}'))
+            cbo.clear()
+            cbo.addItems(['Tất cả khoa', 'Công nghệ thông tin (CNTT)', 'Toán', 'Ngoại ngữ'])
+            cbo.currentIndexChanged.connect(lambda: self._admin_filter_courses())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddCourse')
         if btn_add:
             btn_add.clicked.connect(self._admin_add_course)
+
+    def _admin_filter_courses(self):
+        page = self.page_widgets[1]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdminCourses')
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboFilterDept')
+        if not tbl or not cbo:
+            return
+        if cbo.currentIndex() == 0:
+            for r in range(tbl.rowCount()):
+                tbl.setRowHidden(r, False)
+            return
+        # map khoa -> prefix ma mon
+        prefix_map = {1: 'IT', 2: 'MA', 3: 'EN'}
+        prefix = prefix_map.get(cbo.currentIndex())
+        for r in range(tbl.rowCount()):
+            it = tbl.item(r, 0)
+            show = prefix is None or (it and it.text().startswith(prefix))
+            tbl.setRowHidden(r, not show)
 
     def _admin_add_course(self):
         dlg = QtWidgets.QDialog(self)
@@ -1260,14 +1470,25 @@ class AdminWindow(QtWidgets.QWidget):
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
-        data = [
-            ['2024001', 'Đào Viết Quang Huy', 'CNTT-K20A', 'CNTT', '0912345678', '5'],
-            ['2024002', 'Trần Thị B', 'CNTT-K20A', 'CNTT', '0923456789', '4'],
-            ['2024003', 'Lê Văn C', 'CNTT-K20B', 'CNTT', '0934567890', '6'],
-            ['2024010', 'Phạm Thị D', 'TOAN-K20', 'Toán', '0945678901', '5'],
-            ['2024015', 'Hoàng Văn E', 'NN-K20', 'Ngoại ngữ', '0956789012', '3'],
-            ['2024020', 'Vũ Thị F', 'CNTT-K20B', 'CNTT', '0967890123', '5'],
-        ]
+        # lay tu DB neu co, khong thi mock
+        data = None
+        if DB_AVAILABLE:
+            try:
+                rows = StudentService.get_all()
+                data = [[r['msv'], r['full_name'], r['cac_lop'] or '—',
+                         '—', r.get('sdt') or '—', str(r.get('so_lop') or 0)]
+                        for r in rows]
+            except Exception as e:
+                print(f'[STUDENT] loi: {e}')
+        if not data:
+            data = [
+                ['2024001', 'Đào Viết Quang Huy', 'CNTT-K20A', 'CNTT', '0912345678', '5'],
+                ['2024002', 'Trần Thị B', 'CNTT-K20A', 'CNTT', '0923456789', '4'],
+                ['2024003', 'Lê Văn C', 'CNTT-K20B', 'CNTT', '0934567890', '6'],
+                ['2024010', 'Phạm Thị D', 'TOAN-K20', 'Toán', '0945678901', '5'],
+                ['2024015', 'Hoàng Văn E', 'NN-K20', 'Ngoại ngữ', '0956789012', '3'],
+                ['2024020', 'Vũ Thị F', 'CNTT-K20B', 'CNTT', '0967890123', '5'],
+            ]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdminStudents')
         if tbl:
             tbl.setRowCount(len(data))
@@ -1302,9 +1523,12 @@ class AdminWindow(QtWidgets.QWidget):
                 if w:
                     btns = w.findChildren(QtWidgets.QPushButton)
                     if len(btns) >= 2:
-                        btns[0].clicked.connect(lambda ch, rd=row: msg_info(
+                        btns[0].clicked.connect(lambda ch, rd=row: show_detail_dialog(
                             self, 'Chi tiết học viên',
-                            f"MSV: {rd[0]}\nHọ tên: {rd[1]}\nLớp: {rd[2]}\nKhoa: {rd[3]}\nSDT: {rd[4]}\nSố môn đăng ký: {rd[5]}"))
+                            [('MSV', rd[0]), ('Họ tên', rd[1]), ('Lớp', rd[2]),
+                             ('Khoa', rd[3]), ('Số điện thoại', rd[4]),
+                             ('Số môn đăng ký', rd[5])],
+                            avatar_text=rd[1].split()[-1] if rd[1] else '?', subtitle=rd[0]))
                         btns[1].clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'học viên'))
 
         widen_search(page, 'txtSearchStudent', 300, ['btnSearchStudent', 'cboFilterClass', 'cboFilterDeptSt'])
@@ -1316,10 +1540,14 @@ class AdminWindow(QtWidgets.QWidget):
         if btn_s and txt:
             btn_s.clicked.connect(lambda: table_filter(tbl, txt.text(), cols=[0, 1]))
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
-        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
         if cbo_c:
+            cbo_c.clear()
+            cbo_c.addItems(['Tất cả lớp', 'CNTT-K20A', 'CNTT-K20B', 'TOAN-K20', 'NN-K20'])
             cbo_c.currentIndexChanged.connect(lambda: self._admin_filter_students())
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
         if cbo_d:
+            cbo_d.clear()
+            cbo_d.addItems(['Tất cả khoa', 'CNTT', 'Toán', 'Ngoại ngữ'])
             cbo_d.currentIndexChanged.connect(lambda: self._admin_filter_students())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddStudent')
         if btn_add:
@@ -1531,25 +1759,172 @@ class AdminWindow(QtWidgets.QWidget):
                 if w:
                     btns = w.findChildren(QtWidgets.QPushButton)
                     if len(btns) >= 2:
-                        btns[0].clicked.connect(lambda ch, rd=row: msg_info(self, 'Sửa môn',
-                            f"Mã môn: {rd[1]}\nTên: {rd[2]}\nTín chỉ: {rd[3]}\nLoại: {rd[4]}\nHK: {rd[5]}"))
+                        btns[0].clicked.connect(lambda ch, rr=r: self._admin_edit_curriculum(rr))
                         btns[1].clicked.connect(lambda ch, ma=row[1], nm=row[2], t=tbl: self._admin_del_row(t, ma, nm, 'môn trong CT'))
 
         widen_search(page, 'txtSearchCurr', 280, ['cboNganh', 'cboLoai', 'cboHocKy', 'btnExportCurr'])
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCurr')
         if txt:
             txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[1, 2]))
+        cbo_n = page.findChild(QtWidgets.QComboBox, 'cboNganh')
+        if cbo_n:
+            cbo_n.clear()
+            cbo_n.addItems(['Tất cả ngành', 'CNTT', 'Toán', 'Ngoại ngữ'])
+        cbo_l = page.findChild(QtWidgets.QComboBox, 'cboLoai')
+        if cbo_l:
+            cbo_l.clear()
+            cbo_l.addItems(['Tất cả loại', 'Bắt buộc', 'Tự chọn', 'Đại cương'])
+        cbo_h = page.findChild(QtWidgets.QComboBox, 'cboHocKy')
+        if cbo_h:
+            cbo_h.clear()
+            cbo_h.addItems(['Tất cả học kỳ'] + [f'HK{i}' for i in range(1, 9)])
         for nm in ('cboNganh', 'cboLoai', 'cboHocKy'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda idx, n=nm, c=cbo:
-                    msg_info(self, 'Bộ lọc', f'Đã áp dụng: {c.currentText()}') if idx > 0 else None)
+                cbo.currentIndexChanged.connect(lambda idx: self._admin_filter_curriculum())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddCurr')
         if btn_add:
-            btn_add.clicked.connect(lambda: msg_info(self, 'Thêm môn', 'Đã mở hộp thoại thêm môn vào khung CT (demo)'))
+            btn_add.clicked.connect(self._admin_add_curriculum)
         btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportCurr')
         if btn_exp:
             btn_exp.clicked.connect(lambda: export_table_csv(self, tbl, 'khung_chuong_trinh.csv', 'Xuất khung chương trình'))
+
+    def _admin_edit_curriculum(self, row_idx):
+        page = self.page_widgets[7]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblCurriculum')
+        if not tbl:
+            return
+        cur = [tbl.item(row_idx, c).text() if tbl.item(row_idx, c) else '' for c in range(7)]
+
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle('Sửa môn trong khung CT')
+        dlg.setFixedSize(420, 400)
+        form = QtWidgets.QFormLayout(dlg)
+        txt_stt = QtWidgets.QLineEdit(cur[0]); txt_stt.setReadOnly(True)
+        txt_stt.setStyleSheet('background: #f7fafc; color: #718096;')
+        txt_code = QtWidgets.QLineEdit(cur[1])
+        txt_name = QtWidgets.QLineEdit(cur[2])
+        txt_tc = QtWidgets.QLineEdit(cur[3])
+        cbo_loai = QtWidgets.QComboBox()
+        cbo_loai.addItems(['Bắt buộc', 'Tự chọn', 'Đại cương'])
+        if cur[4] in ['Bắt buộc', 'Tự chọn', 'Đại cương']:
+            cbo_loai.setCurrentText(cur[4])
+        cbo_hk = QtWidgets.QComboBox()
+        cbo_hk.addItems(['HK1', 'HK2', 'HK3', 'HK4', 'HK5', 'HK6', 'HK7', 'HK8'])
+        if cur[5] in [f'HK{i}' for i in range(1, 9)]:
+            cbo_hk.setCurrentText(cur[5])
+        txt_prereq = QtWidgets.QLineEdit(cur[6] if cur[6] != '—' else '')
+        txt_prereq.setPlaceholderText('Để trống nếu không có, cách nhau bởi dấu phẩy')
+        form.addRow('STT:', txt_stt)
+        form.addRow('Mã môn:', txt_code)
+        form.addRow('Tên môn:', txt_name)
+        form.addRow('Tín chỉ:', txt_tc)
+        form.addRow('Loại:', cbo_loai)
+        form.addRow('Học kỳ:', cbo_hk)
+        form.addRow('Môn tiên quyết:', txt_prereq)
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if not txt_code.text().strip() or not txt_name.text().strip():
+            msg_warn(self, 'Thiếu', 'Mã môn và tên môn không được trống')
+            return
+        try:
+            int(txt_tc.text())
+        except ValueError:
+            msg_warn(self, 'Sai dữ liệu', 'Tín chỉ phải là số')
+            return
+        type_colors = {'Bắt buộc': COLORS['navy'], 'Tự chọn': COLORS['green'], 'Đại cương': COLORS['gold']}
+        new_vals = [cur[0], txt_code.text().upper(), txt_name.text(), txt_tc.text(),
+                    cbo_loai.currentText(), cbo_hk.currentText(),
+                    txt_prereq.text().strip() or '—']
+        for c, v in enumerate(new_vals):
+            it = QtWidgets.QTableWidgetItem(v)
+            it.setTextAlignment(Qt.AlignCenter if c in (0, 3, 4, 5) else Qt.AlignLeft | Qt.AlignVCenter)
+            if c == 4:
+                it.setForeground(QColor(type_colors.get(v, COLORS['text_mid'])))
+            tbl.setItem(row_idx, c, it)
+        msg_info(self, 'Thành công', f'Đã cập nhật môn {txt_code.text()} - {txt_name.text()}')
+
+    def _admin_add_curriculum(self):
+        page = self.page_widgets[7]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblCurriculum')
+        if not tbl:
+            return
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle('Thêm môn vào khung CT')
+        dlg.setFixedSize(420, 380)
+        form = QtWidgets.QFormLayout(dlg)
+        txt_code = QtWidgets.QLineEdit()
+        txt_name = QtWidgets.QLineEdit()
+        txt_tc = QtWidgets.QLineEdit('3')
+        cbo_loai = QtWidgets.QComboBox(); cbo_loai.addItems(['Bắt buộc', 'Tự chọn', 'Đại cương'])
+        cbo_hk = QtWidgets.QComboBox(); cbo_hk.addItems([f'HK{i}' for i in range(1, 9)])
+        txt_prereq = QtWidgets.QLineEdit()
+        txt_prereq.setPlaceholderText('Để trống nếu không có')
+        form.addRow('Mã môn:', txt_code)
+        form.addRow('Tên môn:', txt_name)
+        form.addRow('Tín chỉ:', txt_tc)
+        form.addRow('Loại:', cbo_loai)
+        form.addRow('Học kỳ:', cbo_hk)
+        form.addRow('Môn tiên quyết:', txt_prereq)
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if not txt_code.text().strip() or not txt_name.text().strip():
+            msg_warn(self, 'Thiếu', 'Mã và tên môn không được trống')
+            return
+        type_colors = {'Bắt buộc': COLORS['navy'], 'Tự chọn': COLORS['green'], 'Đại cương': COLORS['gold']}
+        r = tbl.rowCount()
+        tbl.insertRow(r)
+        vals = [str(r + 1), txt_code.text().upper(), txt_name.text(), txt_tc.text(),
+                cbo_loai.currentText(), cbo_hk.currentText(), txt_prereq.text().strip() or '—']
+        for c, v in enumerate(vals):
+            it = QtWidgets.QTableWidgetItem(v)
+            it.setTextAlignment(Qt.AlignCenter if c in (0, 3, 4, 5) else Qt.AlignLeft | Qt.AlignVCenter)
+            if c == 4:
+                it.setForeground(QColor(type_colors.get(v, COLORS['text_mid'])))
+            tbl.setItem(r, c, it)
+        tbl.setRowHeight(r, 44)
+        msg_info(self, 'Thành công', f'Đã thêm môn {txt_code.text()}')
+
+    def _admin_filter_curriculum(self):
+        page = self.page_widgets[7]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblCurriculum')
+        if not tbl:
+            return
+        cbo_n = page.findChild(QtWidgets.QComboBox, 'cboNganh')
+        cbo_l = page.findChild(QtWidgets.QComboBox, 'cboLoai')
+        cbo_h = page.findChild(QtWidgets.QComboBox, 'cboHocKy')
+        loai_sel = cbo_l.currentText() if cbo_l and cbo_l.currentIndex() > 0 else None
+        hk_sel = cbo_h.currentText() if cbo_h and cbo_h.currentIndex() > 0 else None
+        nganh_prefix = None
+        if cbo_n and cbo_n.currentIndex() > 0:
+            t = cbo_n.currentText()
+            if 'CNTT' in t or 'thông tin' in t.lower():
+                nganh_prefix = 'IT'
+            elif 'Toán' in t:
+                nganh_prefix = 'MA'
+            elif 'Ngoại ngữ' in t or 'Anh' in t:
+                nganh_prefix = 'EN'
+        for r in range(tbl.rowCount()):
+            show = True
+            if nganh_prefix:
+                it = tbl.item(r, 1)
+                if it and not it.text().startswith(nganh_prefix):
+                    show = False
+            if loai_sel:
+                it = tbl.item(r, 4)
+                if it and loai_sel not in it.text():
+                    show = False
+            if hk_sel:
+                it = tbl.item(r, 5)
+                if it and it.text() != hk_sel:
+                    show = False
+            tbl.setRowHidden(r, not show)
 
     def _fill_admin_audit(self):
         page = self.page_widgets[8]
@@ -1604,14 +1979,60 @@ class AdminWindow(QtWidgets.QWidget):
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchAudit')
         if txt:
             txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[1, 3, 4]))
+        cbo_u = page.findChild(QtWidgets.QComboBox, 'cboAuditUser')
+        if cbo_u:
+            cbo_u.clear()
+            cbo_u.addItems(['Tất cả người dùng', 'admin', 'QTV', 'SV'])
+        cbo_a = page.findChild(QtWidgets.QComboBox, 'cboAuditAction')
+        if cbo_a:
+            cbo_a.clear()
+            cbo_a.addItems(['Tất cả hành động', 'Đăng nhập', 'Đăng ký', 'Hủy ĐK',
+                            'Thanh toán', 'Cập nhật', 'Cảnh báo', 'Mở đăng ký'])
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboAuditDate')
+        if cbo_d:
+            cbo_d.clear()
+            cbo_d.addItems(['Tất cả thời gian', 'Hôm nay (17/04)', '7 ngày qua', '30 ngày qua'])
         for nm in ('cboAuditUser', 'cboAuditAction', 'cboAuditDate'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda idx, c=cbo:
-                    msg_info(self, 'Lọc log', f'Đã lọc: {c.currentText()}') if idx > 0 else None)
+                cbo.currentIndexChanged.connect(lambda: self._admin_filter_audit())
         btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportAudit')
         if btn_exp:
             btn_exp.clicked.connect(lambda: export_table_csv(self, tbl, 'nhat_ky_he_thong.csv', 'Xuất nhật ký hệ thống'))
+
+    def _admin_filter_audit(self):
+        page = self.page_widgets[8]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAudit')
+        if not tbl:
+            return
+        cbo_u = page.findChild(QtWidgets.QComboBox, 'cboAuditUser')
+        cbo_a = page.findChild(QtWidgets.QComboBox, 'cboAuditAction')
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboAuditDate')
+        user_sel = cbo_u.currentText() if cbo_u and cbo_u.currentIndex() > 0 else None
+        action_sel = cbo_a.currentText() if cbo_a and cbo_a.currentIndex() > 0 else None
+        date_sel = cbo_d.currentText() if cbo_d and cbo_d.currentIndex() > 0 else None
+        for r in range(tbl.rowCount()):
+            show = True
+            if user_sel:
+                it = tbl.item(r, 2)  # col 2 = role (QTV/SV/...)
+                if it and user_sel not in it.text() and user_sel != 'Tất cả người dùng':
+                    # match theo username (col 1) hoac role (col 2)
+                    it1 = tbl.item(r, 1)
+                    if not (it1 and user_sel.lower() in it1.text().lower()):
+                        show = False
+            if action_sel:
+                it = tbl.item(r, 3)
+                if it and action_sel not in it.text():
+                    show = False
+            if date_sel:
+                it = tbl.item(r, 0)
+                if it:
+                    # date_sel co the la 'Hom nay', '7 ngay qua', '30 ngay qua', dd/mm/yyyy...
+                    # don gian: hom nay = chua loc gi
+                    if 'hôm nay' in date_sel.lower() or 'today' in date_sel.lower():
+                        # giu lai nhung dong co ngay 17/04/2026 (mock)
+                        show = show and '17/04/2026' in it.text()
+            tbl.setRowHidden(r, not show)
 
     def _fill_admin_stats(self):
         self._render_admin_stats(0)
@@ -1772,14 +2193,65 @@ class AdminWindow(QtWidgets.QWidget):
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCls')
         if txt:
             txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1, 2]))
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboAdmClsCourse')
+        if cbo_c:
+            cbo_c.clear()
+            cbo_c.addItem('Tất cả môn học')
+            for code, name in MOCK_COURSES:
+                cbo_c.addItem(name)
+        cbo_t = page.findChild(QtWidgets.QComboBox, 'cboAdmClsTeacher')
+        if cbo_t:
+            cbo_t.clear()
+            cbo_t.addItem('Tất cả giảng viên')
+            seen = set()
+            for cls in MOCK_CLASSES:
+                if cls[3] not in seen:
+                    seen.add(cls[3])
+                    cbo_t.addItem(cls[3])
         for nm in ('cboAdmClsCourse', 'cboAdmClsTeacher', 'cboAdmClsStatus'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda idx, c=cbo:
-                    msg_info(self, 'Lọc lớp', f'Lọc: {c.currentText()}') if idx > 0 else None)
+                cbo.currentIndexChanged.connect(lambda: self._admin_filter_classes())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddClass')
         if btn_add:
             btn_add.clicked.connect(self._admin_add_class)
+
+    def _admin_filter_classes(self):
+        page = self.page_widgets[2]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmClasses')
+        if not tbl:
+            return
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboAdmClsCourse')
+        cbo_t = page.findChild(QtWidgets.QComboBox, 'cboAdmClsTeacher')
+        cbo_s = page.findChild(QtWidgets.QComboBox, 'cboAdmClsStatus')
+        course_sel = cbo_c.currentText() if cbo_c and cbo_c.currentIndex() > 0 else None
+        teacher_sel = cbo_t.currentText() if cbo_t and cbo_t.currentIndex() > 0 else None
+        status_sel = cbo_s.currentText() if cbo_s and cbo_s.currentIndex() > 0 else None
+        for r in range(tbl.rowCount()):
+            show = True
+            # col 1 = ten mon, col 2 = GV, col 5 = si so (xac dinh dang mo / dong)
+            if course_sel:
+                it = tbl.item(r, 1)
+                if it and course_sel not in it.text():
+                    show = False
+            if teacher_sel:
+                it = tbl.item(r, 2)
+                if it and teacher_sel not in it.text():
+                    show = False
+            if status_sel:
+                it = tbl.item(r, 5)
+                if it:
+                    siso_text = it.text()
+                    try:
+                        cur, mx = siso_text.split('/')
+                        is_full = int(cur) >= int(mx)
+                    except Exception:
+                        is_full = False
+                    if status_sel == 'Đã đóng' and not is_full:
+                        show = False
+                    elif status_sel == 'Đang mở' and is_full:
+                        show = False
+            tbl.setRowHidden(r, not show)
 
     def _admin_edit_class(self, ma_lop):
         idx = None
@@ -1883,16 +2355,27 @@ class AdminWindow(QtWidgets.QWidget):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmTeachers')
         if not tbl:
             return
-        data = [
-            ['GV001', 'Nguyễn Đức Thiện', 'CNTT', 'Tiến sĩ', '0901234567', 3, 4.6],
-            ['GV002', 'Lê Thị C', 'CNTT', 'Thạc sĩ', '0901234568', 2, 4.3],
-            ['GV003', 'Phạm Văn D', 'CNTT', 'Thạc sĩ', '0901234569', 2, 4.1],
-            ['GV004', 'Ngô Thảo Anh', 'CNTT', 'Tiến sĩ', '0901234570', 1, 4.5],
-            ['GV005', 'Lê Trung Thực', 'CNTT', 'Thạc sĩ', '0901234571', 1, 4.2],
-            ['GV006', 'Hoàng Minh Tuấn', 'CNTT', 'Tiến sĩ', '0901234572', 1, 4.7],
-            ['GV007', 'Nguyễn Thị E', 'Toán', 'Phó giáo sư', '0901234573', 1, 4.8],
-            ['GV008', 'Lê Văn M', 'Toán', 'Tiến sĩ', '0901234574', 1, 4.0],
-        ]
+        data = None
+        if DB_AVAILABLE:
+            try:
+                rows = TeacherService.get_all()
+                data = [[r['ma_gv'], r['full_name'], r.get('khoa') or '—',
+                         r.get('hoc_vi') or '—', r.get('sdt') or '—',
+                         int(r.get('so_lop') or 0),
+                         float(r.get('diem_tb') or 0.0)] for r in rows]
+            except Exception as e:
+                print(f'[TEACHER] loi: {e}')
+        if not data:
+            data = [
+                ['GV001', 'Nguyễn Đức Thiện', 'CNTT', 'Tiến sĩ', '0901234567', 3, 4.6],
+                ['GV002', 'Lê Thị C', 'CNTT', 'Thạc sĩ', '0901234568', 2, 4.3],
+                ['GV003', 'Phạm Văn D', 'CNTT', 'Thạc sĩ', '0901234569', 2, 4.1],
+                ['GV004', 'Ngô Thảo Anh', 'CNTT', 'Tiến sĩ', '0901234570', 1, 4.5],
+                ['GV005', 'Lê Trung Thực', 'CNTT', 'Thạc sĩ', '0901234571', 1, 4.2],
+                ['GV006', 'Hoàng Minh Tuấn', 'CNTT', 'Tiến sĩ', '0901234572', 1, 4.7],
+                ['GV007', 'Nguyễn Thị E', 'Toán', 'Phó giáo sư', '0901234573', 1, 4.8],
+                ['GV008', 'Lê Văn M', 'Toán', 'Tiến sĩ', '0901234574', 1, 4.0],
+            ]
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             for c, val in enumerate(row[:5]):
@@ -1926,9 +2409,12 @@ class AdminWindow(QtWidgets.QWidget):
             hl.addWidget(btn_edit)
             hl.addWidget(btn_del)
             tbl.setCellWidget(r, 7, w)
-            btn_edit.clicked.connect(lambda ch, rd=row: msg_info(
-                self, 'Chi tiết GV',
-                f"Mã: {rd[0]}\nHọ tên: {rd[1]}\nKhoa: {rd[2]}\nHọc vị: {rd[3]}\nSDT: {rd[4]}\nSố lớp: {rd[5]}\nĐiểm đánh giá: {rd[6]:.1f}/5"))
+            btn_edit.clicked.connect(lambda ch, rd=row: show_detail_dialog(
+                self, 'Chi tiết giảng viên',
+                [('Mã GV', rd[0]), ('Họ tên', rd[1]), ('Khoa', rd[2]),
+                 ('Học vị', rd[3]), ('Số điện thoại', rd[4]),
+                 ('Số lớp đang dạy', rd[5]), ('Điểm đánh giá', f'{rd[6]:.1f}/5 ⭐')],
+                avatar_text=rd[1].split()[-1] if rd[1] else '?', subtitle=rd[0]))
             btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'giảng viên'))
         tbl.horizontalHeader().setStretchLastSection(True)
         for c, cw in enumerate([75, 170, 140, 110, 115, 70, 90, 140]):
@@ -1942,15 +2428,64 @@ class AdminWindow(QtWidgets.QWidget):
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchTea')
         if txt:
             txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1]))
+        cbo_k = page.findChild(QtWidgets.QComboBox, 'cboTeaKhoa')
+        if cbo_k:
+            cbo_k.clear()
+            cbo_k.addItems(['Tất cả khoa', 'CNTT', 'Toán', 'Ngoại ngữ'])
+        cbo_hv = page.findChild(QtWidgets.QComboBox, 'cboTeaHocVi')
+        if cbo_hv:
+            cbo_hv.clear()
+            cbo_hv.addItems(['Tất cả học vị', 'Tiến sĩ', 'Thạc sĩ', 'Phó giáo sư', 'Cử nhân'])
         for nm in ('cboTeaKhoa', 'cboTeaHocVi'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda idx, c=cbo:
-                    msg_info(self, 'Lọc GV', f'Lọc: {c.currentText()}') if idx > 0 else None)
+                cbo.currentIndexChanged.connect(lambda: self._admin_filter_teachers())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddTeacher')
         if btn_add:
             btn_add.clicked.connect(lambda: self._admin_add_user('giảng viên', 4, 'tblAdmTeachers',
                                                                   ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']))
+
+    def _admin_filter_teachers(self):
+        page = self.page_widgets[4]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmTeachers')
+        if not tbl:
+            return
+        cbo_k = page.findChild(QtWidgets.QComboBox, 'cboTeaKhoa')
+        cbo_hv = page.findChild(QtWidgets.QComboBox, 'cboTeaHocVi')
+        khoa_sel = cbo_k.currentText() if cbo_k and cbo_k.currentIndex() > 0 else None
+        hv_sel = cbo_hv.currentText() if cbo_hv and cbo_hv.currentIndex() > 0 else None
+        for r in range(tbl.rowCount()):
+            show = True
+            if khoa_sel:
+                it = tbl.item(r, 2)
+                if it and khoa_sel not in it.text():
+                    show = False
+            if hv_sel:
+                it = tbl.item(r, 3)
+                if it and hv_sel not in it.text():
+                    show = False
+            tbl.setRowHidden(r, not show)
+
+    def _admin_filter_employees(self):
+        page = self.page_widgets[5]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmEmployees')
+        if not tbl:
+            return
+        cbo_r = page.findChild(QtWidgets.QComboBox, 'cboEmpRole')
+        cbo_s = page.findChild(QtWidgets.QComboBox, 'cboEmpStatus')
+        role_sel = cbo_r.currentText() if cbo_r and cbo_r.currentIndex() > 0 else None
+        status_sel = cbo_s.currentText() if cbo_s and cbo_s.currentIndex() > 0 else None
+        for r in range(tbl.rowCount()):
+            show = True
+            if role_sel:
+                it = tbl.item(r, 2)
+                if it and role_sel not in it.text():
+                    show = False
+            if status_sel:
+                it = tbl.item(r, 5)
+                if it and status_sel not in it.text():
+                    show = False
+            tbl.setRowHidden(r, not show)
 
     def _admin_add_user(self, role_name, page_idx, tbl_name, fields):
         dlg = QtWidgets.QDialog(self)
@@ -1984,13 +2519,23 @@ class AdminWindow(QtWidgets.QWidget):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmEmployees')
         if not tbl:
             return
-        data = [
-            ['NV001', 'Trần Thu Hương', 'Nhân viên đăng ký', '0987654321', 'huongtt@eaut.edu.vn', 'Đang làm'],
-            ['NV002', 'Lê Minh Đức', 'Nhân viên thu ngân', '0987654322', 'ducm@eaut.edu.vn', 'Đang làm'],
-            ['NV003', 'Phạm Quỳnh Anh', 'Nhân viên đăng ký', '0987654323', 'anhpq@eaut.edu.vn', 'Đang làm'],
-            ['NV004', 'Nguyễn Hoài Linh', 'Quản lý', '0987654324', 'linh@eaut.edu.vn', 'Đang làm'],
-            ['NV005', 'Vũ Thanh Tùng', 'Nhân viên thu ngân', '0987654325', 'tungvt@eaut.edu.vn', 'Nghỉ phép'],
-        ]
+        data = None
+        if DB_AVAILABLE:
+            try:
+                rows = EmployeeService.get_all()
+                data = [[r['ma_nv'], r['full_name'], r.get('chuc_vu') or '—',
+                         r.get('sdt') or '—', r.get('email') or '—',
+                         'Đang làm' if r.get('is_active') else 'Đã nghỉ'] for r in rows]
+            except Exception as e:
+                print(f'[EMP] loi: {e}')
+        if not data:
+            data = [
+                ['NV001', 'Trần Thu Hương', 'Nhân viên đăng ký', '0987654321', 'huongtt@eaut.edu.vn', 'Đang làm'],
+                ['NV002', 'Lê Minh Đức', 'Nhân viên thu ngân', '0987654322', 'ducm@eaut.edu.vn', 'Đang làm'],
+                ['NV003', 'Phạm Quỳnh Anh', 'Nhân viên đăng ký', '0987654323', 'anhpq@eaut.edu.vn', 'Đang làm'],
+                ['NV004', 'Nguyễn Hoài Linh', 'Quản lý', '0987654324', 'linh@eaut.edu.vn', 'Đang làm'],
+                ['NV005', 'Vũ Thanh Tùng', 'Nhân viên thu ngân', '0987654325', 'tungvt@eaut.edu.vn', 'Nghỉ phép'],
+            ]
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             for c, val in enumerate(row[:5]):
@@ -2019,9 +2564,11 @@ class AdminWindow(QtWidgets.QWidget):
             hl.addWidget(btn_edit)
             hl.addWidget(btn_del)
             tbl.setCellWidget(r, 6, w)
-            btn_edit.clicked.connect(lambda ch, rd=row: msg_info(
-                self, 'Chi tiết NV',
-                f"Mã: {rd[0]}\nHọ tên: {rd[1]}\nChức vụ: {rd[2]}\nSDT: {rd[3]}\nEmail: {rd[4]}\nTrạng thái: {rd[5]}"))
+            btn_edit.clicked.connect(lambda ch, rd=row: show_detail_dialog(
+                self, 'Chi tiết nhân viên',
+                [('Mã NV', rd[0]), ('Họ tên', rd[1]), ('Chức vụ', rd[2]),
+                 ('Số điện thoại', rd[3]), ('Email', rd[4]), ('Trạng thái', rd[5])],
+                avatar_text=rd[1].split()[-1] if rd[1] else '?', subtitle=rd[0]))
             btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'nhân viên'))
         tbl.horizontalHeader().setStretchLastSection(True)
         for c, cw in enumerate([75, 170, 170, 115, 195, 90, 140]):
@@ -2035,11 +2582,18 @@ class AdminWindow(QtWidgets.QWidget):
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchEmp')
         if txt:
             txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1]))
+        cbo_r = page.findChild(QtWidgets.QComboBox, 'cboEmpRole')
+        if cbo_r:
+            cbo_r.clear()
+            cbo_r.addItems(['Tất cả chức vụ', 'Nhân viên đăng ký', 'Nhân viên thu ngân', 'Quản lý'])
+        cbo_s = page.findChild(QtWidgets.QComboBox, 'cboEmpStatus')
+        if cbo_s:
+            cbo_s.clear()
+            cbo_s.addItems(['Tất cả trạng thái', 'Đang làm', 'Nghỉ phép', 'Đã nghỉ'])
         for nm in ('cboEmpRole', 'cboEmpStatus'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda idx, c=cbo:
-                    msg_info(self, 'Lọc NV', f'Lọc: {c.currentText()}') if idx > 0 else None)
+                cbo.currentIndexChanged.connect(lambda: self._admin_filter_employees())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddEmp')
         if btn_add:
             btn_add.clicked.connect(lambda: self._admin_add_user('nhân viên', 5, 'tblAdmEmployees',
@@ -2348,9 +2902,13 @@ class TeacherWindow(QtWidgets.QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             btn.setFixedSize(76, 26)
             btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-            btn.clicked.connect(lambda ch, m=ma, n=tmon, s=siso, mx=smax, p=phong, l=lich:
-                msg_info(self, 'Chi tiết lớp',
-                         f'Mã lớp: {m}\nMôn: {n}\nLịch: {l}\nPhòng: {p}\nSĩ số: {s}/{mx}'))
+            btn.clicked.connect(lambda ch, m=ma, n=tmon, s=siso, mx=smax, p=phong, l=lich, g=gia:
+                show_detail_dialog(self, 'Chi tiết lớp', [
+                    ('Mã lớp', m), ('Môn học', n), ('Giảng viên', MOCK_TEACHER['name']),
+                    ('Lịch học', l), ('Phòng', p),
+                    ('Sĩ số', f'{s}/{mx}'),
+                    ('Học phí', f'{g:,}'.replace(',', '.') + ' đ'),
+                ], avatar_text=m, subtitle=n))
             w = QtWidgets.QWidget()
             hl = QtWidgets.QHBoxLayout(w)
             hl.setContentsMargins(0, 0, 0, 0)
@@ -2501,6 +3059,16 @@ class TeacherWindow(QtWidgets.QWidget):
             return
         target = cbo.currentText()
         title = subj.text().strip()
+        body = content.toPlainText().strip()
+        # ghi DB neu co
+        if DB_AVAILABLE:
+            gv_user_id = MOCK_TEACHER.get('user_id')
+            if gv_user_id:
+                try:
+                    den_lop = target if cbo.currentIndex() > 0 else None
+                    NotificationService.send(gv_user_id, title, body, den_lop=den_lop, loai='info')
+                except Exception as e:
+                    print(f'[NOTICE] loi: {e}')
         # them card vao dau danh sach
         if hasattr(self, '_tea_notice_layout') and self._tea_notice_layout:
             card = self._make_notice_card(target, title, 'Vừa xong')
@@ -2626,8 +3194,32 @@ class TeacherWindow(QtWidgets.QWidget):
         self._grades_recalc_lock = False
 
     def _save_tea_grades(self):
-        if msg_confirm(self, 'Lưu điểm', 'Xác nhận lưu điểm cho tất cả học viên trong bảng?'):
-            msg_info(self, 'Thành công', 'Đã lưu điểm thành công!')
+        if not msg_confirm(self, 'Lưu điểm', 'Xác nhận lưu điểm cho tất cả học viên trong bảng?'):
+            return
+        # Neu co DB va biet lop, ghi that
+        saved = 0
+        if DB_AVAILABLE:
+            page = self.page_widgets[5]
+            tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherGrades')
+            cbo = page.findChild(QtWidgets.QComboBox, 'cboGradeClass')
+            gv_user_id = MOCK_TEACHER.get('user_id')
+            lop_id = cbo.currentText() if cbo and cbo.currentIndex() > 0 else None
+            if tbl and lop_id and gv_user_id:
+                for r in range(tbl.rowCount()):
+                    try:
+                        msv = tbl.item(r, 1).text()
+                        qt = float(tbl.item(r, 3).text().replace(',', '.'))
+                        thi = float(tbl.item(r, 4).text().replace(',', '.'))
+                        hv = db.fetch_one("SELECT user_id FROM students WHERE msv = %s", (msv,))
+                        if hv:
+                            GradeService.save_grade(hv['user_id'], lop_id, qt, thi, gv_user_id)
+                            saved += 1
+                    except Exception as e:
+                        print(f'[GRADE] loi dong {r}: {e}')
+        if saved:
+            msg_info(self, 'Thành công', f'Đã lưu {saved} điểm vào database.')
+        else:
+            msg_info(self, 'Thành công', 'Đã lưu điểm (chế độ MOCK).')
 
     def _fill_tea_profile(self):
         page = self.page_widgets[6]
@@ -2944,7 +3536,25 @@ class EmployeeWindow(QtWidgets.QWidget):
             return
         if not msg_confirm(self, 'Xác nhận', f'Đăng ký {hoten.text()} vào lớp {cbo_cls.currentText()}?'):
             return
-        msg_info(self, 'Thành công', f'Đã đăng ký thành công cho {hoten.text()}')
+        # ghi DB
+        saved_id = None
+        if DB_AVAILABLE:
+            try:
+                hv_row = db.fetch_one(
+                    "SELECT user_id FROM students WHERE msv = %s", (msv.text().strip(),)
+                )
+                nv_id = MOCK_EMPLOYEE.get('user_id')
+                if hv_row and nv_id:
+                    lop_code = cbo_cls.currentText().split()[0]  # "IT001-A — ..." -> "IT001-A"
+                    saved_id = RegistrationService.register_student(
+                        hv_row['user_id'], lop_code, nv_id
+                    )
+            except Exception as e:
+                print(f'[REG] loi: {e}')
+        if saved_id:
+            msg_info(self, 'Thành công', f'Đã đăng ký vào DB (mã DK #{saved_id}) cho {hoten.text()}')
+        else:
+            msg_info(self, 'Thành công', f'Đã đăng ký thành công cho {hoten.text()}')
         self._emp_reset_form()
 
     def _emp_reset_form(self):
@@ -2993,9 +3603,12 @@ class EmployeeWindow(QtWidgets.QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             btn.setFixedSize(76, 26)
             btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-            btn.clicked.connect(lambda ch, rdata=row: msg_info(
+            btn.clicked.connect(lambda ch, rdata=row: show_detail_dialog(
                 self, 'Chi tiết đăng ký',
-                f'Mã: {rdata[0]}\nNgày: {rdata[1]}\nHọc viên: {rdata[2]}\nLớp: {rdata[3]}\nHọc phí: {rdata[4]} đ\nTrạng thái: {rdata[5]}'))
+                [('Mã đăng ký', rdata[0]), ('Ngày đăng ký', rdata[1]),
+                 ('Học viên', rdata[2]), ('Lớp', rdata[3]),
+                 ('Học phí', f'{rdata[4]} đ'), ('Trạng thái', rdata[5])],
+                avatar_text='DK', subtitle=rdata[2]))
             w = QtWidgets.QWidget()
             hl = QtWidgets.QHBoxLayout(w)
             hl.setContentsMargins(0, 0, 0, 0)
@@ -3014,6 +3627,14 @@ class EmployeeWindow(QtWidgets.QWidget):
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchReg')
         if txt:
             txt.textChanged.connect(lambda t: table_filter(tbl, t, cols=[0, 2, 3]))
+        cbo_st = page.findChild(QtWidgets.QComboBox, 'cboRegStatus')
+        if cbo_st:
+            cbo_st.clear()
+            cbo_st.addItems(['Tất cả trạng thái', 'Đã thanh toán', 'Chờ thanh toán', 'Đã hủy'])
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboRegDate')
+        if cbo_d:
+            cbo_d.clear()
+            cbo_d.addItems(['Tất cả thời gian', 'Hôm nay (18/04)', '7 ngày qua', '30 ngày qua'])
         for nm in ('cboRegStatus', 'cboRegDate'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
@@ -3093,8 +3714,17 @@ class EmployeeWindow(QtWidgets.QWidget):
         gia = tbl.item(r, 3).text() if tbl.item(r, 3) else '?'
         if not msg_confirm(self, 'Xác nhận thu tiền', f'Thu {gia} đ từ {ten} ({ma}) - {method}?'):
             return
-        tbl.removeRow(r)
         ghi_chu = note.text().strip() if note else ''
+        # ghi DB truoc
+        if DB_AVAILABLE and ma.isdigit():
+            try:
+                nv_id = MOCK_EMPLOYEE.get('user_id')
+                so_tien = int(gia.replace('.', '').replace(',', '').replace('đ', '').strip())
+                RegistrationService.confirm_payment(int(ma), so_tien, method, nv_id, ghi_chu)
+                print(f'[PAY] da ghi DB: DK #{ma}, {so_tien}đ')
+            except Exception as e:
+                print(f'[PAY] loi: {e}')
+        tbl.removeRow(r)
         if note: note.clear()
         # cap nhat trang thai ben bang ds dang ky
         self._emp_sync_reg_paid(ma)
@@ -3278,9 +3908,15 @@ class EmployeeWindow(QtWidgets.QWidget):
             txt.textChanged.connect(lambda t: table_filter(tbl, t, cols=[0, 1, 2]))
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboEmpClsCourse')
         if cbo_c:
+            cbo_c.clear()
+            cbo_c.addItem('Tất cả môn học')
+            for code, name in MOCK_COURSES:
+                cbo_c.addItem(name)
             cbo_c.currentIndexChanged.connect(lambda: self._emp_filter_cls())
         cbo_s = page.findChild(QtWidgets.QComboBox, 'cboEmpClsStatus')
         if cbo_s:
+            cbo_s.clear()
+            cbo_s.addItems(['Tất cả trạng thái', 'Còn chỗ', 'Đầy'])
             cbo_s.currentIndexChanged.connect(lambda: self._emp_filter_cls())
 
     def _emp_filter_cls(self):
@@ -3341,6 +3977,41 @@ class App:
         self.main_win = None
         self.login_win = None
 
+    def _sync_mock_from_user(self, user_obj):
+        """dong bo MOCK dict tu User object tra ve DB (sidebar/profile dung MOCK)"""
+        common = {
+            'username': user_obj.username,
+            'name': user_obj.full_name,
+            'initials': user_obj.initials,
+            'email': user_obj.email or '',
+            'sdt': user_obj.sdt or '',
+            'id': user_obj.id,
+        }
+        if user_obj.role == 'student':
+            MOCK_USER.update(common)
+            MOCK_USER['msv'] = user_obj.msv
+            MOCK_USER['gioitinh'] = user_obj.gioitinh or ''
+            MOCK_USER['diachi'] = user_obj.diachi or ''
+            if user_obj.ngaysinh:
+                MOCK_USER['ngaysinh'] = str(user_obj.ngaysinh)
+            MOCK_USER['role'] = 'Học viên'
+        elif user_obj.role == 'teacher':
+            MOCK_TEACHER.update(common)
+            MOCK_TEACHER['id'] = user_obj.ma_gv
+            MOCK_TEACHER['hocvi'] = user_obj.hoc_vi or ''
+            MOCK_TEACHER['khoa'] = user_obj.khoa or ''
+            MOCK_TEACHER['role'] = 'Giảng viên'
+            MOCK_TEACHER['user_id'] = user_obj.id  # luu id thuc de goi service
+        elif user_obj.role == 'employee':
+            MOCK_EMPLOYEE.update(common)
+            MOCK_EMPLOYEE['id'] = user_obj.ma_nv
+            MOCK_EMPLOYEE['chucvu'] = user_obj.chuc_vu or ''
+            MOCK_EMPLOYEE['role'] = 'Nhân viên'
+            MOCK_EMPLOYEE['user_id'] = user_obj.id
+        elif user_obj.role == 'admin':
+            MOCK_ADMIN.update(common)
+            MOCK_ADMIN['role'] = 'Quản trị viên'
+
     def show_login(self):
         if self.main_win:
             self.main_win.close()
@@ -3359,6 +4030,31 @@ class App:
         def on_login():
             u = self.login_win.txtUsername.text().strip()
             p = self.login_win.txtPassword.text().strip()
+
+            # uu tien DB - dung AuthService
+            if DB_AVAILABLE:
+                try:
+                    user_obj = AuthService.login(u, p)
+                    if user_obj:
+                        # set MOCK dict theo user that de sidebar/profile hien tai
+                        self._sync_mock_from_user(user_obj)
+                        self.login_win.close()
+                        window_cls = {
+                            'student': MainWindow, 'admin': AdminWindow,
+                            'teacher': TeacherWindow, 'employee': EmployeeWindow,
+                        }.get(user_obj.role)
+                        if window_cls:
+                            self.main_win = window_cls(self)
+                            self.main_win.current_user = user_obj
+                            self.main_win.show()
+                            return
+                    self.login_win.lblError.setText('Sai tài khoản hoặc mật khẩu!')
+                    return
+                except Exception as e:
+                    print(f'[AUTH] loi DB, fallback MOCK: {e}')
+                    # roi xuong fallback MOCK
+
+            # fallback: MOCK login
             if u == MOCK_USER['username'] and p == MOCK_USER['password']:
                 self.login_win.close()
                 self.main_win = MainWindow(self)
