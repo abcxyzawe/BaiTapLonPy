@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>CartPreview</class>
+ <widget class="QWidget" name="CartPreview">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1100</width><height>700</height></rect></property>
+  <property name="minimumSize"><size><width>1100</width><height>700</height></size></property>
+  <property name="windowTitle"><string>EAUT - Gio hang dang ky</string></property>
+  <property name="styleSheet"><string notr="true">QWidget#CartPreview { background: #edf2f7; }</string></property>
+
+  <!-- SIDEBAR (bo qua boi Python) -->
+  <widget class="QFrame" name="sidebar">
+   <property name="geometry"><rect><x>0</x><y>0</y><width>230</width><height>700</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#sidebar { background: #ffffff; border-right: 1px solid #d2d6dc; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+  </widget>
+
+  <!-- CONTENT -->
+  <widget class="QFrame" name="contentArea">
+   <property name="geometry"><rect><x>230</x><y>0</y><width>870</width><height>700</height></rect></property>
+   <property name="styleSheet"><string notr="true">QFrame#contentArea { background: #edf2f7; border: none; }</string></property>
+   <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+   <!-- Header -->
+   <widget class="QFrame" name="headerBar">
+    <property name="geometry"><rect><x>0</x><y>0</y><width>870</width><height>56</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="lblPageTitle">
+     <property name="geometry"><rect><x>25</x><y>0</y><width>300</width><height>56</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Giỏ hàng đăng ký</string></property>
+     <property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property>
+    </widget>
+    <widget class="QPushButton" name="btnClearAll">
+     <property name="geometry"><rect><x>610</x><y>12</y><width>120</width><height>32</height></rect></property>
+     <property name="styleSheet"><string notr="true">QPushButton { background: white; color: #c53030; border: 1px solid #c53030; border-radius: 6px; padding: 5px 16px; font-size: 12px; } QPushButton:hover { background: #c53030; color: white; }</string></property>
+     <property name="text"><string>Xóa tất cả</string></property>
+     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+    </widget>
+    <widget class="QPushButton" name="btnConfirmAll">
+     <property name="geometry"><rect><x>738</x><y>12</y><width>120</width><height>32</height></rect></property>
+     <property name="styleSheet"><string notr="true">QPushButton { background: #002060; color: white; border: none; border-radius: 6px; padding: 5px 16px; font-size: 12px; font-weight: bold; } QPushButton:hover { background: #001545; }</string></property>
+     <property name="text"><string>Xác nhận ĐK</string></property>
+     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
+    </widget>
+   </widget>
+
+   <!-- Summary Cards -->
+   <widget class="QFrame" name="summaryCard1">
+    <property name="geometry"><rect><x>25</x><y>68</y><width>200</width><height>70</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#summaryCard1 { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="lblCartCount">
+     <property name="geometry"><rect><x>15</x><y>12</y><width>170</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #002060; font-size: 20px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>0</string></property>
+    </widget>
+    <widget class="QLabel" name="lblCartCountLabel">
+     <property name="geometry"><rect><x>15</x><y>38</y><width>170</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Khóa học đã chọn</string></property>
+    </widget>
+   </widget>
+
+   <widget class="QFrame" name="summaryCard2">
+    <property name="geometry"><rect><x>237</x><y>68</y><width>200</width><height>70</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#summaryCard2 { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="lblCartCredits">
+     <property name="geometry"><rect><x>15</x><y>12</y><width>170</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #276749; font-size: 20px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>0</string></property>
+    </widget>
+    <widget class="QLabel" name="lblCartCreditsLabel">
+     <property name="geometry"><rect><x>15</x><y>38</y><width>170</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Tổng tín chỉ</string></property>
+    </widget>
+   </widget>
+
+   <widget class="QFrame" name="summaryCard3">
+    <property name="geometry"><rect><x>449</x><y>68</y><width>200</width><height>70</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#summaryCard3 { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="lblCartFee">
+     <property name="geometry"><rect><x>15</x><y>12</y><width>170</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #b8860b; font-size: 20px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>0 đ</string></property>
+    </widget>
+    <widget class="QLabel" name="lblCartFeeLabel">
+     <property name="geometry"><rect><x>15</x><y>38</y><width>170</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Học phí dự kiến</string></property>
+    </widget>
+   </widget>
+
+   <!-- Trang thai -->
+   <widget class="QFrame" name="statusCard">
+    <property name="geometry"><rect><x>661</x><y>68</y><width>184</width><height>70</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#statusCard { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+    <widget class="QLabel" name="lblCartStatus">
+     <property name="geometry"><rect><x>15</x><y>12</y><width>160</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #b8860b; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Chưa xác nhận</string></property>
+    </widget>
+    <widget class="QLabel" name="lblCartStatusLabel">
+     <property name="geometry"><rect><x>15</x><y>38</y><width>160</width><height>18</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
+     <property name="text"><string>Trạng thái</string></property>
+    </widget>
+   </widget>
+
+   <!-- Cart Table -->
+   <widget class="QFrame" name="tableFrame">
+    <property name="geometry"><rect><x>25</x><y>150</y><width>820</width><height>320</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#tableFrame { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblCartTitle">
+     <property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Danh sách khóa học đã chọn</string></property>
+    </widget>
+
+    <widget class="QTableWidget" name="tblCart">
+     <property name="geometry"><rect><x>12</x><y>44</y><width>796</width><height>260</height></rect></property>
+     <property name="alternatingRowColors"><bool>true</bool></property>
+     <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+     <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+     <property name="showGrid"><bool>false</bool></property>
+     <property name="columnCount"><number>7</number></property>
+     <column><property name="text"><string>Mã HP</string></property></column>
+     <column><property name="text"><string>Tên khóa học</string></property></column>
+     <column><property name="text"><string>TC</string></property></column>
+     <column><property name="text"><string>Giảng viên</string></property></column>
+     <column><property name="text"><string>Lịch học</string></property></column>
+     <column><property name="text"><string>Học phí</string></property></column>
+     <column><property name="text"><string>Thao tác</string></property></column>
+    </widget>
+   </widget>
+
+   <!-- Preview Schedule -->
+   <widget class="QFrame" name="previewFrame">
+    <property name="geometry"><rect><x>25</x><y>482</y><width>820</width><height>200</height></rect></property>
+    <property name="styleSheet"><string notr="true">QFrame#previewFrame { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
+    <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+
+    <widget class="QLabel" name="lblPreviewTitle">
+     <property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property>
+     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
+     <property name="text"><string>Xem trước lịch học dự kiến</string></property>
+    </widget>
+
+    <widget class="QTableWidget" name="tblPreview">
+     <property name="geometry"><rect><x>12</x><y>44</y><width>796</width><height>145</height></rect></property>
+     <property name="alternatingRowColors"><bool>true</bool></property>
+     <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+     <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+     <property name="showGrid"><bool>false</bool></property>
+     <property name="columnCount"><number>7</number></property>
+     <property name="rowCount"><number>6</number></property>
+     <column><property name="text"><string>Giờ</string></property></column>
+     <column><property name="text"><string>Thứ 2</string></property></column>
+     <column><property name="text"><string>Thứ 3</string></property></column>
+     <column><property name="text"><string>Thứ 4</string></property></column>
+     <column><property name="text"><string>Thứ 5</string></property></column>
+     <column><property name="text"><string>Thứ 6</string></property></column>
+     <column><property name="text"><string>Thứ 7</string></property></column>
+    </widget>
+   </widget>
+
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
