@@ -78,6 +78,26 @@ class _GradeEditorDelegate(QtWidgets.QStyledItemDelegate):
         editor.setGeometry(x, y, w, h)
 
 
+def widen_search(page, txt_name, new_width, shift_after=None):
+    """noi rong o tim kiem va day widget ben phai neu can"""
+    txt = page.findChild(QtWidgets.QLineEdit, txt_name)
+    if not txt:
+        return
+    g = txt.geometry()
+    if g.width() >= new_width:
+        return
+    diff = new_width - g.width()
+    txt.setGeometry(g.x(), g.y(), new_width, g.height())
+    # day cac combo/button ben phai sang
+    if shift_after:
+        for nm in shift_after:
+            w = page.findChild(QtWidgets.QWidget, nm)
+            if w:
+                gw = w.geometry()
+                if gw.x() > g.x():
+                    w.setGeometry(gw.x() + diff, gw.y(), gw.width(), gw.height())
+
+
 def export_table_csv(parent, tbl, default_name='export.csv', title='Xuất file'):
     """ghi bang ra CSV, hoi nguoi dung chon noi luu"""
     import csv
@@ -720,6 +740,7 @@ class MainWindow(QtWidgets.QWidget):
                         gv_name = row[1]
                         b.clicked.connect(lambda ch, gv=gv_name: self._open_review_dialog(gv))
 
+        widen_search(page, 'txtSearchReview', 280, ['cboSubject', 'cboDept'])
         # search + filter
         txt_s = page.findChild(QtWidgets.QLineEdit, 'txtSearchReview')
         if txt_s:
@@ -1132,6 +1153,7 @@ class AdminWindow(QtWidgets.QWidget):
                         btns[0].clicked.connect(lambda ch, ma=row[0], nm=row[1]: self._admin_edit_course(ma, nm))
                         btns[1].clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'môn học'))
 
+        widen_search(page, 'txtSearchCourse', 320, ['btnSearchCourse', 'cboFilterDept'])
         # wire search / filter / add
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCourse')
         if txt:
@@ -1285,6 +1307,7 @@ class AdminWindow(QtWidgets.QWidget):
                             f"MSV: {rd[0]}\nHọ tên: {rd[1]}\nLớp: {rd[2]}\nKhoa: {rd[3]}\nSDT: {rd[4]}\nSố môn đăng ký: {rd[5]}"))
                         btns[1].clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'học viên'))
 
+        widen_search(page, 'txtSearchStudent', 300, ['btnSearchStudent', 'cboFilterClass', 'cboFilterDeptSt'])
         # search / filter / add
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchStudent')
         if txt:
@@ -1512,6 +1535,7 @@ class AdminWindow(QtWidgets.QWidget):
                             f"Mã môn: {rd[1]}\nTên: {rd[2]}\nTín chỉ: {rd[3]}\nLoại: {rd[4]}\nHK: {rd[5]}"))
                         btns[1].clicked.connect(lambda ch, ma=row[1], nm=row[2], t=tbl: self._admin_del_row(t, ma, nm, 'môn trong CT'))
 
+        widen_search(page, 'txtSearchCurr', 280, ['cboNganh', 'cboLoai', 'cboHocKy', 'btnExportCurr'])
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCurr')
         if txt:
             txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[1, 2]))
@@ -1575,6 +1599,7 @@ class AdminWindow(QtWidgets.QWidget):
             for r in range(len(data)):
                 tbl.setRowHeight(r, 36)
 
+        widen_search(page, 'txtSearchAudit', 260, ['cboAuditUser', 'cboAuditAction', 'cboAuditDate'])
         # search + filter
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchAudit')
         if txt:
@@ -1741,6 +1766,8 @@ class AdminWindow(QtWidgets.QWidget):
         for r in range(len(MOCK_CLASSES)):
             tbl.setRowHeight(r, 44)
 
+        # noi rong o tim kiem (placeholder dai khong vua)
+        widen_search(page, 'txtSearchCls', 300, ['cboAdmClsCourse', 'cboAdmClsTeacher', 'cboAdmClsStatus'])
         # search / filter / add
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCls')
         if txt:
@@ -1910,6 +1937,7 @@ class AdminWindow(QtWidgets.QWidget):
         for r in range(len(data)):
             tbl.setRowHeight(r, 44)
 
+        widen_search(page, 'txtSearchTea', 300, ['cboTeaKhoa', 'cboTeaHocVi'])
         # search / filter / add
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchTea')
         if txt:
@@ -2002,6 +2030,7 @@ class AdminWindow(QtWidgets.QWidget):
         for r in range(len(data)):
             tbl.setRowHeight(r, 44)
 
+        widen_search(page, 'txtSearchEmp', 300, ['cboEmpRole', 'cboEmpStatus'])
         # search / filter / add
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchEmp')
         if txt:
@@ -2376,6 +2405,7 @@ class TeacherWindow(QtWidgets.QWidget):
         for r in range(len(data)):
             tbl.setRowHeight(r, 40)
 
+        widen_search(page, 'txtSearchStudent', 280, ['btnExportStudents'])
         # filter + search
         txt_s = page.findChild(QtWidgets.QLineEdit, 'txtSearchStudent')
         if txt_s:
@@ -2979,6 +3009,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         for r in range(len(data)):
             tbl.setRowHeight(r, 40)
 
+        widen_search(page, 'txtSearchReg', 300, ['cboRegStatus', 'cboRegDate'])
         # search + filter + export
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchReg')
         if txt:
@@ -3240,6 +3271,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         for r in range(len(MOCK_CLASSES)):
             tbl.setRowHeight(r, 40)
 
+        widen_search(page, 'txtSearchEmpCls', 290, ['cboEmpClsCourse', 'cboEmpClsStatus'])
         # search + filter
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchEmpCls')
         if txt:
