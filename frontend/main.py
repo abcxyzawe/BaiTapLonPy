@@ -55,6 +55,29 @@ def table_filter(tbl, keyword, cols=None):
         tbl.setRowHidden(r, not show)
 
 
+class _GradeEditorDelegate(QtWidgets.QStyledItemDelegate):
+    """delegate cho o nhap diem - phong to editor ra ngoai cell de de nhin"""
+    def createEditor(self, parent, option, index):
+        ed = QtWidgets.QLineEdit(parent)
+        ed.setFont(QFont('Segoe UI', 13, QFont.Bold))
+        ed.setStyleSheet(
+            'QLineEdit { background: white; color: #1a1a2e; '
+            'border: 2px solid #002060; border-radius: 4px; '
+            'padding: 6px 10px; }'
+        )
+        ed.setAlignment(Qt.AlignCenter)
+        return ed
+
+    def updateEditorGeometry(self, editor, option, index):
+        # phong editor ra 140x44 de de go
+        rect = option.rect
+        w = max(rect.width() + 20, 140)
+        h = max(rect.height() + 8, 44)
+        x = rect.x() - (w - rect.width()) // 2
+        y = rect.y() - (h - rect.height()) // 2
+        editor.setGeometry(x, y, w, h)
+
+
 def export_table_csv(parent, tbl, default_name='export.csv', title='Xuất file'):
     """ghi bang ra CSV, hoi nguoi dung chon noi luu"""
     import csv
@@ -614,7 +637,7 @@ class MainWindow(QtWidgets.QWidget):
                 w.setText(val)
                 w.setStyleSheet(f'color: {color}; font-size: 22px; font-weight: bold; background: transparent;')
 
-        # export button
+        # export button (PDF - tinh nang se bo sung sau)
         header = page.findChild(QtWidgets.QFrame, 'headerBar')
         if header:
             btn_export = QtWidgets.QPushButton('Xuất PDF', header)
@@ -622,7 +645,7 @@ class MainWindow(QtWidgets.QWidget):
             btn_export.setCursor(Qt.PointingHandCursor)
             btn_export.setStyleSheet(f'QPushButton {{ background: white; color: {COLORS["navy"]}; border: 1px solid {COLORS["navy"]}; border-radius: 4px; padding: 4px 12px; font-size: 11px; }} QPushButton:hover {{ background: {COLORS["navy"]}; color: white; }}')
             btn_export.show()
-            btn_export.clicked.connect(lambda: msg_info(self, 'Xuất PDF', 'Đã xuất bảng điểm ra file PDF (tinh.nang.demo)'))
+            btn_export.clicked.connect(lambda: msg_info(self, 'Thông báo', 'Chức năng xuất PDF đang phát triển, sẽ bổ sung ở bản cập nhật tới.'))
 
         # loc theo hoc ky
         cbo = page.findChild(QtWidgets.QComboBox, 'cboSemester')
@@ -2499,23 +2522,29 @@ class TeacherWindow(QtWidgets.QWidget):
                     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 tbl.setItem(r, c, item)
         tbl.horizontalHeader().setStretchLastSection(True)
-        for c, cw in enumerate([45, 110, 210, 90, 90, 95, 100]):
+        # cot diem QT (3) va diem thi (4) rong hon de editor to hon
+        for c, cw in enumerate([42, 100, 195, 115, 115, 95, 100]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
+        # row cao hon de editor cao hon
         for r in range(len(data)):
-            tbl.setRowHeight(r, 42)
+            tbl.setRowHeight(r, 52)
 
         # setEditTriggers de cho nhap dc
         tbl.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked | QtWidgets.QAbstractItemView.EditKeyPressed
                             | QtWidgets.QAbstractItemView.SelectedClicked)
-        # phong to editor de nhin ro
+        # phong to editor de nhin ro - rong + cao + font dam
         tbl.setStyleSheet(
             'QTableWidget QLineEdit { '
-            'font-size: 13px; font-weight: bold; color: #1a1a2e; '
-            'background: white; padding: 4px 6px; '
+            'font-size: 14px; font-weight: bold; color: #1a1a2e; '
+            'background: white; padding: 8px 10px; '
+            'min-height: 32px; '
             'border: 2px solid #002060; selection-background-color: #002060; '
             'selection-color: white; }'
         )
+        # delegate de editor to rong ra ngoai cell, de dang sua
+        tbl.setItemDelegateForColumn(3, _GradeEditorDelegate(tbl))
+        tbl.setItemDelegateForColumn(4, _GradeEditorDelegate(tbl))
         tbl.itemChanged.connect(self._recalc_grade_row)
         self._grades_recalc_lock = False
 
