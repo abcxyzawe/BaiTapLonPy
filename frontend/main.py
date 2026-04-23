@@ -9,6 +9,7 @@ from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
 
 # thu ket noi DB - fallback MOCK neu khong co docker
+# ---- core services (ban 1 + ban 2 cu) ----
 DB_AVAILABLE = False
 try:
     from backend.database.db import db
@@ -26,7 +27,41 @@ try:
     else:
         print('[DB] Khong ket noi duoc - fallback MOCK data')
 except Exception as _e:
-    print(f'[DB] Khong load duoc backend ({_e}) - fallback MOCK data')
+    print(f'[DB] Khong load duoc core services ({_e}) - fallback MOCK data')
+
+# ---- optional services (ban 2: them sau) ----
+# neu chua ton tai thi gan None, cac cho dung se check `if X` truoc
+SemesterService = None
+CurriculumService = None
+ScheduleService = None
+ExamService = None
+AttendanceService = None
+AuditService = None
+if DB_AVAILABLE:
+    try:
+        from backend.services.semester_service import SemesterService
+    except ImportError: pass
+    try:
+        from backend.services.curriculum_service import CurriculumService
+    except ImportError: pass
+    try:
+        from backend.services.schedule_service import ScheduleService
+    except ImportError: pass
+    try:
+        from backend.services.exam_service import ExamService
+    except ImportError: pass
+    try:
+        from backend.services.attendance_service import AttendanceService
+    except ImportError: pass
+    try:
+        from backend.services.audit_service import AuditService
+    except ImportError: pass
+    _missing = [n for n, s in [('Semester', SemesterService), ('Curriculum', CurriculumService),
+                                ('Schedule', ScheduleService), ('Exam', ExamService),
+                                ('Attendance', AttendanceService), ('Audit', AuditService)]
+                if s is None]
+    if _missing:
+        print(f'[DB] Service phu chua co: {", ".join(_missing)} - se dung MOCK cho tinh nang moi')
 
 
 # ===== helpers popup =====
@@ -831,25 +866,72 @@ class MainWindow(QtWidgets.QWidget):
 
     def _fill_grades(self):
         page = self.page_widgets[3]
-        # group theo hoc ky - moi HK co danh sach mon rieng
-        self._student_grades_by_sem = {
-            'HK2-2526': [
-                ['IT001', 'Lập trình Python',     '3', '8.5', '7.5', '7.8', 'B+'],
-                ['IT004', 'Trí tuệ nhân tạo',     '3', '8.0', '7.0', '7.3', 'B'],
-                ['MA002', 'Xác suất thống kê',   '3', '7.0', '7.5', '7.3', 'B'],
-            ],
-            'HK1-2526': [
-                ['IT002', 'Cơ sở dữ liệu',        '3', '9.0', '8.5', '8.7', 'A'],
-                ['IT003', 'Mạng máy tính',        '3', '8.0', '8.0', '8.0', 'B+'],
-                ['MA001', 'Toán rời rạc',         '3', '7.0', '6.5', '6.7', 'C+'],
-                ['EN001', 'Tiếng Anh 1',           '3', '9.0', '9.0', '9.0', 'A+'],
-            ],
-        }
+        # lay tu DB truoc neu co
+        self._student_grades_by_sem = {}
+        if DB_AVAILABLE:
+            try:
+                hv_id = MOCK_USER.get('id')
+                if hv_id:
+                    rows = GradeService.get_grades_by_student(hv_id)
+                    # group theo semester_id (tu lop)
+                    from collections import defaultdict
+                    by_sem = defaultdict(list)
+                    for g in rows:
+                        sem = db.fetch_one(
+                            'SELECT semester_id FROM classes WHERE ma_lop = %s',
+                            (g['lop_id'],)
+                        )
+                        sid = sem['semester_id'] if sem and sem.get('semester_id') else 'HK2-2526'
+                        by_sem[sid].append([
+                            g['ma_mon'], g['ten_mon'], '3',
+                            f"{float(g['diem_qt']):.1f}" if g.get('diem_qt') else '',
+                            f"{float(g['diem_thi']):.1f}" if g.get('diem_thi') else '',
+                            f"{float(g['tong_ket']):.1f}" if g.get('tong_ket') else '',
+                            g.get('xep_loai', '') or '',
+                        ])
+                    self._student_grades_by_sem = dict(by_sem)
+            except Exception as e:
+                print(f'[GRADES] DB loi: {e}')
+        # fallback MOCK
+        if not self._student_grades_by_sem:
+            self._student_grades_by_sem = {
+                'HK2-2526': [
+                    ['IT001', 'Lập trình Python',     '3', '8.5', '7.5', '7.8', 'B+'],
+                    ['IT004', 'Trí tuệ nhân tạo',     '3', '8.0', '7.0', '7.3', 'B'],
+                    ['MA002', 'Xác suất thống kê',   '3', '7.0', '7.5', '7.3', 'B'],
+                ],
+                'HK1-2526': [
+                    ['IT002', 'Cơ sở dữ liệu',        '3', '9.0', '8.5', '8.7', 'A'],
+                    ['IT003', 'Mạng máy tính',        '3', '8.0', '8.0', '8.0', 'B+'],
+                    ['MA001', 'Toán rời rạc',         '3', '7.0', '6.5', '6.7', 'C+'],
+                    ['EN001', 'Tiếng Anh 1',           '3', '9.0', '9.0', '9.0', 'A+'],
+                ],
+            }
         self._render_student_grades(None)
-        # GPA cards
+
+        # GPA stats tu DB
+        if DB_AVAILABLE:
+            try:
+                hv_id = MOCK_USER.get('id')
+                if hv_id:
+                    stats = GradeService.get_gpa_stats(hv_id)
+                    for attr, val, color in [
+                        ('lblGpa', f'{stats.get("gpa", 0):.2f}', COLORS['navy']),
+                        ('lblGpaSem', f'{stats.get("gpa", 0):.2f}', COLORS['green']),
+                        ('lblTotalCredits', str(int(stats.get('so_lop', 0)) * 3), COLORS['gold'])
+                    ]:
+                        w = page.findChild(QtWidgets.QLabel, attr)
+                        if w:
+                            w.setText(val)
+                            w.setStyleSheet(f'color: {color}; font-size: 22px; font-weight: bold; background: transparent;')
+            except Exception as e:
+                print(f'[GPA] loi: {e}')
+        # GPA cards fallback MOCK
         for attr, val, color in [('lblGpa', '3.24', COLORS['navy']),
                                  ('lblGpaSem', '3.40', COLORS['green']),
                                  ('lblTotalCredits', '45', COLORS['gold'])]:
+            if DB_AVAILABLE:
+                break
             w = page.findChild(QtWidgets.QLabel, attr)
             if w:
                 w.setText(val)
@@ -1391,14 +1473,38 @@ class AdminWindow(QtWidgets.QWidget):
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
-        data = [
-            ['IT001', 'Lập trình Python', '3', 'Nguyễn Đức Thiện', 'T3 (7:00-9:30)', 40, 40],
-            ['IT002', 'Cơ sở dữ liệu', '3', 'Lê Thị C', 'T5 (7:00-9:30)', 35, 40],
-            ['IT003', 'Mạng máy tính', '3', 'Phạm Văn D', 'T6 (7:00-9:30)', 18, 30],
-            ['MA001', 'Toán rời rạc', '3', 'Nguyễn Thị E', 'T2 (9:30-12:00)', 30, 40],
-            ['EN001', 'Tiếng Anh 3', '3', 'Hoàng Văn F', 'T4 (13:00-15:30)', 15, 35],
-            ['IT004', 'Trí tuệ nhân tạo', '3', 'Nguyễn Văn G', 'T3 (7:00-9:30)', 28, 40],
-        ]
+        data = None
+        if DB_AVAILABLE:
+            try:
+                courses = CourseService.get_all_courses()
+                data = []
+                for c in courses:
+                    # dem si so tong cua tat ca lop cua mon nay
+                    stats = db.fetch_one(
+                        """SELECT COALESCE(SUM(siso_hien_tai),0) AS cur,
+                                  COALESCE(SUM(siso_max),0) AS mx,
+                                  COUNT(*) AS n_lop,
+                                  (SELECT STRING_AGG(DISTINCT lich, ', ')
+                                     FROM classes WHERE ma_mon = %s LIMIT 1) AS lich
+                             FROM classes WHERE ma_mon = %s""",
+                        (c['ma_mon'], c['ma_mon'])
+                    )
+                    data.append([
+                        c['ma_mon'], c['ten_mon'], '3', '—',
+                        stats.get('lich') or '—',
+                        int(stats.get('cur') or 0), int(stats.get('mx') or 40),
+                    ])
+            except Exception as e:
+                print(f'[ADMIN_COURSES] DB loi: {e}')
+        if not data:
+            data = [
+                ['IT001', 'Lập trình Python', '3', 'Nguyễn Đức Thiện', 'T3 (7:00-9:30)', 40, 40],
+                ['IT002', 'Cơ sở dữ liệu', '3', 'Lê Thị C', 'T5 (7:00-9:30)', 35, 40],
+                ['IT003', 'Mạng máy tính', '3', 'Phạm Văn D', 'T6 (7:00-9:30)', 18, 30],
+                ['MA001', 'Toán rời rạc', '3', 'Nguyễn Thị E', 'T2 (9:30-12:00)', 30, 40],
+                ['EN001', 'Tiếng Anh 3', '3', 'Hoàng Văn F', 'T4 (13:00-15:30)', 15, 35],
+                ['IT004', 'Trí tuệ nhân tạo', '3', 'Nguyễn Văn G', 'T3 (7:00-9:30)', 28, 40],
+            ]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdminCourses')
         if tbl:
             tbl.setRowCount(len(data))
@@ -1533,6 +1639,16 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.setCellWidget(r, 6, w)
         # them vao MOCK_COURSES
         MOCK_COURSES.append((txt_code.text().upper(), txt_name.text()))
+        # ghi DB neu co
+        if DB_AVAILABLE:
+            try:
+                CourseService.create_course(
+                    ma_mon=txt_code.text().upper(),
+                    ten_mon=txt_name.text(),
+                    mo_ta=f'TC: {txt_tc.text() or 3}, GV: {txt_gv.text() or ""}'
+                )
+            except Exception as e:
+                print(f'[ADM_ADD_COURSE] DB loi: {e}')
         msg_info(self, 'Thành công', f'Đã thêm môn {txt_code.text()} - {txt_name.text()}')
 
     def _admin_edit_course(self, ma, nm):
@@ -1579,6 +1695,29 @@ class AdminWindow(QtWidgets.QWidget):
     def _admin_del_row(self, tbl, ma, nm, loai):
         if not msg_confirm(self, 'Xác nhận xóa', f'Xóa {loai} {ma} - {nm}?'):
             return
+        # ghi DB truoc khi xoa UI
+        if DB_AVAILABLE:
+            try:
+                if loai == 'môn học':
+                    CourseService.delete_course(ma)
+                elif loai == 'lớp':
+                    CourseService.delete_class(ma)
+                elif loai == 'học viên':
+                    # ma la MSV -> tim user_id
+                    row = db.fetch_one('SELECT user_id FROM students WHERE msv = %s', (ma,))
+                    if row: StudentService.delete(row['user_id'])
+                elif loai == 'giảng viên':
+                    row = db.fetch_one('SELECT user_id FROM teachers WHERE ma_gv = %s', (ma,))
+                    if row: TeacherService.delete(row['user_id'])
+                elif loai == 'nhân viên':
+                    row = db.fetch_one('SELECT user_id FROM employees WHERE ma_nv = %s', (ma,))
+                    if row: EmployeeService.delete(row['user_id'])
+                elif loai == 'môn trong CT':
+                    # ma la ma_mon, xoa row dau tien trung
+                    if CurriculumService:
+                        CurriculumService.delete(int(ma) if ma.isdigit() else 0)
+            except Exception as e:
+                print(f'[ADM_DEL] DB loi: {e}')
         for r in range(tbl.rowCount()):
             it = tbl.item(r, 0)
             if it and it.text() == ma:
@@ -1723,16 +1862,42 @@ class AdminWindow(QtWidgets.QWidget):
             for c, v in enumerate(vals):
                 tbl.setItem(r, c, QtWidgets.QTableWidgetItem(v))
             tbl.setRowHeight(r, 44)
+        # ghi DB - tao user + student
+        if DB_AVAILABLE:
+            try:
+                StudentService.create(
+                    username=widgets['msv'].text().lower(),
+                    password='passuser',   # default password
+                    full_name=widgets['ten'].text(),
+                    msv=widgets['msv'].text(),
+                    sdt=widgets['sdt'].text() or None,
+                )
+            except Exception as e:
+                print(f'[ADM_ADD_HV] DB loi: {e}')
+                msg_warn(self, 'Loi DB', f'UI da them nhung DB loi: {e}')
         msg_info(self, 'Thành công', f'Đã thêm học viên {widgets["msv"].text()}')
 
     def _fill_admin_semester(self):
         page = self.page_widgets[6]
-        data = [
-            ['HK2-2526', 'Học kỳ 2', '2025-2026', '01/01/2026', '30/06/2026', 'Đang mở'],
-            ['HK1-2526', 'Học kỳ 1', '2025-2026', '01/08/2025', '31/12/2025', 'Đã đóng'],
-            ['HK2-2425', 'Học kỳ 2', '2024-2025', '01/01/2025', '30/06/2025', 'Đã đóng'],
-            ['HK1-2425', 'Học kỳ 1', '2024-2025', '01/08/2024', '31/12/2024', 'Đã đóng'],
-        ]
+        data = None
+        if DB_AVAILABLE:
+            try:
+                if not SemesterService: raise RuntimeError("SemesterService chua co")
+                rows = SemesterService.get_all()
+                status_map = {'open': 'Đang mở', 'closed': 'Đã đóng', 'upcoming': 'Sắp tới'}
+                data = [[s['id'], s['ten'], s['nam_hoc'],
+                         s['bat_dau'].strftime('%d/%m/%Y') if s.get('bat_dau') else '—',
+                         s['ket_thuc'].strftime('%d/%m/%Y') if s.get('ket_thuc') else '—',
+                         status_map.get(s['trang_thai'], s['trang_thai'])] for s in rows]
+            except Exception as e:
+                print(f'[ADM_SEM] DB loi: {e}')
+        if not data:
+            data = [
+                ['HK2-2526', 'Học kỳ 2', '2025-2026', '01/01/2026', '30/06/2026', 'Đang mở'],
+                ['HK1-2526', 'Học kỳ 1', '2025-2026', '01/08/2025', '31/12/2025', 'Đã đóng'],
+                ['HK2-2425', 'Học kỳ 2', '2024-2025', '01/01/2025', '30/06/2025', 'Đã đóng'],
+                ['HK1-2425', 'Học kỳ 1', '2024-2025', '01/08/2024', '31/12/2024', 'Đã đóng'],
+            ]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblSemesters')
         if tbl:
             tbl.setRowCount(len(data))
@@ -1785,6 +1950,13 @@ class AdminWindow(QtWidgets.QWidget):
         new_state = 'mở' if not is_open else 'đóng'
         if not msg_confirm(self, 'Xác nhận', f'{"Đóng" if is_open else "Mở"} đăng ký cho {ma}?'):
             return
+        # ghi DB
+        if DB_AVAILABLE:
+            try:
+                if not SemesterService: raise RuntimeError("SemesterService chua co")
+                SemesterService.set_status(ma, 'closed' if is_open else 'open')
+            except Exception as e:
+                print(f'[ADM_TOGGLE_SEM] DB loi: {e}')
         btn.setText('Mở ĐK' if is_open else 'Đóng ĐK')
         msg_info(self, 'Thành công', f'Đã {new_state} đăng ký cho {ma}')
 
@@ -1820,6 +1992,21 @@ class AdminWindow(QtWidgets.QWidget):
             st.setForeground(QColor(COLORS['green']))
             tbl.setItem(r, 5, st)
             tbl.setRowHeight(r, 44)
+        # ghi DB
+        if DB_AVAILABLE:
+            try:
+                from datetime import datetime
+                def parse_dd_mm_yyyy(s):
+                    return datetime.strptime(s.strip(), '%d/%m/%Y').date()
+                if not SemesterService: raise RuntimeError("SemesterService chua co")
+                SemesterService.create(
+                    sem_id=ma.text(), ten=ten.text(), nam_hoc=nam.text(),
+                    bat_dau=parse_dd_mm_yyyy(bd.text()),
+                    ket_thuc=parse_dd_mm_yyyy(kt.text()),
+                    trang_thai='open'
+                )
+            except Exception as e:
+                print(f'[ADM_ADD_SEM] DB loi: {e}')
         msg_info(self, 'Thành công', f'Đã thêm học kỳ {ma.text()}')
 
     def _fill_admin_curriculum(self):
@@ -1828,22 +2015,41 @@ class AdminWindow(QtWidgets.QWidget):
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
-        data = [
-            ['1', 'IT001', 'Nhập môn lập trình', '3', 'Bắt buộc', 'HK1', '—'],
-            ['2', 'MA001', 'Giải tích 1', '3', 'Bắt buộc', 'HK1', '—'],
-            ['3', 'EN001', 'Tiếng Anh 1', '3', 'Đại cương', 'HK1', '—'],
-            ['4', 'IT002', 'Cấu trúc dữ liệu', '3', 'Bắt buộc', 'HK2', 'IT001'],
-            ['5', 'MA002', 'Đại số tuyến tính', '3', 'Bắt buộc', 'HK2', '—'],
-            ['6', 'IT003', 'Kỹ thuật lập trình', '3', 'Bắt buộc', 'HK3', 'IT002'],
-            ['7', 'IT004', 'Cơ sở dữ liệu', '3', 'Bắt buộc', 'HK3', 'IT002'],
-            ['8', 'IT005', 'Mạng máy tính', '3', 'Bắt buộc', 'HK4', '—'],
-            ['9', 'IT006', 'Hệ điều hành', '3', 'Bắt buộc', 'HK4', 'IT003'],
-            ['10', 'IT007', 'Công nghệ phần mềm', '3', 'Bắt buộc', 'HK5', 'IT003'],
-            ['11', 'IT008', 'Trí tuệ nhân tạo', '3', 'Tự chọn', 'HK5', 'IT002, MA002'],
-            ['12', 'IT009', 'Phát triển web', '3', 'Tự chọn', 'HK5', 'IT003'],
-            ['13', 'IT010', 'An toàn thông tin', '3', 'Tự chọn', 'HK6', 'IT005'],
-            ['14', 'IT011', 'Lập trình di động', '3', 'Tự chọn', 'HK6', 'IT003'],
-        ]
+        data = None
+        if DB_AVAILABLE:
+            try:
+                if not CurriculumService: raise RuntimeError("CurriculumService chua co")
+                rows = CurriculumService.get_all()
+                # convert 'Bat buoc' tu DB -> 'Bắt buộc' cho UI
+                loai_map = {'Bat buoc': 'Bắt buộc', 'Tu chon': 'Tự chọn', 'Dai cuong': 'Đại cương'}
+                data = []
+                for i, c in enumerate(rows, start=1):
+                    data.append([
+                        str(i), c['ma_mon'], c.get('ten_mon', '') or '',
+                        str(c.get('tin_chi', 3)),
+                        loai_map.get(c.get('loai', ''), c.get('loai', '')),
+                        c.get('hoc_ky_de_nghi', '') or '—',
+                        c.get('mon_tien_quyet') or '—',
+                    ])
+            except Exception as e:
+                print(f'[ADM_CURR] DB loi: {e}')
+        if not data:
+            data = [
+                ['1', 'IT001', 'Nhập môn lập trình', '3', 'Bắt buộc', 'HK1', '—'],
+                ['2', 'MA001', 'Giải tích 1', '3', 'Bắt buộc', 'HK1', '—'],
+                ['3', 'EN001', 'Tiếng Anh 1', '3', 'Đại cương', 'HK1', '—'],
+                ['4', 'IT002', 'Cấu trúc dữ liệu', '3', 'Bắt buộc', 'HK2', 'IT001'],
+                ['5', 'MA002', 'Đại số tuyến tính', '3', 'Bắt buộc', 'HK2', '—'],
+                ['6', 'IT003', 'Kỹ thuật lập trình', '3', 'Bắt buộc', 'HK3', 'IT002'],
+                ['7', 'IT004', 'Cơ sở dữ liệu', '3', 'Bắt buộc', 'HK3', 'IT002'],
+                ['8', 'IT005', 'Mạng máy tính', '3', 'Bắt buộc', 'HK4', '—'],
+                ['9', 'IT006', 'Hệ điều hành', '3', 'Bắt buộc', 'HK4', 'IT003'],
+                ['10', 'IT007', 'Công nghệ phần mềm', '3', 'Bắt buộc', 'HK5', 'IT003'],
+                ['11', 'IT008', 'Trí tuệ nhân tạo', '3', 'Tự chọn', 'HK5', 'IT002, MA002'],
+                ['12', 'IT009', 'Phát triển web', '3', 'Tự chọn', 'HK5', 'IT003'],
+                ['13', 'IT010', 'An toàn thông tin', '3', 'Tự chọn', 'HK6', 'IT005'],
+                ['14', 'IT011', 'Lập trình di động', '3', 'Tự chọn', 'HK6', 'IT003'],
+            ]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblCurriculum')
         if tbl:
             tbl.setRowCount(len(data))
@@ -2016,6 +2222,21 @@ class AdminWindow(QtWidgets.QWidget):
                 it.setForeground(QColor(type_colors.get(v, COLORS['text_mid'])))
             tbl.setItem(r, c, it)
         tbl.setRowHeight(r, 44)
+        # ghi DB
+        if DB_AVAILABLE:
+            try:
+                loai_map = {'Bắt buộc': 'Bat buoc', 'Tự chọn': 'Tu chon', 'Đại cương': 'Dai cuong'}
+                if not CurriculumService: raise RuntimeError("CurriculumService chua co")
+                CurriculumService.create(
+                    ma_mon=txt_code.text().upper(),
+                    tin_chi=int(txt_tc.text()),
+                    loai=loai_map.get(cbo_loai.currentText(), 'Bat buoc'),
+                    hoc_ky_de_nghi=cbo_hk.currentText(),
+                    mon_tien_quyet=txt_prereq.text().strip() or None,
+                    nganh='CNTT',
+                )
+            except Exception as e:
+                print(f'[ADM_ADD_CURR] DB loi: {e}')
         msg_info(self, 'Thành công', f'Đã thêm môn {txt_code.text()}')
 
     def _admin_filter_curriculum(self):
@@ -2059,20 +2280,39 @@ class AdminWindow(QtWidgets.QWidget):
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
-        data = [
-            ['17/04/2026 08:12:34', 'admin', 'QTV', 'Đăng nhập', 'Đăng nhập thành công', '192.168.1.10'],
-            ['17/04/2026 08:15:02', 'admin', 'QTV', 'Mở đăng ký', 'Mở đăng ký HK2-2526', '192.168.1.10'],
-            ['17/04/2026 08:30:11', '2024001', 'SV', 'Đăng nhập', 'Đăng nhập thành công', '10.0.0.55'],
-            ['17/04/2026 08:31:45', '2024001', 'SV', 'Đăng ký', 'Đăng ký IT004 - Trí tuệ nhân tạo', '10.0.0.55'],
-            ['17/04/2026 08:32:10', '2024001', 'SV', 'Đăng ký', 'Đăng ký IT005 - Phát triển web', '10.0.0.55'],
-            ['17/04/2026 08:45:30', '2024002', 'SV', 'Đăng nhập', 'Đăng nhập thành công', '10.0.0.87'],
-            ['17/04/2026 08:46:12', '2024002', 'SV', 'Hủy ĐK', 'Hủy đăng ký MA002 - Xác suất TK', '10.0.0.87'],
-            ['17/04/2026 09:00:05', '2024003', 'SV', 'Đăng nhập', 'Đăng nhập thất bại (sai MK)', '10.0.0.42'],
-            ['17/04/2026 09:00:15', '2024003', 'SV', 'Đăng nhập', 'Đăng nhập thất bại (sai MK)', '10.0.0.42'],
-            ['17/04/2026 09:00:25', '2024003', 'SV', 'Cảnh báo', 'Khóa tài khoản 15 phút (3 lần sai)', '10.0.0.42'],
-            ['17/04/2026 09:15:30', 'admin', 'QTV', 'Cập nhật', 'Sửa sĩ số IT001 từ 35 → 40', '192.168.1.10'],
-            ['17/04/2026 09:30:00', '2024010', 'SV', 'Thanh toán', 'Thanh toán 9,000,000 đ - HK2', '10.0.0.91'],
-        ]
+        data = None
+        if DB_AVAILABLE:
+            try:
+                if not AuditService: raise RuntimeError("AuditService chua co")
+                rows = AuditService.get_all(limit=50)
+                role_map = {'admin': 'QTV', 'teacher': 'GV', 'employee': 'NV', 'student': 'SV'}
+                data = []
+                for l in rows:
+                    ts = l['created_at'].strftime('%d/%m/%Y %H:%M:%S') if l.get('created_at') else '—'
+                    data.append([
+                        ts, l.get('username') or '—',
+                        role_map.get(l.get('role', ''), l.get('role', '') or '—'),
+                        l.get('action', ''),
+                        l.get('description') or '',
+                        l.get('ip_address') or '—',
+                    ])
+            except Exception as e:
+                print(f'[ADM_AUDIT] DB loi: {e}')
+        if not data:
+            data = [
+                ['17/04/2026 08:12:34', 'admin', 'QTV', 'Đăng nhập', 'Đăng nhập thành công', '192.168.1.10'],
+                ['17/04/2026 08:15:02', 'admin', 'QTV', 'Mở đăng ký', 'Mở đăng ký HK2-2526', '192.168.1.10'],
+                ['17/04/2026 08:30:11', '2024001', 'SV', 'Đăng nhập', 'Đăng nhập thành công', '10.0.0.55'],
+                ['17/04/2026 08:31:45', '2024001', 'SV', 'Đăng ký', 'Đăng ký IT004 - Trí tuệ nhân tạo', '10.0.0.55'],
+                ['17/04/2026 08:32:10', '2024001', 'SV', 'Đăng ký', 'Đăng ký IT005 - Phát triển web', '10.0.0.55'],
+                ['17/04/2026 08:45:30', '2024002', 'SV', 'Đăng nhập', 'Đăng nhập thành công', '10.0.0.87'],
+                ['17/04/2026 08:46:12', '2024002', 'SV', 'Hủy ĐK', 'Hủy đăng ký MA002 - Xác suất TK', '10.0.0.87'],
+                ['17/04/2026 09:00:05', '2024003', 'SV', 'Đăng nhập', 'Đăng nhập thất bại (sai MK)', '10.0.0.42'],
+                ['17/04/2026 09:00:15', '2024003', 'SV', 'Đăng nhập', 'Đăng nhập thất bại (sai MK)', '10.0.0.42'],
+                ['17/04/2026 09:00:25', '2024003', 'SV', 'Cảnh báo', 'Khóa tài khoản 15 phút (3 lần sai)', '10.0.0.42'],
+                ['17/04/2026 09:15:30', 'admin', 'QTV', 'Cập nhật', 'Sửa sĩ số IT001 từ 35 → 40', '192.168.1.10'],
+                ['17/04/2026 09:30:00', '2024010', 'SV', 'Thanh toán', 'Thanh toán 9,000,000 đ - HK2', '10.0.0.91'],
+            ]
         action_colors = {
             'Đăng nhập': COLORS['green'], 'Đăng ký': COLORS['navy'],
             'Hủy ĐK': COLORS['orange'], 'Thanh toán': COLORS['gold'],
@@ -2269,8 +2509,26 @@ class AdminWindow(QtWidgets.QWidget):
         if not tbl:
             return
         type_colors = {'Còn chỗ': COLORS['green'], 'Đầy': COLORS['red']}
-        tbl.setRowCount(len(MOCK_CLASSES))
-        for r, cls in enumerate(MOCK_CLASSES):
+        # lay tu DB neu co
+        classes_src = []
+        if DB_AVAILABLE:
+            try:
+                rows = CourseService.get_all_classes()
+                for r_db in rows:
+                    classes_src.append((
+                        r_db['ma_lop'], r_db.get('ma_mon', ''),
+                        r_db.get('ten_mon', ''), r_db.get('ten_gv') or '—',
+                        r_db.get('lich') or '', r_db.get('phong') or '',
+                        int(r_db.get('siso_max') or 40),
+                        int(r_db.get('siso_hien_tai') or 0),
+                        int(r_db.get('gia') or 0),
+                    ))
+            except Exception as e:
+                print(f'[ADM_CLS] DB loi: {e}')
+        if not classes_src:
+            classes_src = MOCK_CLASSES
+        tbl.setRowCount(len(classes_src))
+        for r, cls in enumerate(classes_src):
             ma, mmon, tmon, gv, lich, phong, smax, siso, gia = cls
             for c, val in enumerate([ma, tmon, gv, lich, phong]):
                 item = QtWidgets.QTableWidgetItem(val)
@@ -2311,7 +2569,7 @@ class AdminWindow(QtWidgets.QWidget):
         for c, cw in enumerate([85, 155, 140, 150, 75, 75, 115, 130]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
-        for r in range(len(MOCK_CLASSES)):
+        for r in range(len(classes_src)):
             tbl.setRowHeight(r, 44)
 
         # noi rong o tim kiem (placeholder dai khong vua)
@@ -2432,6 +2690,14 @@ class AdminWindow(QtWidgets.QWidget):
             return
         MOCK_CLASSES[idx] = (ma_lop, mmon, txt_mon.text(), txt_gv.text(),
                              txt_lich.text(), txt_phong.text(), smax_n, siso_n, gia_n)
+        # ghi DB
+        if DB_AVAILABLE:
+            try:
+                CourseService.update_class(ma_lop,
+                    lich=txt_lich.text(), phong=txt_phong.text(),
+                    siso_max=smax_n, siso_hien_tai=siso_n, gia=gia_n)
+            except Exception as e:
+                print(f'[ADM_EDIT_CLS] DB loi: {e}')
         # re-fill bang admin_classes
         self.pages_filled[2] = False
         self._fill_admin_classes()
@@ -2496,14 +2762,35 @@ class AdminWindow(QtWidgets.QWidget):
 
         mon_code, mon_name = cbo_mon.currentData()
         gv_name = cbo_gv.currentText()
-        MOCK_CLASSES.append((ma.text().upper(), mon_code, mon_name, gv_name,
+        ma_lop = ma.text().upper()
+        MOCK_CLASSES.append((ma_lop, mon_code, mon_name, gv_name,
                              lich.text(), phong.text(),
                              smax.value(), siso_start.value(), gia.value()))
+        # ghi DB
+        if DB_AVAILABLE:
+            try:
+                # tim gv_id tu ten
+                gv_row = db.fetch_one(
+                    'SELECT user_id FROM teachers t JOIN users u ON u.id=t.user_id WHERE u.full_name = %s LIMIT 1',
+                    (gv_name,)
+                )
+                gv_id = gv_row['user_id'] if gv_row else None
+                # semester hien tai
+                sem = SemesterService.get_current() if SemesterService else None
+                sem_id = sem['id'] if sem else 'HK2-2526'
+                CourseService.create_class(
+                    ma_lop=ma_lop, ma_mon=mon_code, gv_id=gv_id,
+                    lich=lich.text(), phong=phong.text(),
+                    siso_max=smax.value(), gia=gia.value(),
+                    semester_id=sem_id, siso_hien_tai=siso_start.value()
+                )
+            except Exception as e:
+                print(f'[ADM_ADD_CLS] DB loi: {e}')
         # re-fill
         self.pages_filled[2] = False
         self._fill_admin_classes()
         self.pages_filled[2] = True
-        msg_info(self, 'Thành công', f'Đã thêm lớp {ma.text()}')
+        msg_info(self, 'Thành công', f'Đã thêm lớp {ma_lop}')
 
     def _fill_admin_teachers(self):
         page = self.page_widgets[4]
@@ -2668,6 +2955,27 @@ class AdminWindow(QtWidgets.QWidget):
             for c, w in enumerate(widgets):
                 tbl.setItem(r, c, QtWidgets.QTableWidgetItem(w.text()))
             tbl.setRowHeight(r, 44)
+        # ghi DB - tao user + teacher/employee
+        if DB_AVAILABLE:
+            try:
+                vals = [w.text() for w in widgets]
+                if role_name == 'giảng viên':
+                    # fields = ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']
+                    TeacherService.create(
+                        username=vals[0].lower(), password='passtea',
+                        full_name=vals[1], ma_gv=vals[0],
+                        khoa=vals[2], hoc_vi=vals[3], sdt=vals[4] or None,
+                    )
+                elif role_name == 'nhân viên':
+                    # fields = ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']
+                    EmployeeService.create(
+                        username=vals[0].lower(), password='passemp',
+                        full_name=vals[1], ma_nv=vals[0],
+                        chuc_vu=vals[2], sdt=vals[3] or None, email=vals[4] or None,
+                    )
+            except Exception as e:
+                print(f'[ADM_ADD_USER] DB loi: {e}')
+                msg_warn(self, 'Loi DB', f'UI da them nhung DB loi: {e}')
         msg_info(self, 'Thành công', f'Đã thêm {role_name}: {widgets[1].text()}')
 
     def _fill_admin_employees(self):
@@ -3042,8 +3350,27 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherClasses')
         if not tbl:
             return
-        # lớp của GV Nguyễn Đức Thiện (GV001)
-        my_classes = [c for c in MOCK_CLASSES if c[3] == 'Nguyễn Đức Thiện']
+        # lay tu DB neu co
+        my_classes = []
+        if DB_AVAILABLE:
+            try:
+                gv_id = MOCK_TEACHER.get('user_id')
+                if gv_id:
+                    rows = CourseService.get_classes_by_teacher(gv_id)
+                    for r_db in rows:
+                        my_classes.append((
+                            r_db['ma_lop'], r_db['ma_mon'], r_db['ten_mon'],
+                            r_db.get('ten_gv') or MOCK_TEACHER['name'],
+                            r_db.get('lich') or '', r_db.get('phong') or '',
+                            int(r_db.get('siso_max') or 40),
+                            int(r_db.get('siso_hien_tai') or 0),
+                            int(r_db.get('gia') or 0),
+                        ))
+            except Exception as e:
+                print(f'[TEA_CLS] DB loi: {e}')
+        if not my_classes:
+            # fallback MOCK: lop cua GV Thien
+            my_classes = [c for c in MOCK_CLASSES if c[3] == 'Nguyễn Đức Thiện']
         tbl.setRowCount(len(my_classes))
         for r, cls in enumerate(my_classes):
             ma, mmon, tmon, gv, lich, phong, smax, siso, gia = cls
@@ -3096,26 +3423,51 @@ class TeacherWindow(QtWidgets.QWidget):
         page = self.page_widgets[3]
         # populate class filter
         cbo = page.findChild(QtWidgets.QComboBox, 'cboClass')
+        # lay lop cua GV tu DB
+        gv_classes_codes = []
+        if DB_AVAILABLE:
+            try:
+                gv_id = MOCK_TEACHER.get('user_id')
+                if gv_id:
+                    rows = CourseService.get_classes_by_teacher(gv_id)
+                    gv_classes_codes = [r['ma_lop'] for r in rows]
+            except Exception: pass
+        if not gv_classes_codes:
+            gv_classes_codes = [c[0] for c in MOCK_CLASSES if c[3] == 'Nguyễn Đức Thiện']
         if cbo:
             cbo.clear()
             cbo.addItem('Tất cả lớp')
-            for cls in MOCK_CLASSES:
-                if cls[3] == 'Nguyễn Đức Thiện':
-                    cbo.addItem(cls[0])
+            for lop in gv_classes_codes:
+                cbo.addItem(lop)
 
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblStudents')
         if not tbl:
             return
-        data = [
-            ['1', 'HV2024001', 'Đào Viết Quang Huy', 'IT001-A', '0912345678', 'Đang học'],
-            ['2', 'HV2024002', 'Trần Thị Bích', 'IT001-A', '0923456789', 'Đang học'],
-            ['3', 'HV2024003', 'Lê Văn Cường', 'IT001-A', '0934567890', 'Đang học'],
-            ['4', 'HV2024010', 'Phạm Thị Dung', 'IT001-A', '0945678901', 'Tạm nghỉ'],
-            ['5', 'HV2024015', 'Hoàng Văn Em', 'IT001-A', '0956789012', 'Đang học'],
-            ['6', 'HV2024020', 'Vũ Thị Phương', 'IT004-A', '0967890123', 'Đang học'],
-            ['7', 'HV2024025', 'Nguyễn Thanh Giang', 'IT004-A', '0978901234', 'Đang học'],
-            ['8', 'HV2024030', 'Bùi Thị Hồng', 'IT001-C', '0989012345', 'Đang học'],
-        ]
+        # lay HV tu DB
+        data = None
+        if DB_AVAILABLE:
+            try:
+                gv_id = MOCK_TEACHER.get('user_id')
+                if gv_id:
+                    rows = CourseService.get_students_by_teacher(gv_id)
+                    data = []
+                    for i, s in enumerate(rows, start=1):
+                        status = 'Đang học' if s.get('trang_thai') == 'paid' else 'Chờ TT'
+                        data.append([str(i), s['msv'], s['full_name'],
+                                     s.get('lop_id', ''), s.get('sdt') or '—', status])
+            except Exception as e:
+                print(f'[TEA_STU] DB loi: {e}')
+        if not data:
+            data = [
+                ['1', 'HV2024001', 'Đào Viết Quang Huy', 'IT001-A', '0912345678', 'Đang học'],
+                ['2', 'HV2024002', 'Trần Thị Bích', 'IT001-A', '0923456789', 'Đang học'],
+                ['3', 'HV2024003', 'Lê Văn Cường', 'IT001-A', '0934567890', 'Đang học'],
+                ['4', 'HV2024010', 'Phạm Thị Dung', 'IT001-A', '0945678901', 'Tạm nghỉ'],
+                ['5', 'HV2024015', 'Hoàng Văn Em', 'IT001-A', '0956789012', 'Đang học'],
+                ['6', 'HV2024020', 'Vũ Thị Phương', 'IT004-A', '0967890123', 'Đang học'],
+                ['7', 'HV2024025', 'Nguyễn Thanh Giang', 'IT004-A', '0978901234', 'Đang học'],
+                ['8', 'HV2024030', 'Bùi Thị Hồng', 'IT001-C', '0989012345', 'Đang học'],
+            ]
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             for c, val in enumerate(row[:5]):
@@ -3257,34 +3609,64 @@ class TeacherWindow(QtWidgets.QWidget):
     def _fill_tea_grades(self):
         page = self.page_widgets[5]
         cbo = page.findChild(QtWidgets.QComboBox, 'cboGradeClass')
+
+        # lay danh sach lop cua GV tu DB
+        gv_classes_codes = []
+        if DB_AVAILABLE:
+            try:
+                gv_id = MOCK_TEACHER.get('user_id')
+                if gv_id:
+                    rows = CourseService.get_classes_by_teacher(gv_id)
+                    gv_classes_codes = [r['ma_lop'] for r in rows]
+            except Exception: pass
+        if not gv_classes_codes:
+            gv_classes_codes = [c[0] for c in MOCK_CLASSES if c[3] == 'Nguyễn Đức Thiện']
+
         if cbo:
             cbo.clear()
             cbo.addItem('-- Chọn lớp để nhập điểm --')
-            for cls in MOCK_CLASSES:
-                if cls[3] == 'Nguyễn Đức Thiện':
-                    cbo.addItem(cls[0])
+            for lop in gv_classes_codes:
+                cbo.addItem(lop)
 
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherGrades')
         if not tbl:
             return
-        # du lieu mau theo lop (key = ma_lop)
-        self._tea_grades_by_class = {
-            'IT001-A': [
-                ['1', 'HV2024001', 'Đào Viết Quang Huy', '8.5', '7.5', '7.8', 'B+'],
-                ['2', 'HV2024002', 'Trần Thị Bích',       '9.0', '8.5', '8.7', 'A'],
-                ['3', 'HV2024015', 'Hoàng Văn Em',         '9.5', '9.0', '9.2', 'A+'],
-                ['4', 'HV2024020', 'Vũ Thị Phương',        '8.0', '7.0', '7.3', 'B'],
-            ],
-            'IT004-A': [
-                ['1', 'HV2024025', 'Nguyễn Thanh Giang', '7.5', '7.0', '7.2', 'B'],
-                ['2', 'HV2024030', 'Bùi Thị Hồng',        '8.5', '8.0', '8.2', 'B+'],
-                ['3', 'HV2024001', 'Đào Viết Quang Huy', '',    '',    '',    ''],
-            ],
-            'IT001-C': [
-                ['1', 'HV2024003', 'Lê Văn Cường', '7.0', '6.5', '6.7', 'C+'],
-                ['2', 'HV2024010', 'Phạm Thị Dung', '8.0', '7.5', '7.7', 'B'],
-            ],
-        }
+        # lay grades tu DB theo lop
+        self._tea_grades_by_class = {}
+        if DB_AVAILABLE:
+            try:
+                for lop in gv_classes_codes:
+                    rows = GradeService.get_grades_by_class(lop)
+                    self._tea_grades_by_class[lop] = [
+                        [str(i+1), r['msv'], r['full_name'],
+                         f"{float(r['diem_qt']):.1f}" if r.get('diem_qt') is not None else '',
+                         f"{float(r['diem_thi']):.1f}" if r.get('diem_thi') is not None else '',
+                         f"{float(r['tong_ket']):.1f}" if r.get('tong_ket') is not None else '',
+                         r.get('xep_loai') or '']
+                        for i, r in enumerate(rows)
+                    ]
+            except Exception as e:
+                print(f'[TEA_GRADES] DB loi: {e}')
+
+        # fallback MOCK
+        if not self._tea_grades_by_class:
+            self._tea_grades_by_class = {
+                'IT001-A': [
+                    ['1', 'HV2024001', 'Đào Viết Quang Huy', '8.5', '7.5', '7.8', 'B+'],
+                    ['2', 'HV2024002', 'Trần Thị Bích',       '9.0', '8.5', '8.7', 'A'],
+                    ['3', 'HV2024015', 'Hoàng Văn Em',         '9.5', '9.0', '9.2', 'A+'],
+                    ['4', 'HV2024020', 'Vũ Thị Phương',        '8.0', '7.0', '7.3', 'B'],
+                ],
+                'IT004-A': [
+                    ['1', 'HV2024025', 'Nguyễn Thanh Giang', '7.5', '7.0', '7.2', 'B'],
+                    ['2', 'HV2024030', 'Bùi Thị Hồng',        '8.5', '8.0', '8.2', 'B+'],
+                    ['3', 'HV2024001', 'Đào Viết Quang Huy', '',    '',    '',    ''],
+                ],
+                'IT001-C': [
+                    ['1', 'HV2024003', 'Lê Văn Cường', '7.0', '6.5', '6.7', 'C+'],
+                    ['2', 'HV2024010', 'Phạm Thị Dung', '8.0', '7.5', '7.7', 'B'],
+                ],
+            }
         # defaut show tat ca
         self._tea_grades_render(tbl, None)
 
@@ -3883,18 +4265,39 @@ class EmployeeWindow(QtWidgets.QWidget):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblRegistrations')
         if not tbl:
             return
-        data = [
-            ['DK001', '18/04/2026', 'Đào Viết Quang Huy', 'IT001-A', '2.500.000', 'Chờ thanh toán'],
-            ['DK002', '18/04/2026', 'Trần Thị Bích', 'IT002-A', '2.200.000', 'Chờ thanh toán'],
-            ['DK003', '18/04/2026', 'Hoàng Văn Em', 'IT001-B', '1.800.000', 'Đã thanh toán'],
-            ['DK004', '17/04/2026', 'Nguyễn Thanh Giang', 'IT001-B', '1.800.000', 'Đã thanh toán'],
-            ['DK005', '17/04/2026', 'Vũ Thị Phương', 'IT004-A', '2.800.000', 'Đã thanh toán'],
-            ['DK006', '17/04/2026', 'Phạm Thị Dung', 'MA001-A', '1.500.000', 'Đã thanh toán'],
-            ['DK007', '16/04/2026', 'Lê Văn Cường', 'IT004-B', '2.200.000', 'Chờ thanh toán'],
-            ['DK008', '16/04/2026', 'Bùi Thị Hồng', 'IT001-C', '2.000.000', 'Đã thanh toán'],
-            ['DK009', '15/04/2026', 'Đinh Văn Khánh', 'IT001-A', '2.500.000', 'Đã thanh toán'],
-            ['DK010', '15/04/2026', 'Lâm Thị Nga', 'IT002-B', '1.800.000', 'Đã hủy'],
-        ]
+        # tu DB neu co
+        data = None
+        if DB_AVAILABLE:
+            try:
+                rows = RegistrationService.get_all_registrations(limit=50)
+                status_map = {
+                    'pending_payment': 'Chờ thanh toán',
+                    'paid': 'Đã thanh toán',
+                    'cancelled': 'Đã hủy',
+                    'completed': 'Hoàn thành',
+                }
+                data = []
+                for r in rows:
+                    st_vn = status_map.get(r['trang_thai'], r['trang_thai'])
+                    ngay = r['ngay_dk'].strftime('%d/%m/%Y') if r.get('ngay_dk') else '—'
+                    gia = f'{int(r.get("gia", 0)):,}'.replace(',', '.')
+                    data.append([f'DK{r["id"]:03d}', ngay, r['ten_hv'],
+                                 r['lop_id'], gia, st_vn])
+            except Exception as e:
+                print(f'[EMP_REG] DB loi: {e}')
+        if not data:
+            data = [
+                ['DK001', '18/04/2026', 'Đào Viết Quang Huy', 'IT001-A', '2.500.000', 'Chờ thanh toán'],
+                ['DK002', '18/04/2026', 'Trần Thị Bích', 'IT002-A', '2.200.000', 'Chờ thanh toán'],
+                ['DK003', '18/04/2026', 'Hoàng Văn Em', 'IT001-B', '1.800.000', 'Đã thanh toán'],
+                ['DK004', '17/04/2026', 'Nguyễn Thanh Giang', 'IT001-B', '1.800.000', 'Đã thanh toán'],
+                ['DK005', '17/04/2026', 'Vũ Thị Phương', 'IT004-A', '2.800.000', 'Đã thanh toán'],
+                ['DK006', '17/04/2026', 'Phạm Thị Dung', 'MA001-A', '1.500.000', 'Đã thanh toán'],
+                ['DK007', '16/04/2026', 'Lê Văn Cường', 'IT004-B', '2.200.000', 'Chờ thanh toán'],
+                ['DK008', '16/04/2026', 'Bùi Thị Hồng', 'IT001-C', '2.000.000', 'Đã thanh toán'],
+                ['DK009', '15/04/2026', 'Đinh Văn Khánh', 'IT001-A', '2.500.000', 'Đã thanh toán'],
+                ['DK010', '15/04/2026', 'Lâm Thị Nga', 'IT002-B', '1.800.000', 'Đã hủy'],
+            ]
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             for c, val in enumerate(row[:5]):
@@ -3974,13 +4377,24 @@ class EmployeeWindow(QtWidgets.QWidget):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblPayPending')
         if not tbl:
             return
-        data = [
-            ['DK001', 'Đào Viết Quang Huy', 'IT001-A', '2.500.000'],
-            ['DK002', 'Trần Thị Bích', 'IT002-A', '2.200.000'],
-            ['DK007', 'Lê Văn Cường', 'IT004-B', '2.200.000'],
-            ['DK011', 'Phạm Minh Hòa', 'IT003-A', '2.000.000'],
-            ['DK012', 'Ngô Thị Kim', 'MA001-B', '1.200.000'],
-        ]
+        # lay tu DB
+        data = None
+        if DB_AVAILABLE:
+            try:
+                rows = RegistrationService.get_pending_payments()
+                # dung format DK### giong reg list - de match khi sync
+                data = [[f'DK{r["id"]:03d}', r['ten_hv'], r['lop_id'],
+                         f'{int(r["gia"]):,}'.replace(',', '.')] for r in rows]
+            except Exception as e:
+                print(f'[EMP_PAY] DB loi: {e}')
+        if not data:
+            data = [
+                ['DK001', 'Đào Viết Quang Huy', 'IT001-A', '2.500.000'],
+                ['DK002', 'Trần Thị Bích', 'IT002-A', '2.200.000'],
+                ['DK007', 'Lê Văn Cường', 'IT004-B', '2.200.000'],
+                ['DK011', 'Phạm Minh Hòa', 'IT003-A', '2.000.000'],
+                ['DK012', 'Ngô Thị Kim', 'MA001-B', '1.200.000'],
+            ]
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             for c, val in enumerate(row):
@@ -4027,13 +4441,15 @@ class EmployeeWindow(QtWidgets.QWidget):
         if not msg_confirm(self, 'Xác nhận thu tiền', f'Thu {gia} đ từ {ten} ({ma}) - {method}?'):
             return
         ghi_chu = note.text().strip() if note else ''
+        # parse ma_dk: "DK001" → 1, "1" → 1
+        ma_digits = ''.join(ch for ch in ma if ch.isdigit())
         # ghi DB truoc
-        if DB_AVAILABLE and ma.isdigit():
+        if DB_AVAILABLE and ma_digits:
             try:
                 nv_id = MOCK_EMPLOYEE.get('user_id')
                 so_tien = int(gia.replace('.', '').replace(',', '').replace('đ', '').strip())
-                RegistrationService.confirm_payment(int(ma), so_tien, method, nv_id, ghi_chu)
-                print(f'[PAY] da ghi DB: DK #{ma}, {so_tien}đ')
+                RegistrationService.confirm_payment(int(ma_digits), so_tien, method, nv_id, ghi_chu)
+                print(f'[PAY] da ghi DB: {ma}, {so_tien}đ')
             except Exception as e:
                 print(f'[PAY] loi: {e}')
         tbl.removeRow(r)
