@@ -1,9 +1,32 @@
 import sys, os
+# them root vao path de import backend
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtGui import QPixmap, QIcon, QColor, QFont
 from PyQt5.QtCore import Qt, QDate
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
+
+# thu ket noi DB - fallback MOCK neu khong co docker
+DB_AVAILABLE = False
+try:
+    from backend.database.db import db
+    from backend.services.auth_service import AuthService
+    from backend.services.course_service import CourseService
+    from backend.services.registration_service import RegistrationService
+    from backend.services.grade_service import GradeService
+    from backend.services.notification_service import NotificationService
+    from backend.services.user_service import (StudentService, TeacherService,
+                                                EmployeeService, ReviewService)
+    from backend.services.stats_service import StatsService
+    DB_AVAILABLE = db.is_connected()
+    if DB_AVAILABLE:
+        print('[DB] Ket noi PostgreSQL OK - dung du lieu that')
+    else:
+        print('[DB] Khong ket noi duoc - fallback MOCK data')
+except Exception as _e:
+    print(f'[DB] Khong load duoc backend ({_e}) - fallback MOCK data')
 
 
 # ===== helpers popup =====
@@ -900,8 +923,31 @@ class MainWindow(QtWidgets.QWidget):
         btns.accepted.connect(dlg.accept)
         btns.rejected.connect(dlg.reject)
         lay.addWidget(btns)
-        if dlg.exec_() == QtWidgets.QDialog.Accepted:
-            msg_info(self, 'Đánh giá', f'Đã gửi đánh giá {sp.value()}/5 cho {gv_name}')
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        # ghi DB
+        if DB_AVAILABLE:
+            try:
+                hv_id = MOCK_USER.get('id')
+                gv_row = db.fetch_one(
+                    "SELECT id FROM users WHERE full_name = %s AND role = 'teacher'",
+                    (gv_name,)
+                )
+                if hv_id and gv_row:
+                    # lay 1 lop bat ky ma HV + GV cung co
+                    lop = db.fetch_one(
+                        """SELECT r.lop_id FROM registrations r
+                             JOIN classes c ON c.ma_lop = r.lop_id
+                            WHERE r.hv_id = %s AND c.gv_id = %s LIMIT 1""",
+                        (hv_id, gv_row['id'])
+                    )
+                    lop_id = lop['lop_id'] if lop else 'NA'
+                    ReviewService.submit_review(hv_id, gv_row['id'], lop_id,
+                                                sp.value(), ta.toPlainText().strip())
+                    print(f'[REVIEW] da ghi DB: {sp.value()}/5 cho {gv_name}')
+            except Exception as e:
+                print(f'[REVIEW] loi: {e}')
+        msg_info(self, 'Đánh giá', f'Đã gửi đánh giá {sp.value()}/5 cho {gv_name}')
 
     def _fill_notifications(self):
         page = self.page_widgets[5]
@@ -964,6 +1010,12 @@ class MainWindow(QtWidgets.QWidget):
             msg_warn(self, 'Lỗi', 'Mật khẩu mới không khớp')
             return
         MOCK_USER['password'] = new1.text()
+        if DB_AVAILABLE and MOCK_USER.get('id'):
+            try:
+                AuthService.change_password(MOCK_USER['id'], new1.text())
+                print('[AUTH] da doi mk trong DB')
+            except Exception as e:
+                print(f'[AUTH] loi doi mk: {e}')
         msg_info(self, 'Thành công', 'Đổi mật khẩu thành công')
 
 
@@ -1147,10 +1199,31 @@ class AdminWindow(QtWidgets.QWidget):
 
     def _fill_admin_dashboard(self):
         page = self.page_widgets[0]
+        # lay du lieu that neu co DB, khong thi dung mock
+        top_data = None
+        recent_data = None
+        if DB_AVAILABLE:
+            try:
+                rows = StatsService.top_classes(limit=5)
+                top_data = [(r.get('ten_mon', r.get('ma_lop', '?')),
+                             int(r.get('siso_hien_tai') or 0),
+                             int(r.get('siso_max') or 40)) for r in rows]
+            except Exception as e:
+                print(f'[STATS] top_classes loi: {e}')
+            try:
+                acts = StatsService.recent_activity(limit=5)
+                recent_data = []
+                for a in acts:
+                    t_str = 'Vừa xong' if not a.get('thoi_gian') else str(a['thoi_gian'])[:16]
+                    color = COLORS['green'] if a.get('loai') == 'reg' else COLORS['gold']
+                    recent_data.append((t_str, a.get('noi_dung', ''), color))
+            except Exception as e:
+                print(f'[STATS] recent loi: {e}')
+
         # top courses voi progress bar
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblTopCourses')
         if tbl:
-            data = [('Lập trình Python', 40, 40), ('Cơ sở dữ liệu', 35, 40),
+            data = top_data or [('Lập trình Python', 40, 40), ('Cơ sở dữ liệu', 35, 40),
                     ('Trí tuệ nhân tạo', 28, 40), ('Phát triển web', 22, 35),
                     ('Mạng máy tính', 18, 30)]
             tbl.setRowCount(len(data))
@@ -1176,7 +1249,7 @@ class AdminWindow(QtWidgets.QWidget):
         # recent voi badge loai
         tbl2 = page.findChild(QtWidgets.QTableWidget, 'tblRecent')
         if tbl2:
-            data = [('2 phút trước', 'Trần Văn B đăng ký IT003', COLORS['green']),
+            data = recent_data or [('2 phút trước', 'Trần Văn B đăng ký IT003', COLORS['green']),
                     ('15 phút trước', 'Lê Thị C hủy MA002', COLORS['red']),
                     ('1 giờ trước', 'Phạm Văn D đăng ký IT005', COLORS['green']),
                     ('3 giờ trước', 'Nguyễn Thị E đăng ký EN001', COLORS['green']),
@@ -1397,14 +1470,25 @@ class AdminWindow(QtWidgets.QWidget):
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
-        data = [
-            ['2024001', 'Đào Viết Quang Huy', 'CNTT-K20A', 'CNTT', '0912345678', '5'],
-            ['2024002', 'Trần Thị B', 'CNTT-K20A', 'CNTT', '0923456789', '4'],
-            ['2024003', 'Lê Văn C', 'CNTT-K20B', 'CNTT', '0934567890', '6'],
-            ['2024010', 'Phạm Thị D', 'TOAN-K20', 'Toán', '0945678901', '5'],
-            ['2024015', 'Hoàng Văn E', 'NN-K20', 'Ngoại ngữ', '0956789012', '3'],
-            ['2024020', 'Vũ Thị F', 'CNTT-K20B', 'CNTT', '0967890123', '5'],
-        ]
+        # lay tu DB neu co, khong thi mock
+        data = None
+        if DB_AVAILABLE:
+            try:
+                rows = StudentService.get_all()
+                data = [[r['msv'], r['full_name'], r['cac_lop'] or '—',
+                         '—', r.get('sdt') or '—', str(r.get('so_lop') or 0)]
+                        for r in rows]
+            except Exception as e:
+                print(f'[STUDENT] loi: {e}')
+        if not data:
+            data = [
+                ['2024001', 'Đào Viết Quang Huy', 'CNTT-K20A', 'CNTT', '0912345678', '5'],
+                ['2024002', 'Trần Thị B', 'CNTT-K20A', 'CNTT', '0923456789', '4'],
+                ['2024003', 'Lê Văn C', 'CNTT-K20B', 'CNTT', '0934567890', '6'],
+                ['2024010', 'Phạm Thị D', 'TOAN-K20', 'Toán', '0945678901', '5'],
+                ['2024015', 'Hoàng Văn E', 'NN-K20', 'Ngoại ngữ', '0956789012', '3'],
+                ['2024020', 'Vũ Thị F', 'CNTT-K20B', 'CNTT', '0967890123', '5'],
+            ]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdminStudents')
         if tbl:
             tbl.setRowCount(len(data))
@@ -2271,16 +2355,27 @@ class AdminWindow(QtWidgets.QWidget):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmTeachers')
         if not tbl:
             return
-        data = [
-            ['GV001', 'Nguyễn Đức Thiện', 'CNTT', 'Tiến sĩ', '0901234567', 3, 4.6],
-            ['GV002', 'Lê Thị C', 'CNTT', 'Thạc sĩ', '0901234568', 2, 4.3],
-            ['GV003', 'Phạm Văn D', 'CNTT', 'Thạc sĩ', '0901234569', 2, 4.1],
-            ['GV004', 'Ngô Thảo Anh', 'CNTT', 'Tiến sĩ', '0901234570', 1, 4.5],
-            ['GV005', 'Lê Trung Thực', 'CNTT', 'Thạc sĩ', '0901234571', 1, 4.2],
-            ['GV006', 'Hoàng Minh Tuấn', 'CNTT', 'Tiến sĩ', '0901234572', 1, 4.7],
-            ['GV007', 'Nguyễn Thị E', 'Toán', 'Phó giáo sư', '0901234573', 1, 4.8],
-            ['GV008', 'Lê Văn M', 'Toán', 'Tiến sĩ', '0901234574', 1, 4.0],
-        ]
+        data = None
+        if DB_AVAILABLE:
+            try:
+                rows = TeacherService.get_all()
+                data = [[r['ma_gv'], r['full_name'], r.get('khoa') or '—',
+                         r.get('hoc_vi') or '—', r.get('sdt') or '—',
+                         int(r.get('so_lop') or 0),
+                         float(r.get('diem_tb') or 0.0)] for r in rows]
+            except Exception as e:
+                print(f'[TEACHER] loi: {e}')
+        if not data:
+            data = [
+                ['GV001', 'Nguyễn Đức Thiện', 'CNTT', 'Tiến sĩ', '0901234567', 3, 4.6],
+                ['GV002', 'Lê Thị C', 'CNTT', 'Thạc sĩ', '0901234568', 2, 4.3],
+                ['GV003', 'Phạm Văn D', 'CNTT', 'Thạc sĩ', '0901234569', 2, 4.1],
+                ['GV004', 'Ngô Thảo Anh', 'CNTT', 'Tiến sĩ', '0901234570', 1, 4.5],
+                ['GV005', 'Lê Trung Thực', 'CNTT', 'Thạc sĩ', '0901234571', 1, 4.2],
+                ['GV006', 'Hoàng Minh Tuấn', 'CNTT', 'Tiến sĩ', '0901234572', 1, 4.7],
+                ['GV007', 'Nguyễn Thị E', 'Toán', 'Phó giáo sư', '0901234573', 1, 4.8],
+                ['GV008', 'Lê Văn M', 'Toán', 'Tiến sĩ', '0901234574', 1, 4.0],
+            ]
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             for c, val in enumerate(row[:5]):
@@ -2424,13 +2519,23 @@ class AdminWindow(QtWidgets.QWidget):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmEmployees')
         if not tbl:
             return
-        data = [
-            ['NV001', 'Trần Thu Hương', 'Nhân viên đăng ký', '0987654321', 'huongtt@eaut.edu.vn', 'Đang làm'],
-            ['NV002', 'Lê Minh Đức', 'Nhân viên thu ngân', '0987654322', 'ducm@eaut.edu.vn', 'Đang làm'],
-            ['NV003', 'Phạm Quỳnh Anh', 'Nhân viên đăng ký', '0987654323', 'anhpq@eaut.edu.vn', 'Đang làm'],
-            ['NV004', 'Nguyễn Hoài Linh', 'Quản lý', '0987654324', 'linh@eaut.edu.vn', 'Đang làm'],
-            ['NV005', 'Vũ Thanh Tùng', 'Nhân viên thu ngân', '0987654325', 'tungvt@eaut.edu.vn', 'Nghỉ phép'],
-        ]
+        data = None
+        if DB_AVAILABLE:
+            try:
+                rows = EmployeeService.get_all()
+                data = [[r['ma_nv'], r['full_name'], r.get('chuc_vu') or '—',
+                         r.get('sdt') or '—', r.get('email') or '—',
+                         'Đang làm' if r.get('is_active') else 'Đã nghỉ'] for r in rows]
+            except Exception as e:
+                print(f'[EMP] loi: {e}')
+        if not data:
+            data = [
+                ['NV001', 'Trần Thu Hương', 'Nhân viên đăng ký', '0987654321', 'huongtt@eaut.edu.vn', 'Đang làm'],
+                ['NV002', 'Lê Minh Đức', 'Nhân viên thu ngân', '0987654322', 'ducm@eaut.edu.vn', 'Đang làm'],
+                ['NV003', 'Phạm Quỳnh Anh', 'Nhân viên đăng ký', '0987654323', 'anhpq@eaut.edu.vn', 'Đang làm'],
+                ['NV004', 'Nguyễn Hoài Linh', 'Quản lý', '0987654324', 'linh@eaut.edu.vn', 'Đang làm'],
+                ['NV005', 'Vũ Thanh Tùng', 'Nhân viên thu ngân', '0987654325', 'tungvt@eaut.edu.vn', 'Nghỉ phép'],
+            ]
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             for c, val in enumerate(row[:5]):
@@ -2954,6 +3059,16 @@ class TeacherWindow(QtWidgets.QWidget):
             return
         target = cbo.currentText()
         title = subj.text().strip()
+        body = content.toPlainText().strip()
+        # ghi DB neu co
+        if DB_AVAILABLE:
+            gv_user_id = MOCK_TEACHER.get('user_id')
+            if gv_user_id:
+                try:
+                    den_lop = target if cbo.currentIndex() > 0 else None
+                    NotificationService.send(gv_user_id, title, body, den_lop=den_lop, loai='info')
+                except Exception as e:
+                    print(f'[NOTICE] loi: {e}')
         # them card vao dau danh sach
         if hasattr(self, '_tea_notice_layout') and self._tea_notice_layout:
             card = self._make_notice_card(target, title, 'Vừa xong')
@@ -3079,8 +3194,32 @@ class TeacherWindow(QtWidgets.QWidget):
         self._grades_recalc_lock = False
 
     def _save_tea_grades(self):
-        if msg_confirm(self, 'Lưu điểm', 'Xác nhận lưu điểm cho tất cả học viên trong bảng?'):
-            msg_info(self, 'Thành công', 'Đã lưu điểm thành công!')
+        if not msg_confirm(self, 'Lưu điểm', 'Xác nhận lưu điểm cho tất cả học viên trong bảng?'):
+            return
+        # Neu co DB va biet lop, ghi that
+        saved = 0
+        if DB_AVAILABLE:
+            page = self.page_widgets[5]
+            tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherGrades')
+            cbo = page.findChild(QtWidgets.QComboBox, 'cboGradeClass')
+            gv_user_id = MOCK_TEACHER.get('user_id')
+            lop_id = cbo.currentText() if cbo and cbo.currentIndex() > 0 else None
+            if tbl and lop_id and gv_user_id:
+                for r in range(tbl.rowCount()):
+                    try:
+                        msv = tbl.item(r, 1).text()
+                        qt = float(tbl.item(r, 3).text().replace(',', '.'))
+                        thi = float(tbl.item(r, 4).text().replace(',', '.'))
+                        hv = db.fetch_one("SELECT user_id FROM students WHERE msv = %s", (msv,))
+                        if hv:
+                            GradeService.save_grade(hv['user_id'], lop_id, qt, thi, gv_user_id)
+                            saved += 1
+                    except Exception as e:
+                        print(f'[GRADE] loi dong {r}: {e}')
+        if saved:
+            msg_info(self, 'Thành công', f'Đã lưu {saved} điểm vào database.')
+        else:
+            msg_info(self, 'Thành công', 'Đã lưu điểm (chế độ MOCK).')
 
     def _fill_tea_profile(self):
         page = self.page_widgets[6]
@@ -3397,7 +3536,25 @@ class EmployeeWindow(QtWidgets.QWidget):
             return
         if not msg_confirm(self, 'Xác nhận', f'Đăng ký {hoten.text()} vào lớp {cbo_cls.currentText()}?'):
             return
-        msg_info(self, 'Thành công', f'Đã đăng ký thành công cho {hoten.text()}')
+        # ghi DB
+        saved_id = None
+        if DB_AVAILABLE:
+            try:
+                hv_row = db.fetch_one(
+                    "SELECT user_id FROM students WHERE msv = %s", (msv.text().strip(),)
+                )
+                nv_id = MOCK_EMPLOYEE.get('user_id')
+                if hv_row and nv_id:
+                    lop_code = cbo_cls.currentText().split()[0]  # "IT001-A — ..." -> "IT001-A"
+                    saved_id = RegistrationService.register_student(
+                        hv_row['user_id'], lop_code, nv_id
+                    )
+            except Exception as e:
+                print(f'[REG] loi: {e}')
+        if saved_id:
+            msg_info(self, 'Thành công', f'Đã đăng ký vào DB (mã DK #{saved_id}) cho {hoten.text()}')
+        else:
+            msg_info(self, 'Thành công', f'Đã đăng ký thành công cho {hoten.text()}')
         self._emp_reset_form()
 
     def _emp_reset_form(self):
@@ -3557,8 +3714,17 @@ class EmployeeWindow(QtWidgets.QWidget):
         gia = tbl.item(r, 3).text() if tbl.item(r, 3) else '?'
         if not msg_confirm(self, 'Xác nhận thu tiền', f'Thu {gia} đ từ {ten} ({ma}) - {method}?'):
             return
-        tbl.removeRow(r)
         ghi_chu = note.text().strip() if note else ''
+        # ghi DB truoc
+        if DB_AVAILABLE and ma.isdigit():
+            try:
+                nv_id = MOCK_EMPLOYEE.get('user_id')
+                so_tien = int(gia.replace('.', '').replace(',', '').replace('đ', '').strip())
+                RegistrationService.confirm_payment(int(ma), so_tien, method, nv_id, ghi_chu)
+                print(f'[PAY] da ghi DB: DK #{ma}, {so_tien}đ')
+            except Exception as e:
+                print(f'[PAY] loi: {e}')
+        tbl.removeRow(r)
         if note: note.clear()
         # cap nhat trang thai ben bang ds dang ky
         self._emp_sync_reg_paid(ma)
@@ -3811,6 +3977,41 @@ class App:
         self.main_win = None
         self.login_win = None
 
+    def _sync_mock_from_user(self, user_obj):
+        """dong bo MOCK dict tu User object tra ve DB (sidebar/profile dung MOCK)"""
+        common = {
+            'username': user_obj.username,
+            'name': user_obj.full_name,
+            'initials': user_obj.initials,
+            'email': user_obj.email or '',
+            'sdt': user_obj.sdt or '',
+            'id': user_obj.id,
+        }
+        if user_obj.role == 'student':
+            MOCK_USER.update(common)
+            MOCK_USER['msv'] = user_obj.msv
+            MOCK_USER['gioitinh'] = user_obj.gioitinh or ''
+            MOCK_USER['diachi'] = user_obj.diachi or ''
+            if user_obj.ngaysinh:
+                MOCK_USER['ngaysinh'] = str(user_obj.ngaysinh)
+            MOCK_USER['role'] = 'Học viên'
+        elif user_obj.role == 'teacher':
+            MOCK_TEACHER.update(common)
+            MOCK_TEACHER['id'] = user_obj.ma_gv
+            MOCK_TEACHER['hocvi'] = user_obj.hoc_vi or ''
+            MOCK_TEACHER['khoa'] = user_obj.khoa or ''
+            MOCK_TEACHER['role'] = 'Giảng viên'
+            MOCK_TEACHER['user_id'] = user_obj.id  # luu id thuc de goi service
+        elif user_obj.role == 'employee':
+            MOCK_EMPLOYEE.update(common)
+            MOCK_EMPLOYEE['id'] = user_obj.ma_nv
+            MOCK_EMPLOYEE['chucvu'] = user_obj.chuc_vu or ''
+            MOCK_EMPLOYEE['role'] = 'Nhân viên'
+            MOCK_EMPLOYEE['user_id'] = user_obj.id
+        elif user_obj.role == 'admin':
+            MOCK_ADMIN.update(common)
+            MOCK_ADMIN['role'] = 'Quản trị viên'
+
     def show_login(self):
         if self.main_win:
             self.main_win.close()
@@ -3829,6 +4030,31 @@ class App:
         def on_login():
             u = self.login_win.txtUsername.text().strip()
             p = self.login_win.txtPassword.text().strip()
+
+            # uu tien DB - dung AuthService
+            if DB_AVAILABLE:
+                try:
+                    user_obj = AuthService.login(u, p)
+                    if user_obj:
+                        # set MOCK dict theo user that de sidebar/profile hien tai
+                        self._sync_mock_from_user(user_obj)
+                        self.login_win.close()
+                        window_cls = {
+                            'student': MainWindow, 'admin': AdminWindow,
+                            'teacher': TeacherWindow, 'employee': EmployeeWindow,
+                        }.get(user_obj.role)
+                        if window_cls:
+                            self.main_win = window_cls(self)
+                            self.main_win.current_user = user_obj
+                            self.main_win.show()
+                            return
+                    self.login_win.lblError.setText('Sai tài khoản hoặc mật khẩu!')
+                    return
+                except Exception as e:
+                    print(f'[AUTH] loi DB, fallback MOCK: {e}')
+                    # roi xuong fallback MOCK
+
+            # fallback: MOCK login
             if u == MOCK_USER['username'] and p == MOCK_USER['password']:
                 self.login_win.close()
                 self.main_win = MainWindow(self)
