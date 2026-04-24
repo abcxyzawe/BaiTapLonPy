@@ -76,14 +76,57 @@ class CourseService:
         sql += " ORDER BY r.lop_id, u.full_name"
         return db.fetch_all(sql, tuple(params))
 
-    # ===== mutation (admin) =====
+    # ===== Courses CRUD (admin) =====
     @staticmethod
-    def create_class(ma_lop, ma_mon, gv_id, lich, phong, siso_max, gia):
+    def create_course(ma_mon: str, ten_mon: str, mo_ta: str = ''):
         db.execute(
-            """INSERT INTO classes (ma_lop, ma_mon, gv_id, lich, phong, siso_max, gia)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (ma_lop, ma_mon, gv_id, lich, phong, siso_max, gia)
+            "INSERT INTO courses (ma_mon, ten_mon, mo_ta) VALUES (%s, %s, %s)",
+            (ma_mon, ten_mon, mo_ta)
         )
+
+    @staticmethod
+    def update_course(ma_mon: str, ten_mon: str = None, mo_ta: str = None):
+        pairs, values = [], []
+        if ten_mon is not None:
+            pairs.append('ten_mon = %s'); values.append(ten_mon)
+        if mo_ta is not None:
+            pairs.append('mo_ta = %s'); values.append(mo_ta)
+        if not pairs:
+            return
+        values.append(ma_mon)
+        db.execute(f"UPDATE courses SET {', '.join(pairs)} WHERE ma_mon = %s", tuple(values))
+
+    @staticmethod
+    def delete_course(ma_mon: str):
+        db.execute("DELETE FROM courses WHERE ma_mon = %s", (ma_mon,))
+
+    # ===== Classes CRUD (admin) =====
+    @staticmethod
+    def create_class(ma_lop, ma_mon, gv_id=None, lich='', phong='',
+                     siso_max=40, gia=0, semester_id=None,
+                     siso_hien_tai=0, so_buoi=24):
+        db.execute(
+            """INSERT INTO classes
+               (ma_lop, ma_mon, gv_id, semester_id, lich, phong,
+                siso_max, siso_hien_tai, gia, so_buoi)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (ma_lop, ma_mon, gv_id, semester_id, lich, phong,
+             siso_max, siso_hien_tai, gia, so_buoi)
+        )
+
+    @staticmethod
+    def update_class(ma_lop: str, **fields):
+        allowed = {'ma_mon', 'gv_id', 'semester_id', 'lich', 'phong',
+                   'siso_max', 'siso_hien_tai', 'gia', 'trang_thai',
+                   'ngay_bat_dau', 'ngay_ket_thuc', 'so_buoi'}
+        pairs, values = [], []
+        for k, v in fields.items():
+            if k in allowed:
+                pairs.append(f'{k} = %s'); values.append(v)
+        if not pairs:
+            return
+        values.append(ma_lop)
+        db.execute(f"UPDATE classes SET {', '.join(pairs)} WHERE ma_lop = %s", tuple(values))
 
     @staticmethod
     def delete_class(ma_lop: str):
@@ -92,3 +135,14 @@ class CourseService:
     @staticmethod
     def update_class_price(ma_lop: str, gia: int):
         db.execute("UPDATE classes SET gia = %s WHERE ma_lop = %s", (gia, ma_lop))
+
+    @staticmethod
+    def get_teachers_list():
+        """Danh sach GV (id, ten, ma_gv) de populate combo admin"""
+        return db.fetch_all(
+            """SELECT u.id, u.full_name, t.ma_gv, t.hoc_vi, t.khoa
+                 FROM users u
+                 JOIN teachers t ON t.user_id = u.id
+                WHERE u.is_active = TRUE
+                ORDER BY u.full_name"""
+        )
