@@ -1,4 +1,17 @@
 from backend.database.db import db
+from backend.utils.hash_util import hash_password
+
+
+def _create_user_base(username: str, password: str, role: str,
+                      full_name: str, email: str = None, sdt: str = None):
+    """Tao row trong users + tra ve user_id moi"""
+    row = db.execute_returning(
+        """INSERT INTO users (username, password, role, full_name, email, sdt)
+                VALUES (%s, %s, %s, %s, %s, %s)
+             RETURNING id""",
+        (username, hash_password(password), role, full_name, email, sdt)
+    )
+    return row['id']
 
 
 class StudentService:
@@ -23,6 +36,46 @@ class StudentService:
              ORDER BY s.msv
         """
         return db.fetch_all(sql)
+
+    @staticmethod
+    def get_by_msv(msv: str):
+        return db.fetch_one(
+            """SELECT u.id, u.full_name, u.email, u.sdt,
+                      s.msv, s.ngaysinh, s.gioitinh, s.diachi
+                 FROM users u JOIN students s ON s.user_id = u.id
+                WHERE s.msv = %s""",
+            (msv,)
+        )
+
+    @staticmethod
+    def create(username: str, password: str, full_name: str, msv: str,
+               email: str = None, sdt: str = None,
+               ngaysinh=None, gioitinh: str = None, diachi: str = None):
+        uid = _create_user_base(username, password, 'student', full_name, email, sdt)
+        db.execute(
+            """INSERT INTO students (user_id, msv, ngaysinh, gioitinh, diachi)
+                    VALUES (%s, %s, %s, %s, %s)""",
+            (uid, msv, ngaysinh, gioitinh, diachi)
+        )
+        return uid
+
+    @staticmethod
+    def update(user_id: int, email: str = None, sdt: str = None,
+               diachi: str = None, full_name: str = None):
+        pairs_u, vals_u = [], []
+        if email is not None: pairs_u.append('email = %s'); vals_u.append(email)
+        if sdt is not None: pairs_u.append('sdt = %s'); vals_u.append(sdt)
+        if full_name is not None: pairs_u.append('full_name = %s'); vals_u.append(full_name)
+        if pairs_u:
+            vals_u.append(user_id)
+            db.execute(f"UPDATE users SET {', '.join(pairs_u)} WHERE id = %s", tuple(vals_u))
+        if diachi is not None:
+            db.execute("UPDATE students SET diachi = %s WHERE user_id = %s", (diachi, user_id))
+
+    @staticmethod
+    def delete(user_id: int):
+        """Chi deactivate, khong xoa that (bao toan registrations)"""
+        db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
 
 
 class TeacherService:
@@ -55,6 +108,36 @@ class TeacherService:
         """
         return db.fetch_all(sql)
 
+    @staticmethod
+    def create(username: str, password: str, full_name: str, ma_gv: str,
+               email: str = None, sdt: str = None,
+               hoc_vi: str = None, khoa: str = None,
+               chuyen_nganh: str = None, tham_nien: int = 0):
+        uid = _create_user_base(username, password, 'teacher', full_name, email, sdt)
+        db.execute(
+            """INSERT INTO teachers (user_id, ma_gv, hoc_vi, khoa, chuyen_nganh, tham_nien)
+                    VALUES (%s, %s, %s, %s, %s, %s)""",
+            (uid, ma_gv, hoc_vi, khoa, chuyen_nganh, tham_nien)
+        )
+        return uid
+
+    @staticmethod
+    def update(user_id: int, **fields):
+        u_fields = {k: fields[k] for k in ('full_name', 'email', 'sdt') if k in fields}
+        t_fields = {k: fields[k] for k in ('hoc_vi', 'khoa', 'chuyen_nganh', 'tham_nien') if k in fields}
+        if u_fields:
+            pairs = [f'{k} = %s' for k in u_fields]
+            vals = list(u_fields.values()) + [user_id]
+            db.execute(f"UPDATE users SET {', '.join(pairs)} WHERE id = %s", tuple(vals))
+        if t_fields:
+            pairs = [f'{k} = %s' for k in t_fields]
+            vals = list(t_fields.values()) + [user_id]
+            db.execute(f"UPDATE teachers SET {', '.join(pairs)} WHERE user_id = %s", tuple(vals))
+
+    @staticmethod
+    def delete(user_id: int):
+        db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
+
 
 class EmployeeService:
     @staticmethod
@@ -67,6 +150,35 @@ class EmployeeService:
              ORDER BY e.ma_nv
         """
         return db.fetch_all(sql)
+
+    @staticmethod
+    def create(username: str, password: str, full_name: str, ma_nv: str,
+               email: str = None, sdt: str = None,
+               chuc_vu: str = None, phong_ban: str = None, ngay_vao_lam=None):
+        uid = _create_user_base(username, password, 'employee', full_name, email, sdt)
+        db.execute(
+            """INSERT INTO employees (user_id, ma_nv, chuc_vu, phong_ban, ngay_vao_lam)
+                    VALUES (%s, %s, %s, %s, %s)""",
+            (uid, ma_nv, chuc_vu, phong_ban, ngay_vao_lam)
+        )
+        return uid
+
+    @staticmethod
+    def update(user_id: int, **fields):
+        u_fields = {k: fields[k] for k in ('full_name', 'email', 'sdt') if k in fields}
+        e_fields = {k: fields[k] for k in ('chuc_vu', 'phong_ban', 'ngay_vao_lam') if k in fields}
+        if u_fields:
+            pairs = [f'{k} = %s' for k in u_fields]
+            vals = list(u_fields.values()) + [user_id]
+            db.execute(f"UPDATE users SET {', '.join(pairs)} WHERE id = %s", tuple(vals))
+        if e_fields:
+            pairs = [f'{k} = %s' for k in e_fields]
+            vals = list(e_fields.values()) + [user_id]
+            db.execute(f"UPDATE employees SET {', '.join(pairs)} WHERE user_id = %s", tuple(vals))
+
+    @staticmethod
+    def delete(user_id: int):
+        db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
 
 
 class ReviewService:
