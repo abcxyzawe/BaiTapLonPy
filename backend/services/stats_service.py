@@ -12,13 +12,55 @@ class StatsService:
             "SELECT COUNT(*) AS c FROM classes WHERE trang_thai IN ('open', 'full')"
         )['c']
         total_regs = db.fetch_one("SELECT COUNT(*) AS c FROM registrations")['c']
-        current_sem = 'HK2'  # hien tai chua co bang semester, hardcode
+        cur_sem_row = db.fetch_one(
+            "SELECT id, ten FROM semesters WHERE trang_thai = 'open' LIMIT 1"
+        )
+        current_sem = cur_sem_row['id'] if cur_sem_row else 'HK2'
         return dict(
             total_students=total_students,
             total_classes=total_classes,
             total_registrations=total_regs,
             current_semester=current_sem,
         )
+
+    @staticmethod
+    def stats_by_semester(semester_id: str):
+        """Thong ke chi tiet cho 1 hoc ky (chart/dept/class data)"""
+        # chart data: lop cua HK do + siso
+        chart = db.fetch_all(
+            """SELECT co.ten_mon, vc.siso_hien_tai AS cur, vc.siso_max AS mx
+                 FROM v_class_detail vc
+                 JOIN courses co ON co.ma_mon = vc.ma_mon
+                WHERE vc.semester_id = %s
+                ORDER BY vc.siso_hien_tai DESC""",
+            (semester_id,)
+        )
+        # dept stats: nhom theo khoa GV (CNTT/Toan/Ngoai ngu)
+        dept = db.fetch_all(
+            """SELECT COALESCE(t.khoa, 'Khac') AS khoa,
+                      COUNT(DISTINCT r.hv_id) AS so_hv,
+                      COUNT(DISTINCT c.ma_lop) AS so_lop
+                 FROM classes c
+            LEFT JOIN teachers t ON t.user_id = c.gv_id
+            LEFT JOIN registrations r ON r.lop_id = c.ma_lop
+                WHERE c.semester_id = %s
+                GROUP BY COALESCE(t.khoa, 'Khac')
+                ORDER BY so_hv DESC""",
+            (semester_id,)
+        )
+        # class stats voi avg GPA
+        cls = db.fetch_all(
+            """SELECT vc.ma_lop, vc.siso_hien_tai,
+                      COALESCE(ROUND(AVG(g.tong_ket)::numeric, 1), 0) AS gpa,
+                      (vc.siso_hien_tai * vc.gia) AS doanh_thu
+                 FROM v_class_detail vc
+            LEFT JOIN grades g ON g.lop_id = vc.ma_lop
+                WHERE vc.semester_id = %s
+                GROUP BY vc.ma_lop, vc.siso_hien_tai, vc.gia
+                ORDER BY gpa DESC""",
+            (semester_id,)
+        )
+        return dict(chart=chart, dept=dept, class_stats=cls)
 
     @staticmethod
     def top_classes(limit: int = 5):
