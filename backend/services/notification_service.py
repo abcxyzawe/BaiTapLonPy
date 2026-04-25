@@ -46,3 +46,19 @@ class NotificationService:
                     VALUES (%s, %s, %s, %s, %s)""",
             (tu_id, den_lop, tieu_de, noi_dung, loai)
         )
+
+    @staticmethod
+    def get_recent(limit: int = 10):
+        """Lay thong bao gan day nhat (cho admin dashboard)"""
+        sql = """
+            SELECT n.*, u.full_name AS ten_nguoi_gui
+              FROM notifications n
+         LEFT JOIN users u ON u.id = n.tu_id
+             ORDER BY n.ngay_tao DESC
+             LIMIT %s
+        """
+        return db.fetch_all(sql, (limit,))
+
+    @staticmethod
+    def delete(notif_id: int):
+        db.execute("DELETE FROM notifications WHERE id = %s", (notif_id,))
