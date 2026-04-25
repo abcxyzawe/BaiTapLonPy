@@ -94,7 +94,7 @@
     </widget>
 
     <!-- Ma SV -->
-    <widget class="QLabel" name="lbl01"><property name="geometry"><rect><x>20</x><y>52</y><width>120</width><height>16</height></rect></property><property name="styleSheet"><string notr="true">color: #718096; font-size: 11px; background: transparent;</string></property><property name="text"><string>Mã sinh viên</string></property></widget>
+    <widget class="QLabel" name="lbl01"><property name="geometry"><rect><x>20</x><y>52</y><width>120</width><height>16</height></rect></property><property name="styleSheet"><string notr="true">color: #718096; font-size: 11px; background: transparent;</string></property><property name="text"><string>Mã học viên</string></property></widget>
     <widget class="QLabel" name="valMaSV"><property name="geometry"><rect><x>150</x><y>50</y><width>230</width><height>18</height></rect></property><property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 13px; background: transparent;</string></property><property name="text"><string>2024001</string></property></widget>
 
     <!-- Ho ten -->

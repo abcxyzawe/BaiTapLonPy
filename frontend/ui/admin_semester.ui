@@ -68,7 +68,7 @@
    <widget class="QPushButton" name="btnAdminStudent">
     <property name="geometry"><rect><x>10</x><y>162</y><width>210</width><height>36</height></rect></property>
     <property name="styleSheet"><string notr="true">QPushButton { background: transparent; color: #4a5568; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; } QPushButton:hover { background: #edf2f7; }</string></property>
-    <property name="text"><string>Quản lý sinh viên</string></property>
+    <property name="text"><string>Quản lý học viên</string></property>
     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
    </widget>
    <widget class="QLabel" name="iconAdminStudent">
