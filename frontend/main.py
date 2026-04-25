@@ -946,6 +946,15 @@ class MainWindow(QtWidgets.QWidget):
             btn_export.setStyleSheet(f'QPushButton {{ background: white; color: {COLORS["navy"]}; border: 1px solid {COLORS["navy"]}; border-radius: 4px; padding: 4px 12px; font-size: 11px; }} QPushButton:hover {{ background: {COLORS["navy"]}; color: white; }}')
             btn_export.show()
             btn_export.clicked.connect(lambda: msg_info(self, 'Thông báo', 'Chức năng xuất PDF đang phát triển, sẽ bổ sung ở bản cập nhật tới.'))
+        # nut "Tien do CT" - lien ket khung CT voi diem cua HV
+        if header and not header.findChild(QtWidgets.QPushButton, 'btnProgressCT'):
+            btn_prog = QtWidgets.QPushButton('Tiến độ CT', header)
+            btn_prog.setObjectName('btnProgressCT')
+            btn_prog.setGeometry(615, 14, 95, 28)
+            btn_prog.setCursor(Qt.PointingHandCursor)
+            btn_prog.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; padding: 4px 12px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
+            btn_prog.show()
+            btn_prog.clicked.connect(self._show_progress_dialog)
         # combo loc HK
         cbo = page.findChild(QtWidgets.QComboBox, 'cboSemester')
         if cbo:
@@ -1167,6 +1176,136 @@ class MainWindow(QtWidgets.QWidget):
             if w:
                 MOCK_USER[key] = w.text().strip()
         msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
+
+    def _show_progress_dialog(self):
+        """Dialog hien tien do hoc khung CT cua HV - lien ket curriculum + grades"""
+        if not (DB_AVAILABLE and CurriculumService):
+            msg_warn(self, 'Chưa có DB',
+                     'Tính năng tiến độ chương trình cần kết nối Database.\n'
+                     'Vui lòng khởi động Docker và đăng nhập lại.')
+            return
+        hv_id = MOCK_USER.get('id')
+        if not hv_id:
+            msg_warn(self, 'Lỗi', 'Không tìm thấy ID học viên')
+            return
+        try:
+            prog = CurriculumService.get_progress_for_student(hv_id, 'CNTT')
+        except Exception as e:
+            msg_warn(self, 'Lỗi DB', f'Không lấy được tiến độ:\n{e}')
+            return
+
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle('Tiến độ học khung chương trình - Ngành CNTT')
+        dlg.setFixedSize(720, 580)
+        lay = QtWidgets.QVBoxLayout(dlg)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(12)
+
+        # Header tien do
+        ty_le = prog['ty_le']
+        color = COLORS['green'] if ty_le >= 70 else COLORS['gold'] if ty_le >= 30 else COLORS['orange']
+        lbl_title = QtWidgets.QLabel(
+            f'<b style="color:{COLORS["navy"]}; font-size:18px;">{MOCK_USER["name"]}</b>  '
+            f'<span style="color:#718096;">({MOCK_USER.get("msv", "")})</span><br>'
+            f'<span style="color:{color}; font-size:24px; font-weight:bold;">'
+            f'  {prog["da_pass"]}/{prog["tong_mon"]} môn  ·  {ty_le}%</span>'
+        )
+        lay.addWidget(lbl_title)
+
+        # Progress bar
+        bar = QtWidgets.QProgressBar()
+        bar.setRange(0, 100)
+        bar.setValue(int(ty_le))
+        bar.setFormat(f'{ty_le}%')
+        bar.setStyleSheet(
+            f'QProgressBar {{ height: 20px; border-radius: 10px; background: #edf2f7; '
+            f'text-align: center; font-weight: bold; }} '
+            f'QProgressBar::chunk {{ background: {color}; border-radius: 10px; }}'
+        )
+        lay.addWidget(bar)
+
+        # 4 stat box
+        stats_frame = QtWidgets.QFrame()
+        sl = QtWidgets.QHBoxLayout(stats_frame)
+        sl.setSpacing(8)
+        for label, val, c in [
+            ('Đã đạt',    prog['da_pass'],  COLORS['green']),
+            ('Đang học',  prog['dang_hoc'], COLORS['navy']),
+            ('Phải học lại', prog['da_fail'], COLORS['red']),
+            ('Chưa học',  prog['chua_hoc'], COLORS['text_light']),
+        ]:
+            box = QtWidgets.QFrame()
+            box.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #d2d6dc; border-radius: 8px; padding: 8px; }}')
+            bl = QtWidgets.QVBoxLayout(box)
+            bl.setContentsMargins(8, 6, 8, 6)
+            l1 = QtWidgets.QLabel(str(val))
+            l1.setStyleSheet(f'color: {c}; font-size: 22px; font-weight: bold; border: none;')
+            l1.setAlignment(Qt.AlignCenter)
+            l2 = QtWidgets.QLabel(label)
+            l2.setStyleSheet('color: #718096; font-size: 11px; border: none;')
+            l2.setAlignment(Qt.AlignCenter)
+            bl.addWidget(l1); bl.addWidget(l2)
+            sl.addWidget(box)
+        lay.addWidget(stats_frame)
+
+        # Bang chi tiet 14 mon
+        tbl = QtWidgets.QTableWidget()
+        tbl.setColumnCount(6)
+        tbl.setHorizontalHeaderLabels(['Mã môn', 'Tên môn', 'TC', 'HK', 'Điểm', 'Trạng thái'])
+        tbl.setRowCount(len(prog['chi_tiet']))
+        tbl.setAlternatingRowColors(True)
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+
+        status_text = {
+            'pass':        ('✓ Đạt',          COLORS['green']),
+            'fail':        ('✗ Trượt',        COLORS['red']),
+            'learning':    ('⏳ Đang học',     COLORS['navy']),
+            'not_started': ('— Chưa học',     COLORS['text_light']),
+        }
+        for r, m in enumerate(prog['chi_tiet']):
+            tbl.setItem(r, 0, QtWidgets.QTableWidgetItem(m['ma_mon']))
+            tbl.setItem(r, 1, QtWidgets.QTableWidgetItem(m['ten_mon']))
+            it_tc = QtWidgets.QTableWidgetItem(str(m['tin_chi']))
+            it_tc.setTextAlignment(Qt.AlignCenter)
+            tbl.setItem(r, 2, it_tc)
+            it_hk = QtWidgets.QTableWidgetItem(m['hoc_ky'] or '—')
+            it_hk.setTextAlignment(Qt.AlignCenter)
+            tbl.setItem(r, 3, it_hk)
+            it_diem = QtWidgets.QTableWidgetItem(f'{m["diem"]:.1f}' if m['diem'] is not None else '—')
+            it_diem.setTextAlignment(Qt.AlignCenter)
+            if m['diem'] is not None:
+                it_diem.setForeground(QColor(COLORS['green'] if m['diem'] >= 5 else COLORS['red']))
+            tbl.setItem(r, 4, it_diem)
+            txt, c = status_text.get(m['trang_thai'], ('—', COLORS['text_mid']))
+            it_st = QtWidgets.QTableWidgetItem(txt)
+            it_st.setTextAlignment(Qt.AlignCenter)
+            it_st.setForeground(QColor(c))
+            it_st.setFont(QFont('Segoe UI', 10, QFont.Bold))
+            tbl.setItem(r, 5, it_st)
+            tbl.setRowHeight(r, 30)
+        for c, w in enumerate([75, 230, 40, 50, 70, 130]):
+            tbl.setColumnWidth(c, w)
+        tbl.horizontalHeader().setStretchLastSection(True)
+        lay.addWidget(tbl, 1)
+
+        # Note
+        note = QtWidgets.QLabel(
+            '<i style="color:#718096; font-size:11px;">'
+            '💡 Tổng hợp từ <b>khung chương trình ngành CNTT</b> + bảng điểm cá nhân. '
+            'Môn đạt = tổng kết ≥ 5.0</i>'
+        )
+        note.setWordWrap(True)
+        lay.addWidget(note)
+
+        # Close
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)
+        btns.button(QtWidgets.QDialogButtonBox.Close).setText('Đóng')
+        btns.rejected.connect(dlg.accept)
+        lay.addWidget(btns)
+
+        dlg.exec_()
 
     def _change_pass(self):
         dlg = QtWidgets.QDialog(self)
@@ -1800,19 +1939,54 @@ class AdminWindow(QtWidgets.QWidget):
         btn_s = page.findChild(QtWidgets.QPushButton, 'btnSearchStudent')
         if btn_s and txt:
             btn_s.clicked.connect(lambda: table_filter(tbl, txt.text(), cols=[0, 1]))
-        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
-        if cbo_c:
-            cbo_c.clear()
-            cbo_c.addItems(['Tất cả lớp', 'CNTT-K20A', 'CNTT-K20B', 'TOAN-K20', 'NN-K20'])
-            cbo_c.currentIndexChanged.connect(lambda: self._admin_filter_students())
+        # mapping khoa -> lop (dung khi cascade)
+        self._adm_lop_by_khoa = {
+            'CNTT': ['CNTT-K20A', 'CNTT-K20B'],
+            'Toán': ['TOAN-K20'],
+            'Ngoại ngữ': ['NN-K20'],
+        }
+        # Khoa truoc (cha)
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
         if cbo_d:
             cbo_d.clear()
             cbo_d.addItems(['Tất cả khoa', 'CNTT', 'Toán', 'Ngoại ngữ'])
-            cbo_d.currentIndexChanged.connect(lambda: self._admin_filter_students())
+            cbo_d.currentIndexChanged.connect(self._adm_st_khoa_changed)
+        # Lop sau (con) - mac dinh tat ca, doi khi khoa thay doi
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
+        if cbo_c:
+            cbo_c.clear()
+            cbo_c.addItem('Tất cả lớp')
+            for lops in self._adm_lop_by_khoa.values():
+                for lop in lops:
+                    cbo_c.addItem(lop)
+            cbo_c.currentIndexChanged.connect(lambda: self._admin_filter_students())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddStudent')
         if btn_add:
             btn_add.clicked.connect(self._admin_add_student)
+
+    def _adm_st_khoa_changed(self, idx):
+        """Khi chon khoa -> populate lai cbo lop voi cac lop cua khoa do"""
+        page = self.page_widgets[3]
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
+        if not cbo_c or not cbo_d:
+            return
+        # block signal de tranh trigger filter 2 lan
+        cbo_c.blockSignals(True)
+        cbo_c.clear()
+        cbo_c.addItem('Tất cả lớp')
+        if idx == 0:
+            # tat ca lop
+            for lops in self._adm_lop_by_khoa.values():
+                for lop in lops:
+                    cbo_c.addItem(lop)
+        else:
+            khoa = cbo_d.currentText()
+            for lop in self._adm_lop_by_khoa.get(khoa, []):
+                cbo_c.addItem(lop)
+        cbo_c.blockSignals(False)
+        # filter ngay
+        self._admin_filter_students()
 
     def _admin_filter_students(self):
         page = self.page_widgets[3]
@@ -2050,8 +2224,49 @@ class AdminWindow(QtWidgets.QWidget):
                 ['13', 'IT010', 'An toàn thông tin', '3', 'Tự chọn', 'HK6', 'IT005'],
                 ['14', 'IT011', 'Lập trình di động', '3', 'Tự chọn', 'HK6', 'IT003'],
             ]
+        # tinh trang thai mo lop cho moi mon (de show "Đang mở X lớp")
+        # query DB neu co, khong thi check trong MOCK_CLASSES
+        ma_mon_count = {}
+        if DB_AVAILABLE:
+            try:
+                rows = db.fetch_all('SELECT ma_mon, COUNT(*) AS n FROM classes GROUP BY ma_mon')
+                ma_mon_count = {r['ma_mon']: r['n'] for r in rows}
+            except Exception: pass
+        if not ma_mon_count:
+            for c in MOCK_CLASSES:
+                ma_mon_count[c[1]] = ma_mon_count.get(c[1], 0) + 1
+
+        # Stats summary tren cung trang
+        n_total = len(data)
+        n_bb = sum(1 for r in data if r[4] == 'Bắt buộc')
+        n_tc = sum(1 for r in data if r[4] == 'Tự chọn')
+        n_dc = sum(1 for r in data if r[4] == 'Đại cương')
+        n_co_lop = sum(1 for r in data if ma_mon_count.get(r[1], 0) > 0)
+        # tao label summary o headerBar (dynamic create)
+        headerBar = page.findChild(QtWidgets.QFrame, 'headerBar')
+        if headerBar:
+            old = headerBar.findChild(QtWidgets.QLabel, 'lblCurrStats')
+            if old:
+                old.deleteLater()
+            lbl_stats = QtWidgets.QLabel(headerBar)
+            lbl_stats.setObjectName('lblCurrStats')
+            lbl_stats.setGeometry(380, 18, 540, 22)
+            lbl_stats.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 12px; background: transparent;')
+            lbl_stats.setText(
+                f'<b>{n_total}</b> môn  ·  '
+                f'<span style="color:{COLORS["navy"]};"><b>{n_bb}</b> Bắt buộc</span>  '
+                f'<span style="color:{COLORS["green"]};"><b>{n_tc}</b> Tự chọn</span>  '
+                f'<span style="color:{COLORS["gold"]};"><b>{n_dc}</b> Đại cương</span>  ·  '
+                f'<b>{n_co_lop}/{n_total}</b> môn đã mở lớp'
+            )
+            lbl_stats.show()
+
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblCurriculum')
         if tbl:
+            # them 1 cot 'Trang thai' truoc cot Thao tac → tong 9 cot
+            tbl.setColumnCount(9)
+            tbl.setHorizontalHeaderItem(7, QtWidgets.QTableWidgetItem('Trạng thái'))
+            tbl.setHorizontalHeaderItem(8, QtWidgets.QTableWidgetItem('Thao tác'))
             tbl.setRowCount(len(data))
             type_colors = {'Bắt buộc': COLORS['navy'], 'Tự chọn': COLORS['green'], 'Đại cương': COLORS['gold']}
             for r, row in enumerate(data):
@@ -2061,6 +2276,18 @@ class AdminWindow(QtWidgets.QWidget):
                     if c == 4:
                         item.setForeground(QColor(type_colors.get(val, COLORS['text_mid'])))
                     tbl.setItem(r, c, item)
+                # cot 7: trang thai mo lop
+                cnt = ma_mon_count.get(row[1], 0)
+                if cnt > 0:
+                    tt = QtWidgets.QTableWidgetItem(f'✓ {cnt} lớp')
+                    tt.setForeground(QColor(COLORS['green']))
+                else:
+                    tt = QtWidgets.QTableWidgetItem('⚠ Chưa mở')
+                    tt.setForeground(QColor(COLORS['orange']))
+                tt.setTextAlignment(Qt.AlignCenter)
+                tt.setFont(QFont('Segoe UI', 10, QFont.Bold))
+                tbl.setItem(r, 7, tt)
+                # cot 8: nut sua/xoa
                 btn_edit = QtWidgets.QPushButton('Sửa')
                 btn_edit.setCursor(Qt.PointingHandCursor)
                 btn_edit.setFixedSize(50, 24)
@@ -2076,8 +2303,8 @@ class AdminWindow(QtWidgets.QWidget):
                 hl.setAlignment(Qt.AlignCenter)
                 hl.addWidget(btn_edit)
                 hl.addWidget(btn_del)
-                tbl.setCellWidget(r, 7, w)
-            for c, cw in enumerate([32, 65, 160, 28, 95, 50, 100, 155]):
+                tbl.setCellWidget(r, 8, w)
+            for c, cw in enumerate([32, 65, 150, 28, 90, 48, 95, 90, 130]):
                 tbl.setColumnWidth(c, cw)
             tbl.horizontalHeader().setStretchLastSection(True)
             tbl.verticalHeader().setVisible(False)
@@ -2085,7 +2312,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setRowHeight(r, 44)
             # wire action
             for r, row in enumerate(data):
-                w = tbl.cellWidget(r, 7)
+                w = tbl.cellWidget(r, 8)
                 if w:
                     btns = w.findChildren(QtWidgets.QPushButton)
                     if len(btns) >= 2:
@@ -4228,6 +4455,39 @@ class EmployeeWindow(QtWidgets.QWidget):
         if cbo_cls.currentIndex() == 0:
             msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
             return
+        # === CHECK MON TIEN QUYET tu khung CT ===
+        lop_code = cbo_cls.currentText().split()[0]
+        ma_mon_lop = MOCK_COURSES[cbo_c.currentIndex() - 1][0] if cbo_c.currentIndex() > 0 else None
+        if DB_AVAILABLE and CurriculumService:
+            try:
+                hv_row = db.fetch_one(
+                    "SELECT user_id FROM students WHERE msv = %s", (msv.text().strip(),)
+                )
+                if hv_row and ma_mon_lop:
+                    check = CurriculumService.check_prerequisites_for_student(
+                        hv_row['user_id'], ma_mon_lop)
+                    if not check['ok']:
+                        warn_msg = (
+                            f'<b>Học viên chưa đủ điều kiện học môn {ma_mon_lop}!</b><br><br>'
+                            f'Theo khung chương trình, cần hoàn thành các môn tiên quyết:<br>'
+                            f'<span style="color:red;">• {", ".join(check["missing"])}</span><br><br>'
+                            f'Vẫn tiếp tục đăng ký?'
+                        )
+                        box = QtWidgets.QMessageBox(self)
+                        box.setIcon(QtWidgets.QMessageBox.Warning)
+                        box.setWindowTitle('Cảnh báo môn tiên quyết')
+                        box.setTextFormat(Qt.RichText)
+                        box.setText(warn_msg)
+                        box.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+                        box.button(QtWidgets.QMessageBox.Yes).setText('Tiếp tục')
+                        box.button(QtWidgets.QMessageBox.No).setText('Hủy')
+                        box.setDefaultButton(QtWidgets.QMessageBox.No)
+                        _style_msgbox(box)
+                        if box.exec_() != QtWidgets.QMessageBox.Yes:
+                            return
+            except Exception as e:
+                print(f'[REG] check prereq loi: {e}')
+
         if not msg_confirm(self, 'Xác nhận', f'Đăng ký {hoten.text()} vào lớp {cbo_cls.currentText()}?'):
             return
         # ghi DB
@@ -4239,7 +4499,6 @@ class EmployeeWindow(QtWidgets.QWidget):
                 )
                 nv_id = MOCK_EMPLOYEE.get('user_id')
                 if hv_row and nv_id:
-                    lop_code = cbo_cls.currentText().split()[0]  # "IT001-A — ..." -> "IT001-A"
                     saved_id = RegistrationService.register_student(
                         hv_row['user_id'], lop_code, nv_id
                     )
