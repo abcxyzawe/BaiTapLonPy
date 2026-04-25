@@ -68,7 +68,7 @@
    <widget class="QPushButton" name="btnAdminStudent">
     <property name="geometry"><rect><x>10</x><y>162</y><width>210</width><height>36</height></rect></property>
     <property name="styleSheet"><string notr="true">QPushButton { background: rgba(0,32,96,0.08); color: #002060; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; font-weight: bold; }</string></property>
-    <property name="text"><string>Quản lý sinh viên</string></property>
+    <property name="text"><string>Quản lý học viên</string></property>
     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
    </widget>
    <widget class="QLabel" name="iconAdminStudent">
@@ -153,12 +153,12 @@
    <widget class="QLabel" name="lblPageTitle">
     <property name="geometry"><rect><x>25</x><y>22</y><width>300</width><height>32</height></rect></property>
     <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 20px; font-weight: bold; background: transparent;</string></property>
-    <property name="text"><string>Quản lý sinh viên</string></property>
+    <property name="text"><string>Quản lý học viên</string></property>
    </widget>
    <widget class="QPushButton" name="btnAddStudent">
     <property name="geometry"><rect><x>835</x><y>22</y><width>160</width><height>32</height></rect></property>
     <property name="styleSheet"><string notr="true">QPushButton { background: #002060; color: #ffffff; border: none; border-radius: 6px; font-size: 12px; font-weight: bold; padding: 0 14px; } QPushButton:hover { background: #001a4d; }</string></property>
-    <property name="text"><string>+ Thêm sinh viên</string></property>
+    <property name="text"><string>+ Thêm học viên</string></property>
     <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
    </widget>
 
@@ -177,7 +177,7 @@
     <widget class="QLineEdit" name="txtSearchStudent">
      <property name="geometry"><rect><x>38</x><y>8</y><width>260</width><height>34</height></rect></property>
      <property name="styleSheet"><string notr="true">QLineEdit { border: none; background: transparent; font-size: 13px; color: #2d3748; padding-left: 4px; } QLineEdit::placeholder { color: #a0aec0; }</string></property>
-     <property name="placeholderText"><string>Tìm theo tên hoặc mã SV...</string></property>
+     <property name="placeholderText"><string>Tìm theo tên hoặc mã HV...</string></property>
     </widget>
 
     <!-- Vertical separator 1 -->
@@ -223,7 +223,7 @@
     <widget class="QLabel" name="lblTableTitle">
      <property name="geometry"><rect><x>20</x><y>14</y><width>300</width><height>24</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 15px; font-weight: bold; background: transparent;</string></property>
-     <property name="text"><string>Danh sách sinh viên</string></property>
+     <property name="text"><string>Danh sách học viên</string></property>
     </widget>
 
     <widget class="QTableWidget" name="tblAdminStudents">

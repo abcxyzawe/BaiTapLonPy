@@ -223,7 +223,7 @@ Nhanh chóng - Tiện lợi - Chính xác</string></property>
       QLineEdit:focus { border-color: #002060; background: #fff; }
      </string>
     </property>
-    <property name="placeholderText"><string>Nhập mã sinh viên hoặc tài khoản</string></property>
+    <property name="placeholderText"><string>Nhập mã học viên hoặc tên đăng nhập hoặc tài khoản</string></property>
    </widget>
 
    <!-- Mat khau -->
