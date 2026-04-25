@@ -172,47 +172,19 @@ Nhanh chóng - Tiện lợi - Chính xác</string></property>
     <property name="text"><string>Vui lòng đăng nhập để sử dụng hệ thống</string></property>
    </widget>
 
-   <!-- Vai tro -->
-   <widget class="QLabel" name="lblRole">
+   <!-- Tai khoan -->
+   <widget class="QLabel" name="lblUser">
     <property name="geometry">
      <rect><x>60</x><y>220</y><width>400</width><height>16</height></rect>
     </property>
     <property name="styleSheet">
      <string notr="true">color: #555; font-size: 12px; font-weight: bold; background: transparent;</string>
     </property>
-    <property name="text"><string>Vai trò</string></property>
-   </widget>
-   <widget class="QComboBox" name="cboRole">
-    <property name="geometry">
-     <rect><x>60</x><y>240</y><width>400</width><height>42</height></rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">
-      QComboBox {
-        padding: 10px 15px; border: 2px solid #e8e8e8; border-radius: 10px;
-        font-size: 13px; background: #fafbfc; color: #333;
-      }
-      QComboBox:focus { border-color: #002060; background: #fff; }
-      QComboBox::drop-down { border: none; padding-right: 14px; }
-     </string>
-    </property>
-    <item><property name="text"><string>Sinh viên</string></property></item>
-    <item><property name="text"><string>Quản trị viên</string></property></item>
-   </widget>
-
-   <!-- Tai khoan -->
-   <widget class="QLabel" name="lblUser">
-    <property name="geometry">
-     <rect><x>60</x><y>296</y><width>400</width><height>16</height></rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true">color: #555; font-size: 12px; font-weight: bold; background: transparent;</string>
-    </property>
-    <property name="text"><string>Tài khoản</string></property>
+    <property name="text"><string>Tên đăng nhập</string></property>
    </widget>
    <widget class="QLineEdit" name="txtUsername">
     <property name="geometry">
-     <rect><x>60</x><y>316</y><width>400</width><height>42</height></rect>
+     <rect><x>60</x><y>240</y><width>400</width><height>42</height></rect>
     </property>
     <property name="styleSheet">
      <string notr="true">
@@ -223,13 +195,13 @@ Nhanh chóng - Tiện lợi - Chính xác</string></property>
       QLineEdit:focus { border-color: #002060; background: #fff; }
      </string>
     </property>
-    <property name="placeholderText"><string>Nhập mã học viên hoặc tên đăng nhập hoặc tài khoản</string></property>
+    <property name="placeholderText"><string>Nhập tên đăng nhập</string></property>
    </widget>
 
    <!-- Mat khau -->
    <widget class="QLabel" name="lblPass">
     <property name="geometry">
-     <rect><x>60</x><y>372</y><width>400</width><height>16</height></rect>
+     <rect><x>60</x><y>296</y><width>400</width><height>16</height></rect>
     </property>
     <property name="styleSheet">
      <string notr="true">color: #555; font-size: 12px; font-weight: bold; background: transparent;</string>
@@ -238,7 +210,7 @@ Nhanh chóng - Tiện lợi - Chính xác</string></property>
    </widget>
    <widget class="QLineEdit" name="txtPassword">
     <property name="geometry">
-     <rect><x>60</x><y>392</y><width>400</width><height>42</height></rect>
+     <rect><x>60</x><y>316</y><width>400</width><height>42</height></rect>
     </property>
     <property name="styleSheet">
      <string notr="true">
@@ -256,7 +228,7 @@ Nhanh chóng - Tiện lợi - Chính xác</string></property>
    <!-- Nut dang nhap -->
    <widget class="QPushButton" name="btnLogin">
     <property name="geometry">
-     <rect><x>60</x><y>460</y><width>400</width><height>46</height></rect>
+     <rect><x>60</x><y>390</y><width>400</width><height>46</height></rect>
     </property>
     <property name="styleSheet">
      <string notr="true">
@@ -278,7 +250,7 @@ Nhanh chóng - Tiện lợi - Chính xác</string></property>
    <!-- Thong bao loi -->
    <widget class="QLabel" name="lblError">
     <property name="geometry">
-     <rect><x>60</x><y>515</y><width>400</width><height>18</height></rect>
+     <rect><x>60</x><y>445</y><width>400</width><height>18</height></rect>
     </property>
     <property name="styleSheet">
      <string notr="true">color: #e53935; font-size: 12px; background: transparent;</string>
