@@ -4184,8 +4184,12 @@ class TeacherWindow(QtWidgets.QWidget):
             # action: xem chi tiết
             btn = QtWidgets.QPushButton('Chi tiết')
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFixedSize(76, 26)
-            btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            btn.setFixedSize(64, 22)
+            btn.setStyleSheet(
+                f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; '
+                f'border-radius: 3px; font-size: 10px; font-weight: bold; padding: 0; }} '
+                f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
+            )
             btn.clicked.connect(lambda ch, m=ma, n=tmon, s=siso, mx=smax, p=phong, l=lich, g=gia:
                 show_detail_dialog(self, 'Chi tiết lớp', [
                     ('Mã lớp', m), ('Môn học', n), ('Giảng viên', MOCK_TEACHER['name']),
@@ -4193,18 +4197,21 @@ class TeacherWindow(QtWidgets.QWidget):
                     ('Sĩ số', f'{s}/{mx}'),
                     ('Học phí', f'{g:,}'.replace(',', '.') + ' đ'),
                 ], avatar_text=m, subtitle=n))
+            # Wrapper voi fixed height de tranh button overflow row
             w = QtWidgets.QWidget()
+            w.setFixedHeight(34)
             hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setContentsMargins(2, 2, 2, 2)
+            hl.setSpacing(0)
             hl.setAlignment(Qt.AlignCenter)
             hl.addWidget(btn)
             tbl.setCellWidget(r, 6, w)
         tbl.horizontalHeader().setStretchLastSection(True)
-        for c, cw in enumerate([100, 180, 80, 160, 80, 120, 96]):
+        for c, cw in enumerate([100, 180, 80, 160, 80, 120, 90]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(my_classes)):
-            tbl.setRowHeight(r, 44)
+            tbl.setRowHeight(r, 36)
 
     def _fill_tea_students(self):
         page = self.page_widgets[3]
