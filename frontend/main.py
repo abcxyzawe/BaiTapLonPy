@@ -2,7 +2,7 @@ import sys, os
 # them root vao path de import backend
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PyQt5 import QtWidgets, uic
+from PyQt5 import QtWidgets, uic, QtCore
 from PyQt5.QtGui import QPixmap, QIcon, QColor, QFont
 from PyQt5.QtCore import Qt, QDate
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
@@ -3461,9 +3461,354 @@ class TeacherWindow(QtWidgets.QWidget):
             fill[index]()
             self.pages_filled[index] = True
 
+    # ===== DIEM DANH =====
+    # 4 trang thai: present (Co mat) | late (Tre) | absent (Vang) | excused (Co phep)
+    _ATTEND_STATES = [
+        ('present', 'Có mặt', '#276749'),
+        ('late', 'Trễ', '#c68a1e'),
+        ('absent', 'Vắng', '#c53030'),
+        ('excused', 'Có phép', '#3182ce'),
+    ]
+    _ATTEND_LABEL_MAP = {s[0]: s[1] for s in _ATTEND_STATES}
+    _ATTEND_COLOR_MAP = {s[0]: s[2] for s in _ATTEND_STATES}
+
     def _fill_tea_attendance(self):
-        """STUB: se duoc bo sung o commit sau (Quang Huy)"""
-        pass
+        """Trang Diem danh GV: chon lop -> chon buoi -> mark trang thai cho tung HV."""
+        page = self.page_widgets[4]
+
+        # 1. Lay danh sach lop GV dang day
+        gv_id = MOCK_TEACHER.get('user_id')
+        gv_classes = []
+        if DB_AVAILABLE:
+            try:
+                if not CourseService:
+                    raise RuntimeError('CourseService chua co')
+                rows = CourseService.get_classes_by_teacher(gv_id) if gv_id else []
+                gv_classes = [(r['ma_lop'], r.get('ten_mon', '')) for r in rows]
+            except Exception as e:
+                print(f'[TEA_ATTEND] DB loi load classes: {e}')
+        if not gv_classes:
+            gv_classes = [(c[0], c[2]) for c in MOCK_CLASSES if c[3] == 'Nguyễn Đức Thiện']
+
+        cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboAttendClass')
+        if cbo_cls:
+            cbo_cls.clear()
+            cbo_cls.addItem('-- Chọn lớp --')
+            for ma, ten in gv_classes:
+                cbo_cls.addItem(f'{ma} — {ten}', ma)
+
+        # 2. Cache du lieu trong memory de save batch
+        self._attend_cache = {}
+        self._attend_buoi_by_class = {}
+        self._attend_hv_by_class = {}
+
+        # 3. Wire signal
+        if cbo_cls:
+            cbo_cls.currentIndexChanged.connect(self._on_attend_class_changed)
+        cbo_buoi = page.findChild(QtWidgets.QComboBox, 'cboAttendBuoi')
+        if cbo_buoi:
+            cbo_buoi.currentIndexChanged.connect(self._on_attend_buoi_changed)
+
+        btn_save = page.findChild(QtWidgets.QPushButton, 'btnSaveAttend')
+        if btn_save:
+            btn_save.clicked.connect(self._save_attendance)
+        btn_all = page.findChild(QtWidgets.QPushButton, 'btnMarkAllPresent')
+        if btn_all:
+            btn_all.clicked.connect(self._mark_all_present)
+
+        # 4. Render trang trong (cho user chon lop)
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAttendance')
+        if tbl:
+            tbl.setRowCount(0)
+            tbl.verticalHeader().setVisible(False)
+            for c, cw in enumerate([40, 95, 200, 130, 100, 200]):
+                tbl.setColumnWidth(c, cw)
+            tbl.horizontalHeader().setStretchLastSection(True)
+
+    def _on_attend_class_changed(self, idx):
+        """Khi GV doi lop -> load danh sach buoi cua lop do"""
+        page = self.page_widgets[4]
+        cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboAttendClass')
+        cbo_buoi = page.findChild(QtWidgets.QComboBox, 'cboAttendBuoi')
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAttendance')
+        info = page.findChild(QtWidgets.QLabel, 'lblAttendInfo')
+        if not (cbo_cls and cbo_buoi):
+            return
+        if idx <= 0:
+            cbo_buoi.clear()
+            cbo_buoi.addItem('-- Chọn buổi học --')
+            if tbl: tbl.setRowCount(0)
+            if info: info.setText('Chưa chọn buổi')
+            return
+        ma_lop = cbo_cls.itemData(idx) or cbo_cls.currentText().split(' — ')[0]
+
+        buois = []
+        if DB_AVAILABLE:
+            try:
+                if not ScheduleService:
+                    raise RuntimeError('ScheduleService chua co')
+                rows = ScheduleService.get_for_class(ma_lop)
+                for r in rows:
+                    bid = r.get('id')
+                    ngay = r.get('ngay', '')
+                    gio_bd = str(r.get('gio_bat_dau', ''))[:5]
+                    gio_kt = str(r.get('gio_ket_thuc', ''))[:5]
+                    buoi_so = r.get('buoi_so', '?')
+                    label = f'Buổi {buoi_so} — {ngay} ({gio_bd}-{gio_kt})'
+                    buois.append((bid, label, r))
+            except Exception as e:
+                print(f'[TEA_ATTEND] DB loi load buoi: {e}')
+
+        if not buois:
+            from datetime import date, timedelta
+            today = date.today()
+            for i in range(6, 0, -1):
+                d = today - timedelta(days=i * 7)
+                fake_id = -(hash((ma_lop, i)) & 0xFFFFFF)
+                label = f'Buổi {7 - i} — {d.strftime("%d/%m/%Y")} (07:00-09:30)'
+                buois.append((fake_id, label, {'ngay': d, 'gio_bat_dau': '07:00', 'gio_ket_thuc': '09:30'}))
+
+        self._attend_buoi_by_class[ma_lop] = buois
+        cbo_buoi.blockSignals(True)
+        cbo_buoi.clear()
+        cbo_buoi.addItem('-- Chọn buổi học --')
+        for bid, label, _ in buois:
+            cbo_buoi.addItem(label, bid)
+        cbo_buoi.blockSignals(False)
+        if tbl: tbl.setRowCount(0)
+        if info: info.setText(f'Lớp {ma_lop} — {len(buois)} buổi')
+
+    def _on_attend_buoi_changed(self, idx):
+        """Khi GV chon buoi -> render bang HV + trang thai diem danh"""
+        page = self.page_widgets[4]
+        cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboAttendClass')
+        cbo_buoi = page.findChild(QtWidgets.QComboBox, 'cboAttendBuoi')
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAttendance')
+        info = page.findChild(QtWidgets.QLabel, 'lblAttendInfo')
+        if not (cbo_cls and cbo_buoi and tbl) or idx <= 0:
+            if tbl: tbl.setRowCount(0)
+            return
+        ma_lop = cbo_cls.itemData(cbo_cls.currentIndex())
+        buoi_id = cbo_buoi.itemData(idx)
+        if ma_lop is None or buoi_id is None:
+            return
+
+        hvs = self._load_class_students(ma_lop)
+        existing = {}
+        if DB_AVAILABLE and AttendanceService and buoi_id > 0:
+            try:
+                rows = AttendanceService.get_for_schedule(buoi_id)
+                for r in rows:
+                    existing[r['hv_id']] = {
+                        'trang_thai': r.get('trang_thai', ''),
+                        'gio_vao': str(r.get('gio_vao') or ''),
+                        'ghi_chu': r.get('ghi_chu') or '',
+                    }
+            except Exception as e:
+                print(f'[TEA_ATTEND] DB loi load attendance: {e}')
+
+        self._render_attend_table(tbl, hvs, existing)
+        if info:
+            label_buoi = cbo_buoi.currentText()
+            info.setText(f'{label_buoi} — {len(hvs)} HV')
+        self._update_attend_stats()
+
+    def _load_class_students(self, ma_lop):
+        """Lay danh sach HV cua 1 lop (paid). Tra ve [(hv_id, msv, full_name)]"""
+        if ma_lop in self._attend_hv_by_class:
+            return self._attend_hv_by_class[ma_lop]
+        hvs = []
+        if DB_AVAILABLE:
+            try:
+                rows = db.fetch_all(
+                    """SELECT s.user_id AS hv_id, s.msv, u.full_name
+                         FROM registrations r
+                         JOIN students s ON s.user_id = r.hv_id
+                         JOIN users u ON u.id = s.user_id
+                        WHERE r.lop_id = %s AND r.trang_thai IN ('paid', 'completed')
+                     ORDER BY u.full_name""",
+                    (ma_lop,)
+                )
+                hvs = [(r['hv_id'], r['msv'], r['full_name']) for r in rows]
+            except Exception as e:
+                print(f'[TEA_ATTEND] DB loi load HV lop {ma_lop}: {e}')
+        if not hvs:
+            grade_data = getattr(self, '_tea_grades_by_class', {}).get(ma_lop, [])
+            for r in grade_data:
+                msv = r[1]
+                ten = r[2]
+                hvs.append((-(hash(msv) & 0xFFFFFF), msv, ten))
+            if not hvs:
+                hvs = [
+                    (-1001, 'HV2024001', 'Đào Viết Quang Huy'),
+                    (-1002, 'HV2024002', 'Trần Thị Bích'),
+                    (-1015, 'HV2024015', 'Hoàng Văn Em'),
+                    (-1020, 'HV2024020', 'Vũ Thị Phương'),
+                ]
+        self._attend_hv_by_class[ma_lop] = hvs
+        return hvs
+
+    def _render_attend_table(self, tbl, hvs, existing):
+        """Render bang diem danh - moi row gom combo trang thai + giờ vào + ghi chú"""
+        tbl.setRowCount(len(hvs))
+        for r, (hv_id, msv, ten) in enumerate(hvs):
+            tbl.setRowHeight(r, 38)
+            it_stt = QtWidgets.QTableWidgetItem(str(r + 1))
+            it_stt.setTextAlignment(Qt.AlignCenter)
+            it_stt.setFlags(it_stt.flags() & ~Qt.ItemIsEditable)
+            it_stt.setData(Qt.UserRole, hv_id)
+            tbl.setItem(r, 0, it_stt)
+            it_msv = QtWidgets.QTableWidgetItem(msv)
+            it_msv.setTextAlignment(Qt.AlignCenter)
+            it_msv.setFlags(it_msv.flags() & ~Qt.ItemIsEditable)
+            tbl.setItem(r, 1, it_msv)
+            it_ten = QtWidgets.QTableWidgetItem(ten)
+            it_ten.setFlags(it_ten.flags() & ~Qt.ItemIsEditable)
+            tbl.setItem(r, 2, it_ten)
+            combo = QtWidgets.QComboBox()
+            combo.setProperty('hv_id', hv_id)
+            combo.addItem('— Chưa điểm danh —', '')
+            for code, label, _ in self._ATTEND_STATES:
+                combo.addItem(label, code)
+            cur_st = existing.get(hv_id, {}).get('trang_thai', '')
+            for i in range(combo.count()):
+                if combo.itemData(i) == cur_st:
+                    combo.setCurrentIndex(i)
+                    break
+            combo.setStyleSheet(
+                'QComboBox { padding: 4px 8px; border: 1px solid #cbd5e0; border-radius: 4px; '
+                'background: white; font-size: 12px; min-height: 24px; }'
+            )
+            combo.currentIndexChanged.connect(lambda _i, rr=r: self._on_attend_combo_changed(rr))
+            tbl.setCellWidget(r, 3, combo)
+            te = QtWidgets.QTimeEdit()
+            te.setDisplayFormat('HH:mm')
+            te.setStyleSheet(
+                'QTimeEdit { padding: 3px 6px; border: 1px solid #cbd5e0; border-radius: 4px; '
+                'background: white; font-size: 12px; min-height: 24px; }'
+            )
+            cur_gv = existing.get(hv_id, {}).get('gio_vao', '')
+            if cur_gv:
+                try:
+                    h, m = cur_gv.split(':')[:2]
+                    te.setTime(QtCore.QTime(int(h), int(m)))
+                except Exception:
+                    te.setTime(QtCore.QTime(7, 0))
+            else:
+                te.setTime(QtCore.QTime(7, 0))
+            tbl.setCellWidget(r, 4, te)
+            it_note = QtWidgets.QTableWidgetItem(existing.get(hv_id, {}).get('ghi_chu', ''))
+            tbl.setItem(r, 5, it_note)
+
+    def _on_attend_combo_changed(self, row):
+        """Toi mau row khi GV chon trang thai"""
+        page = self.page_widgets[4]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAttendance')
+        if not tbl: return
+        combo = tbl.cellWidget(row, 3)
+        if not combo: return
+        code = combo.currentData()
+        color = self._ATTEND_COLOR_MAP.get(code, '#718096')
+        for c in (0, 1, 2, 5):
+            it = tbl.item(row, c)
+            if it:
+                if code:
+                    it.setBackground(QColor(color + '15'))
+                else:
+                    it.setBackground(QColor('#ffffff'))
+        self._update_attend_stats()
+
+    def _update_attend_stats(self):
+        """Cap nhat label thong ke: x co mat / y vang / z tre"""
+        page = self.page_widgets[4]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAttendance')
+        lbl = page.findChild(QtWidgets.QLabel, 'lblAttendStats')
+        if not (tbl and lbl): return
+        cnt = {'present': 0, 'late': 0, 'absent': 0, 'excused': 0, '': 0}
+        for r in range(tbl.rowCount()):
+            cb = tbl.cellWidget(r, 3)
+            if cb:
+                cnt[cb.currentData() or ''] = cnt.get(cb.currentData() or '', 0) + 1
+        parts = [
+            f'<span style="color:#276749;"><b>{cnt["present"]}</b> Có mặt</span>',
+            f'<span style="color:#c68a1e;"><b>{cnt["late"]}</b> Trễ</span>',
+            f'<span style="color:#c53030;"><b>{cnt["absent"]}</b> Vắng</span>',
+            f'<span style="color:#3182ce;"><b>{cnt["excused"]}</b> Có phép</span>',
+        ]
+        if cnt['']:
+            parts.append(f'<span style="color:#a0aec0;">{cnt[""]} chưa ghi</span>')
+        lbl.setText('  ·  '.join(parts))
+
+    def _mark_all_present(self):
+        """Quick action: set tat ca HV chua diem danh -> 'present'"""
+        page = self.page_widgets[4]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAttendance')
+        if not tbl or tbl.rowCount() == 0:
+            msg_info(self, 'Chưa có dữ liệu', 'Hãy chọn lớp và buổi học trước.')
+            return
+        for r in range(tbl.rowCount()):
+            cb = tbl.cellWidget(r, 3)
+            if cb and not cb.currentData():
+                for i in range(cb.count()):
+                    if cb.itemData(i) == 'present':
+                        cb.setCurrentIndex(i)
+                        break
+
+    def _save_attendance(self):
+        """Luu attendance vao DB qua AttendanceService.mark()"""
+        page = self.page_widgets[4]
+        cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboAttendClass')
+        cbo_buoi = page.findChild(QtWidgets.QComboBox, 'cboAttendBuoi')
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAttendance')
+        if not (cbo_cls and cbo_buoi and tbl) or cbo_buoi.currentIndex() <= 0:
+            msg_info(self, 'Chưa chọn buổi', 'Vui lòng chọn lớp và buổi học trước khi lưu.')
+            return
+        if tbl.rowCount() == 0:
+            msg_info(self, 'Chưa có dữ liệu', 'Không có học viên nào để điểm danh.')
+            return
+
+        buoi_id = cbo_buoi.itemData(cbo_buoi.currentIndex())
+        gv_id = MOCK_TEACHER.get('user_id')
+        records = []
+        for r in range(tbl.rowCount()):
+            it_stt = tbl.item(r, 0)
+            cb = tbl.cellWidget(r, 3)
+            te = tbl.cellWidget(r, 4)
+            it_note = tbl.item(r, 5)
+            if not (it_stt and cb): continue
+            code = cb.currentData()
+            if not code:
+                continue
+            hv_id = it_stt.data(Qt.UserRole)
+            gio_vao = te.time().toString('HH:mm') if te and code in ('present', 'late') else None
+            ghi_chu = it_note.text().strip() if it_note else ''
+            records.append((hv_id, code, gio_vao, ghi_chu))
+
+        if not records:
+            if not msg_confirm(self, 'Chưa điểm danh ai',
+                               'Bạn chưa chọn trạng thái cho học viên nào. Vẫn lưu (rỗng)?'):
+                return
+
+        saved = 0
+        if DB_AVAILABLE and AttendanceService and buoi_id and buoi_id > 0:
+            for hv_id, code, gio_vao, ghi_chu in records:
+                try:
+                    AttendanceService.mark(buoi_id, hv_id, code,
+                                           gio_vao=gio_vao,
+                                           recorded_by=gv_id,
+                                           ghi_chu=ghi_chu or None)
+                    saved += 1
+                except Exception as e:
+                    print(f'[TEA_ATTEND] save hv_id={hv_id}: {e}')
+            msg_info(self, 'Thành công', f'Đã lưu điểm danh {saved}/{len(records)} học viên vào DB.')
+        else:
+            ma_lop = cbo_cls.itemData(cbo_cls.currentIndex())
+            self._attend_cache.setdefault(ma_lop, {})[buoi_id] = {
+                hv_id: {'trang_thai': code, 'gio_vao': gio_vao, 'ghi_chu': ghi_chu}
+                for hv_id, code, gio_vao, ghi_chu in records
+            }
+            msg_info(self, 'Đã lưu (MOCK)',
+                     f'Đã ghi điểm danh {len(records)} HV vào bộ nhớ tạm (chế độ MOCK).')
 
     def _switch_page(self, index):
         self.stack.setCurrentIndex(index)
