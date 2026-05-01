@@ -1,0 +1,114 @@
+"""Users router: Students, Teachers, Employees, Reviews."""
+from fastapi import APIRouter
+
+from backend.api.schemas import (EmployeeCreate, EmployeeUpdate, ReviewSubmit,
+                                  StudentCreate, StudentUpdate, TeacherCreate, TeacherUpdate)
+from backend.services.user_service import (EmployeeService, ReviewService,
+                                            StudentService, TeacherService)
+
+router = APIRouter()
+
+
+# ===== Students =====
+@router.get('/students')
+def list_students():
+    return StudentService.get_all()
+
+
+@router.get('/students/{msv}')
+def get_student(msv: str):
+    return StudentService.get_by_msv(msv)
+
+
+@router.post('/students')
+def create_student(req: StudentCreate):
+    uid = StudentService.create(
+        req.username, req.password, req.full_name, req.msv,
+        email=req.email, sdt=req.sdt, ngaysinh=req.ngaysinh,
+        gioitinh=req.gioitinh, diachi=req.diachi
+    )
+    return {'user_id': uid}
+
+
+@router.put('/students/{user_id}')
+def update_student(user_id: int, req: StudentUpdate):
+    fields = req.model_dump(exclude_none=True)
+    StudentService.update(user_id, **fields)
+    return {'status': 'ok'}
+
+
+@router.delete('/students/{user_id}')
+def delete_student(user_id: int):
+    StudentService.delete(user_id)
+    return {'status': 'deactivated'}
+
+
+# ===== Teachers =====
+@router.get('/teachers')
+def list_teachers():
+    return TeacherService.get_all()
+
+
+@router.get('/teachers/for-review')
+def teachers_for_review():
+    return TeacherService.get_for_review()
+
+
+@router.post('/teachers')
+def create_teacher(req: TeacherCreate):
+    uid = TeacherService.create(
+        req.username, req.password, req.full_name, req.ma_gv,
+        email=req.email, sdt=req.sdt, hoc_vi=req.hoc_vi,
+        khoa=req.khoa, chuyen_nganh=req.chuyen_nganh, tham_nien=req.tham_nien
+    )
+    return {'user_id': uid}
+
+
+@router.put('/teachers/{user_id}')
+def update_teacher(user_id: int, req: TeacherUpdate):
+    fields = req.model_dump(exclude_none=True)
+    TeacherService.update(user_id, **fields)
+    return {'status': 'ok'}
+
+
+@router.delete('/teachers/{user_id}')
+def delete_teacher(user_id: int):
+    TeacherService.delete(user_id)
+    return {'status': 'deactivated'}
+
+
+# ===== Employees =====
+@router.get('/employees')
+def list_employees():
+    return EmployeeService.get_all()
+
+
+@router.post('/employees')
+def create_employee(req: EmployeeCreate):
+    uid = EmployeeService.create(
+        req.username, req.password, req.full_name, req.ma_nv,
+        email=req.email, sdt=req.sdt, chuc_vu=req.chuc_vu,
+        phong_ban=req.phong_ban, ngay_vao_lam=req.ngay_vao_lam
+    )
+    return {'user_id': uid}
+
+
+@router.put('/employees/{user_id}')
+def update_employee(user_id: int, req: EmployeeUpdate):
+    fields = req.model_dump(exclude_none=True)
+    EmployeeService.update(user_id, **fields)
+    return {'status': 'ok'}
+
+
+@router.delete('/employees/{user_id}')
+def delete_employee(user_id: int):
+    EmployeeService.delete(user_id)
+    return {'status': 'deactivated'}
+
+
+# ===== Reviews =====
+@router.post('/reviews')
+def submit_review(req: ReviewSubmit):
+    ReviewService.submit_review(req.hv_id, req.gv_id, req.lop_id, req.diem,
+                                 nhan_xet=req.nhan_xet)
+    return {'status': 'submitted'}
