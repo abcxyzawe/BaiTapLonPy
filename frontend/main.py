@@ -3755,7 +3755,8 @@ class TeacherWindow(QtWidgets.QWidget):
                         break
 
     def _save_attendance(self):
-        """Luu attendance vao DB qua AttendanceService.mark()"""
+        """Luu attendance vao DB qua AttendanceService.mark()
+        Neu buoi la MOCK (id am) ma user co DB -> hoi co tu dong tao buoi that khong"""
         page = self.page_widgets[4]
         cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboAttendClass')
         cbo_buoi = page.findChild(QtWidgets.QComboBox, 'cboAttendBuoi')
@@ -3768,6 +3769,7 @@ class TeacherWindow(QtWidgets.QWidget):
             return
 
         buoi_id = cbo_buoi.itemData(cbo_buoi.currentIndex())
+        ma_lop = cbo_cls.itemData(cbo_cls.currentIndex())
         gv_id = MOCK_TEACHER.get('user_id')
         records = []
         for r in range(tbl.rowCount()):
@@ -3789,6 +3791,46 @@ class TeacherWindow(QtWidgets.QWidget):
                                'Bạn chưa chọn trạng thái cho học viên nào. Vẫn lưu (rỗng)?'):
                 return
 
+        # Neu buoi la MOCK (id am) ma co DB -> hoi user xem co tao buoi that khong
+        # de attendance vao DB chu khong vo cache RAM
+        if DB_AVAILABLE and AttendanceService and (not buoi_id or buoi_id <= 0):
+            if msg_confirm(self, 'Buổi học chưa có trong DB',
+                           f'Buổi này được sinh tự động (mock).\n'
+                           f'Bạn có muốn tạo buổi học THẬT trong DB cho lớp {ma_lop} '
+                           f'để lưu điểm danh + tính chuyên cần không?\n\n'
+                           f'Chọn "Có" -> tạo schedule mới + lưu DB\n'
+                           f'Chọn "Không" -> chỉ ghi vào bộ nhớ tạm (sẽ mất khi tắt app)'):
+                # Lay info buoi tu cache
+                buoi_info = None
+                for bid, label, info in self._attend_buoi_by_class.get(ma_lop, []):
+                    if bid == buoi_id:
+                        buoi_info = info
+                        break
+                buoi_info = buoi_info or {}
+                # Tao schedule moi trong DB
+                try:
+                    from datetime import date as _date
+                    ngay_val = buoi_info.get('ngay') or _date.today()
+                    new_id = db.execute_returning(
+                        """INSERT INTO schedules (lop_id, ngay, gio_bat_dau, gio_ket_thuc,
+                                                  buoi_so, trang_thai)
+                           VALUES (%s, %s, %s, %s,
+                                   COALESCE((SELECT MAX(buoi_so)+1 FROM schedules WHERE lop_id=%s), 1),
+                                   'completed')
+                           RETURNING id""",
+                        (ma_lop, ngay_val,
+                         str(buoi_info.get('gio_bat_dau', '07:00'))[:5],
+                         str(buoi_info.get('gio_ket_thuc', '09:30'))[:5],
+                         ma_lop)
+                    )
+                    if new_id:
+                        buoi_id = new_id['id']
+                        print(f'[TEA_ATTEND] Tao schedule moi cho {ma_lop}, id={buoi_id}')
+                except Exception as e:
+                    print(f'[TEA_ATTEND] Khong tao duoc schedule: {e}')
+                    msg_info(self, 'Lỗi tạo buổi', f'Không thể tạo buổi học trong DB:\n{e}')
+                    return
+
         saved = 0
         if DB_AVAILABLE and AttendanceService and buoi_id and buoi_id > 0:
             for hv_id, code, gio_vao, ghi_chu in records:
@@ -3800,15 +3842,19 @@ class TeacherWindow(QtWidgets.QWidget):
                     saved += 1
                 except Exception as e:
                     print(f'[TEA_ATTEND] save hv_id={hv_id}: {e}')
-            msg_info(self, 'Thành công', f'Đã lưu điểm danh {saved}/{len(records)} học viên vào DB.')
+            msg_info(self, 'Thành công',
+                     f'Đã lưu điểm danh {saved}/{len(records)} học viên vào DB.\n'
+                     f'Lớp {ma_lop} - schedule_id={buoi_id}.\n\n'
+                     f'→ Có thể sang trang "Nhập điểm" và bấm "↻ CC từ điểm danh" '
+                     f'để fill cột Chuyên cần.')
         else:
-            ma_lop = cbo_cls.itemData(cbo_cls.currentIndex())
             self._attend_cache.setdefault(ma_lop, {})[buoi_id] = {
                 hv_id: {'trang_thai': code, 'gio_vao': gio_vao, 'ghi_chu': ghi_chu}
                 for hv_id, code, gio_vao, ghi_chu in records
             }
             msg_info(self, 'Đã lưu (MOCK)',
-                     f'Đã ghi điểm danh {len(records)} HV vào bộ nhớ tạm (chế độ MOCK).')
+                     f'Đã ghi điểm danh {len(records)} HV vào bộ nhớ tạm (chế độ MOCK).\n'
+                     f'⚠ Dữ liệu sẽ MẤT khi tắt app, và CC tự động không lấy được.')
 
     def _switch_page(self, index):
         self.stack.setCurrentIndex(index)
@@ -4341,39 +4387,102 @@ class TeacherWindow(QtWidgets.QWidget):
 
     def _sync_cc_from_attendance(self, tbl, cbo):
         """Fill cot Chuyen can (col 3) tu attendance_rate cua tung HV
-        Cong thuc: CC = round(attendance_rate / 10, 1)  (= rate% / 10)"""
+        Cong thuc: CC = round(attendance_rate / 10, 1)  (= rate% / 10)
+        - Lay theo MSV cot 1, fallback theo Ho ten neu MSV khong khop DB
+        - Verbose log de debug"""
         if not (tbl and cbo):
             return
         ma_lop = cbo.currentText() if cbo.currentIndex() > 0 else None
         if not ma_lop:
             msg_info(self, 'Chưa chọn lớp', 'Chọn 1 lớp cụ thể trước khi đồng bộ điểm chuyên cần.')
             return
+        if tbl.rowCount() == 0:
+            msg_info(self, 'Bảng trống',
+                     f'Lớp {ma_lop} chưa có học viên trong bảng điểm.\n'
+                     'Hãy chọn lớp khác (có dữ liệu) hoặc nhập điểm trước khi đồng bộ.')
+            return
         if not (DB_AVAILABLE and AttendanceService):
             msg_info(self, 'Không có DB',
                      'Cần kết nối database để tính chuyên cần từ điểm danh thực tế.')
             return
 
+        # Lay 1 phat tat ca attendance_rate cua HV trong lop nay (tranh N+1 query)
+        rates_by_msv = {}
+        try:
+            rows = db.fetch_all(
+                """SELECT s.msv,
+                          COUNT(*) FILTER (WHERE a.trang_thai IN ('present','late')) AS present_cnt,
+                          COUNT(*) AS total
+                     FROM students s
+                     JOIN attendance a ON a.hv_id = s.user_id
+                     JOIN schedules sc ON sc.id = a.schedule_id
+                    WHERE sc.lop_id = %s
+                 GROUP BY s.msv""",
+                (ma_lop,)
+            )
+            for r in rows:
+                if r['total']:
+                    rates_by_msv[r['msv']] = round(r['present_cnt'] / r['total'] * 100, 1)
+            print(f"[SYNC_CC] lop={ma_lop} - tim thay attendance cua {len(rates_by_msv)} HV")
+        except Exception as e:
+            print(f'[SYNC_CC] loi truy van batch: {e}')
+
         self._grades_recalc_lock = True
-        updated = 0
-        for r in range(tbl.rowCount()):
+        n_filled = 0       # so HV duoc fill CC tu diem danh thuc te
+        n_no_data = 0      # so HV chua co diem danh
+        n_no_db = 0        # so HV khong tim thay trong DB
+        n_total = tbl.rowCount()
+
+        for r in range(n_total):
             it_msv = tbl.item(r, 1)
-            if not it_msv: continue
+            it_cc = tbl.item(r, 3)
+            if not (it_msv and it_cc): continue
             msv = it_msv.text().strip()
             if not msv: continue
             try:
-                hv = db.fetch_one("SELECT user_id FROM students WHERE msv = %s", (msv,))
-                if not hv: continue
-                rate = AttendanceService.attendance_rate(hv['user_id'], ma_lop)
-                cc = round(rate / 10, 1)  # rate la % (0-100) -> diem 0-10
-                it_cc = tbl.item(r, 3)
-                if it_cc:
-                    it_cc.setText(f'{cc:.1f}' if cc > 0 else '')
-                    updated += 1
+                if msv in rates_by_msv:
+                    rate = rates_by_msv[msv]
+                    cc = round(rate / 10, 1)
+                    it_cc.setText(f'{cc:.1f}')
+                    n_filled += 1
+                    print(f'[SYNC_CC] {msv}: rate={rate}% -> CC={cc}')
+                else:
+                    # check xem msv co trong DB khong
+                    hv = db.fetch_one("SELECT user_id FROM students WHERE msv = %s", (msv,))
+                    if hv:
+                        n_no_data += 1
+                        print(f'[SYNC_CC] {msv}: chua co diem danh nao')
+                    else:
+                        n_no_db += 1
+                        print(f'[SYNC_CC] {msv}: khong co trong DB students (mock?)')
             except Exception as e:
-                print(f'[GRADE_SYNC_CC] {msv}: {e}')
+                print(f'[SYNC_CC] {msv} exception: {e}')
         self._grades_recalc_lock = False
-        msg_info(self, 'Đã đồng bộ',
-                 f'Đã cập nhật cột Chuyên cần cho {updated} học viên từ điểm danh thực tế.')
+
+        # Bao cao chi tiet
+        if n_filled > 0:
+            extra = []
+            if n_no_data: extra.append(f'{n_no_data} HV chưa có điểm danh')
+            if n_no_db: extra.append(f'{n_no_db} HV không có trong DB')
+            tail = '\n• ' + '\n• '.join(extra) if extra else ''
+            msg_info(self, 'Đã đồng bộ',
+                     f'Đã fill cột Chuyên cần cho <b>{n_filled}/{n_total}</b> học viên'
+                     f' từ điểm danh thực tế.{tail}')
+        else:
+            # Khong co HV nao co diem danh -> phan tich vi sao
+            reason = []
+            if not rates_by_msv:
+                reason.append(f'• Lớp {ma_lop} chưa có ai được điểm danh trong DB')
+                reason.append('  → Vào trang "Điểm danh", chọn lớp + buổi, mark trạng thái rồi LƯU')
+                reason.append('  → Đảm bảo buổi học là buổi THẬT (load từ DB) chứ không phải buổi mock')
+            if n_no_db == n_total:
+                reason.append(f'• Tất cả {n_total} HV trong bảng KHÔNG có trong DB students')
+                reason.append('  → Có thể bảng đang dùng MOCK data, cần seed lại DB')
+            msg_info(self, 'Chưa fill được CC',
+                     'Không có HV nào được cập nhật. Lý do có thể:\n\n' +
+                     ('\n'.join(reason) if reason else
+                      '• Đã điểm danh nhưng lưu vào MOCK chứ không vào DB.\n'
+                      '• Hãy mở Console (run từ terminal) xem log [SYNC_CC] de biet chi tiet.'))
 
     def _tea_grades_render(self, tbl, ma_lop):
         """Render bang nhap diem theo lop. ma_lop=None = hien tat ca HV o moi lop
