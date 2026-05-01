@@ -432,6 +432,8 @@ MOCK_CLASSES = [
     ('IT004-B', 'IT004', 'Trí tuệ nhân tạo', 'Hoàng Minh Tuấn', 'T5 (13:00-15:30)', 'P.B301', 35, 20, 2200000),
     ('MA001-A', 'MA001', 'Toán rời rạc', 'Nguyễn Thị E', 'T2 (9:30-12:00)', 'P.A203', 40, 30, 1500000),
     ('MA001-B', 'MA001', 'Toán rời rạc', 'Lê Văn M', 'T4 (9:30-12:00)', 'P.B204', 40, 25, 1200000),
+    ('IT002-C', 'IT002', 'Cơ sở dữ liệu', 'Nguyễn Đức Thiện', 'T2 (13:00-15:30)', 'P.A205', 40, 32, 2200000),
+    ('IT009-A', 'IT009', 'Phát triển web', 'Nguyễn Đức Thiện', 'T7 (9:30-12:00)', 'P.C201', 35, 28, 2500000),
 ]
 
 
@@ -3551,12 +3553,13 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.setColumnWidth(0, 45)
         for i in range(1, 7):
             tbl.setColumnWidth(i, 92)
+        # font lon hon cho lich day - dec hon nhin tu xa
         for r in range(len(hours)):
-            tbl.setRowHeight(r, 45)
+            tbl.setRowHeight(r, 55)
             item = QtWidgets.QTableWidgetItem(hours[r])
             item.setTextAlignment(Qt.AlignRight | Qt.AlignTop)
             item.setForeground(QColor('#718096'))
-            item.setFont(QFont('Segoe UI', 8))
+            item.setFont(QFont('Segoe UI', 9))
             tbl.setItem(r, 0, item)
         for r in range(len(hours)):
             for c in range(1, 7):
@@ -3567,12 +3570,12 @@ class TeacherWindow(QtWidgets.QWidget):
             f = QtWidgets.QFrame()
             f.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #d2d6dc; border-radius: 4px; border-top: 3px solid {color}; margin: 1px; }}')
             vb = QtWidgets.QVBoxLayout(f)
-            vb.setContentsMargins(4, 3, 4, 3)
-            vb.setSpacing(1)
-            for txt, st in [(ten, f'color: {color}; font-size: 9px; font-weight: bold; border: none;'),
-                            (ts, 'color: #4a5568; font-size: 8px; border: none;'),
-                            (f'Tòa {toa} - {phong}', 'color: #718096; font-size: 8px; border: none;'),
-                            (ss, 'color: #4a5568; font-size: 8px; border: none;')]:
+            vb.setContentsMargins(5, 4, 5, 4)
+            vb.setSpacing(2)
+            for txt, st in [(ten, f'color: {color}; font-size: 11px; font-weight: bold; border: none;'),
+                            (ts, 'color: #4a5568; font-size: 10px; border: none;'),
+                            (f'Tòa {toa} - {phong}', 'color: #718096; font-size: 9px; border: none;'),
+                            (ss, 'color: #4a5568; font-size: 9px; border: none;')]:
                 l = QtWidgets.QLabel(txt)
                 l.setStyleSheet(st)
                 l.setWordWrap(True)
@@ -3746,7 +3749,8 @@ class TeacherWindow(QtWidgets.QWidget):
         for r in range(len(data)):
             tbl.setRowHeight(r, 40)
 
-        widen_search(page, 'txtSearchStudent', 280, ['btnExportStudents'])
+        # btnExportStudents nam o headerBar va da o sat phai - khong day
+        widen_search(page, 'txtSearchStudent', 280)
         # filter + search
         txt_s = page.findChild(QtWidgets.QLineEdit, 'txtSearchStudent')
         if txt_s:
@@ -3909,23 +3913,32 @@ class TeacherWindow(QtWidgets.QWidget):
             except Exception as e:
                 print(f'[TEA_GRADES] DB loi: {e}')
 
-        # fallback MOCK
+        # fallback MOCK - them cot Chuyen can sau Ho ten
         if not self._tea_grades_by_class:
             self._tea_grades_by_class = {
                 'IT001-A': [
-                    ['1', 'HV2024001', 'Đào Viết Quang Huy', '8.5', '7.5', '7.8', 'B+'],
-                    ['2', 'HV2024002', 'Trần Thị Bích',       '9.0', '8.5', '8.7', 'A'],
-                    ['3', 'HV2024015', 'Hoàng Văn Em',         '9.5', '9.0', '9.2', 'A+'],
-                    ['4', 'HV2024020', 'Vũ Thị Phương',        '8.0', '7.0', '7.3', 'B'],
+                    ['1', 'HV2024001', 'Đào Viết Quang Huy', '9.0', '8.5', '7.5', '7.8', 'B+'],
+                    ['2', 'HV2024002', 'Trần Thị Bích',       '9.5', '9.0', '8.5', '8.7', 'A'],
+                    ['3', 'HV2024015', 'Hoàng Văn Em',         '10',  '9.5', '9.0', '9.2', 'A+'],
+                    ['4', 'HV2024020', 'Vũ Thị Phương',        '8.0', '8.0', '7.0', '7.3', 'B'],
                 ],
                 'IT004-A': [
-                    ['1', 'HV2024025', 'Nguyễn Thanh Giang', '7.5', '7.0', '7.2', 'B'],
-                    ['2', 'HV2024030', 'Bùi Thị Hồng',        '8.5', '8.0', '8.2', 'B+'],
-                    ['3', 'HV2024001', 'Đào Viết Quang Huy', '',    '',    '',    ''],
+                    ['1', 'HV2024025', 'Nguyễn Thanh Giang', '8.5', '7.5', '7.0', '7.2', 'B'],
+                    ['2', 'HV2024030', 'Bùi Thị Hồng',        '9.0', '8.5', '8.0', '8.2', 'B+'],
+                    ['3', 'HV2024001', 'Đào Viết Quang Huy', '',    '',    '',    '',    ''],
                 ],
                 'IT001-C': [
-                    ['1', 'HV2024003', 'Lê Văn Cường', '7.0', '6.5', '6.7', 'C+'],
-                    ['2', 'HV2024010', 'Phạm Thị Dung', '8.0', '7.5', '7.7', 'B'],
+                    ['1', 'HV2024003', 'Lê Văn Cường', '7.5', '7.0', '6.5', '6.7', 'C+'],
+                    ['2', 'HV2024010', 'Phạm Thị Dung', '8.5', '8.0', '7.5', '7.7', 'B'],
+                ],
+                'IT002-C': [
+                    ['1', 'HV2024005', 'Trần Văn An', '9.0', '8.0', '7.5', '7.7', 'B'],
+                    ['2', 'HV2024012', 'Nguyễn Thị Lan', '8.5', '7.5', '7.0', '7.2', 'B'],
+                    ['3', 'HV2024018', 'Lê Hoàng Nam', '10',  '9.0', '8.5', '8.7', 'A'],
+                ],
+                'IT009-A': [
+                    ['1', 'HV2024007', 'Phạm Quỳnh Mai', '9.5', '9.0', '8.5', '8.7', 'A'],
+                    ['2', 'HV2024014', 'Đỗ Anh Tú', '8.0', '7.5', '7.0', '7.2', 'B'],
                 ],
             }
         # defaut show tat ca
@@ -3942,8 +3955,10 @@ class TeacherWindow(QtWidgets.QWidget):
             'border: 2px solid #002060; selection-background-color: #002060; '
             'selection-color: white; }'
         )
+        # cot CC (3), QT (4), Thi (5) - cho nhap truc tiep tren bang
         tbl.setItemDelegateForColumn(3, _GradeEditorDelegate(tbl))
         tbl.setItemDelegateForColumn(4, _GradeEditorDelegate(tbl))
+        tbl.setItemDelegateForColumn(5, _GradeEditorDelegate(tbl))
         tbl.itemChanged.connect(self._recalc_grade_row)
         self._grades_recalc_lock = False
 
@@ -3956,21 +3971,29 @@ class TeacherWindow(QtWidgets.QWidget):
             cbo.currentIndexChanged.connect(lambda idx: self._tea_grades_render(tbl, cbo.currentText() if idx > 0 else None))
 
     def _tea_grades_render(self, tbl, ma_lop):
-        """Render bang nhap diem theo lop. ma_lop=None = hien tat ca HV o moi lop"""
+        """Render bang nhap diem theo lop. ma_lop=None = hien tat ca HV o moi lop
+        Cot: STT | Ma HV | Ho ten | Chuyen can | QT | Thi | TK | XL | Thao tac"""
         grade_colors = {'A+': COLORS['green'], 'A': COLORS['green'],
                         'B+': COLORS['navy'], 'B': COLORS['navy'],
                         'C+': COLORS['orange'], 'C': COLORS['orange'],
                         'D': COLORS['red'], 'F': COLORS['red']}
-        # lay data theo lop
+
+        # helper - normalize 1 row ve dung 8 col (chen CC='' neu thieu)
+        def _norm(stt, r, suffix=''):
+            ten = r[2] + suffix
+            if len(r) == 7:  # legacy: STT|MaHV|HoTen|QT|Thi|TK|XL
+                return [str(stt), r[1], ten, '', r[3], r[4], r[5], r[6]]
+            return [str(stt), r[1], ten, r[3], r[4], r[5], r[6], r[7]]
+
         if ma_lop and ma_lop in self._tea_grades_by_class:
-            data = self._tea_grades_by_class[ma_lop]
+            raw = self._tea_grades_by_class[ma_lop]
+            data = [_norm(i, r) for i, r in enumerate(raw, start=1)]
         else:
-            # gop tat ca lop
             data = []
             stt = 1
             for lop, rows in self._tea_grades_by_class.items():
                 for r in rows:
-                    data.append([str(stt), r[1], r[2] + f'  ({lop})', r[3], r[4], r[5], r[6]])
+                    data.append(_norm(stt, r, suffix=f'  ({lop})'))
                     stt += 1
 
         self._grades_recalc_lock = True
@@ -3979,19 +4002,22 @@ class TeacherWindow(QtWidgets.QWidget):
             for c, val in enumerate(row):
                 item = QtWidgets.QTableWidgetItem(str(val))
                 item.setTextAlignment(Qt.AlignCenter if c != 2 else Qt.AlignLeft | Qt.AlignVCenter)
-                if c == 6 and val:
+                if c == 7 and val:
                     item.setForeground(QColor(grade_colors.get(val, COLORS['text_mid'])))
                     item.setFont(QFont('Segoe UI', 11, QFont.Bold))
-                # cot diem QT (3), diem thi (4) -> cho edit
-                if c not in (3, 4):
+                # cot CC (3), QT (4), Thi (5) cho edit truc tiep tren bang
+                if c not in (3, 4, 5):
                     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 tbl.setItem(r, c, item)
-            # them nut 'Nhap diem' cot 7 (them cot action)
-        # resize columns
-        tbl.setColumnCount(8)
-        if not tbl.horizontalHeaderItem(7) or tbl.horizontalHeaderItem(7).text() != 'Thao tác':
-            tbl.setHorizontalHeaderItem(7, QtWidgets.QTableWidgetItem('Thao tác'))
-        for c, cw in enumerate([40, 95, 180, 85, 85, 80, 70, 100]):
+        # resize columns - them cot Chuyen can va day Thao tac sang phai
+        tbl.setColumnCount(9)
+        tbl.setHorizontalHeaderItem(3, QtWidgets.QTableWidgetItem('Chuyên cần'))
+        tbl.setHorizontalHeaderItem(4, QtWidgets.QTableWidgetItem('Điểm QT'))
+        tbl.setHorizontalHeaderItem(5, QtWidgets.QTableWidgetItem('Điểm thi'))
+        tbl.setHorizontalHeaderItem(6, QtWidgets.QTableWidgetItem('Tổng kết'))
+        tbl.setHorizontalHeaderItem(7, QtWidgets.QTableWidgetItem('Xếp loại'))
+        tbl.setHorizontalHeaderItem(8, QtWidgets.QTableWidgetItem('Thao tác'))
+        for c, cw in enumerate([36, 90, 165, 75, 70, 70, 70, 65, 95]):
             tbl.setColumnWidth(c, cw)
         tbl.horizontalHeader().setStretchLastSection(True)
         tbl.verticalHeader().setVisible(False)
@@ -4000,27 +4026,29 @@ class TeacherWindow(QtWidgets.QWidget):
             # nut nhap diem (dialog dang)
             btn_enter = QtWidgets.QPushButton('Nhập điểm')
             btn_enter.setCursor(Qt.PointingHandCursor)
-            btn_enter.setFixedSize(88, 28)
+            btn_enter.setFixedSize(84, 28)
             btn_enter.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
             btn_enter.clicked.connect(lambda ch, rr=r: self._tea_grade_dialog(tbl, rr))
             w = QtWidgets.QWidget()
             hl = QtWidgets.QHBoxLayout(w)
             hl.setContentsMargins(0, 0, 0, 0); hl.setAlignment(Qt.AlignCenter)
             hl.addWidget(btn_enter)
-            tbl.setCellWidget(r, 7, w)
+            tbl.setCellWidget(r, 8, w)
         self._grades_recalc_lock = False
 
     def _tea_grade_dialog(self, tbl, row_idx):
-        """Dialog nhap diem QT + Thi cho 1 HV, tu dong tinh tong ket + xep loai"""
+        """Dialog nhap CC + QT + Thi cho 1 HV, tu dong tinh TK + xep loai
+        TK = QT*0.3 + Thi*0.7 (chuyen can chi luu de tham khao)"""
         msv = tbl.item(row_idx, 1).text() if tbl.item(row_idx, 1) else ''
         hoten = tbl.item(row_idx, 2).text() if tbl.item(row_idx, 2) else ''
-        cur_qt = tbl.item(row_idx, 3).text() if tbl.item(row_idx, 3) else ''
-        cur_thi = tbl.item(row_idx, 4).text() if tbl.item(row_idx, 4) else ''
+        cur_cc = tbl.item(row_idx, 3).text() if tbl.item(row_idx, 3) else ''
+        cur_qt = tbl.item(row_idx, 4).text() if tbl.item(row_idx, 4) else ''
+        cur_thi = tbl.item(row_idx, 5).text() if tbl.item(row_idx, 5) else ''
 
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle(f'Nhập điểm - {msv}')
-        dlg.setFixedSize(420, 360)
+        dlg.setFixedSize(440, 410)
         lay = QtWidgets.QVBoxLayout(dlg)
         lay.setContentsMargins(24, 20, 24, 20)
         lay.setSpacing(14)
@@ -4031,12 +4059,16 @@ class TeacherWindow(QtWidgets.QWidget):
 
         form = QtWidgets.QFormLayout()
         form.setSpacing(12)
+        sp_cc = QtWidgets.QDoubleSpinBox()
+        sp_cc.setRange(0, 10); sp_cc.setDecimals(1); sp_cc.setSingleStep(0.5)
+        sp_cc.setValue(float(cur_cc) if cur_cc else 0)
         sp_qt = QtWidgets.QDoubleSpinBox()
         sp_qt.setRange(0, 10); sp_qt.setDecimals(2); sp_qt.setSingleStep(0.5)
         sp_qt.setValue(float(cur_qt) if cur_qt else 0)
         sp_thi = QtWidgets.QDoubleSpinBox()
         sp_thi.setRange(0, 10); sp_thi.setDecimals(2); sp_thi.setSingleStep(0.5)
         sp_thi.setValue(float(cur_thi) if cur_thi else 0)
+        form.addRow('Chuyên cần (/10):', sp_cc)
         form.addRow('Điểm quá trình (30%):', sp_qt)
         form.addRow('Điểm thi (70%):', sp_thi)
 
@@ -4094,26 +4126,30 @@ class TeacherWindow(QtWidgets.QWidget):
                         'C+': COLORS['orange'], 'C': COLORS['orange'],
                         'D': COLORS['red'], 'F': COLORS['red']}
 
-        tbl.item(row_idx, 3).setText(f'{qt_val:.1f}')
-        tbl.item(row_idx, 4).setText(f'{thi_val:.1f}')
-        it5 = QtWidgets.QTableWidgetItem(f'{total:.1f}')
-        it5.setTextAlignment(Qt.AlignCenter)
-        it5.setFlags(it5.flags() & ~Qt.ItemIsEditable)
-        tbl.setItem(row_idx, 5, it5)
-        it6 = QtWidgets.QTableWidgetItem(letter)
-        it6.setTextAlignment(Qt.AlignCenter)
-        it6.setFont(QFont('Segoe UI', 11, QFont.Bold))
-        it6.setForeground(QColor(grade_colors.get(letter, COLORS['text_mid'])))
-        it6.setFlags(it6.flags() & ~Qt.ItemIsEditable)
-        tbl.setItem(row_idx, 6, it6)
+        cc_val = sp_cc.value()
+        tbl.item(row_idx, 3).setText(f'{cc_val:.1f}' if cc_val > 0 else '')
+        tbl.item(row_idx, 4).setText(f'{qt_val:.1f}')
+        tbl.item(row_idx, 5).setText(f'{thi_val:.1f}')
+        it_tk = QtWidgets.QTableWidgetItem(f'{total:.1f}')
+        it_tk.setTextAlignment(Qt.AlignCenter)
+        it_tk.setFlags(it_tk.flags() & ~Qt.ItemIsEditable)
+        tbl.setItem(row_idx, 6, it_tk)
+        it_xl = QtWidgets.QTableWidgetItem(letter)
+        it_xl.setTextAlignment(Qt.AlignCenter)
+        it_xl.setFont(QFont('Segoe UI', 11, QFont.Bold))
+        it_xl.setForeground(QColor(grade_colors.get(letter, COLORS['text_mid'])))
+        it_xl.setFlags(it_xl.flags() & ~Qt.ItemIsEditable)
+        tbl.setItem(row_idx, 7, it_xl)
         self._grades_recalc_lock = False
         msg_info(self, 'Đã cập nhật', f'Điểm của {tbl.item(row_idx,2).text()}: {total} ({letter})')
 
     def _recalc_grade_row(self, item):
+        """Tinh lai TK + XL khi nguoi dung sua CC (3) / QT (4) / Thi (5)
+        Cong thuc: TK = QT*0.3 + Thi*0.7 (CC chi luu de tham khao)"""
         if getattr(self, '_grades_recalc_lock', False):
             return
         c = item.column()
-        if c not in (3, 4):
+        if c not in (3, 4, 5):
             return
         page = self.page_widgets[5]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherGrades')
@@ -4121,8 +4157,8 @@ class TeacherWindow(QtWidgets.QWidget):
             return
         r = item.row()
         try:
-            qt = float(tbl.item(r, 3).text().replace(',', '.')) if tbl.item(r, 3) else 0
-            thi = float(tbl.item(r, 4).text().replace(',', '.')) if tbl.item(r, 4) else 0
+            qt = float(tbl.item(r, 4).text().replace(',', '.')) if tbl.item(r, 4) else 0
+            thi = float(tbl.item(r, 5).text().replace(',', '.')) if tbl.item(r, 5) else 0
         except Exception:
             return
         total = round(qt * 0.3 + thi * 0.7, 2)
@@ -4138,14 +4174,14 @@ class TeacherWindow(QtWidgets.QWidget):
         it_tot = QtWidgets.QTableWidgetItem(f'{total:.1f}')
         it_tot.setTextAlignment(Qt.AlignCenter)
         it_tot.setFlags(it_tot.flags() & ~Qt.ItemIsEditable)
-        tbl.setItem(r, 5, it_tot)
+        tbl.setItem(r, 6, it_tot)
         grade_colors = {'A+': COLORS['green'], 'A': COLORS['green'], 'B+': COLORS['navy'], 'B': COLORS['navy'],
                         'C+': COLORS['orange'], 'C': COLORS['orange'], 'D': COLORS['red'], 'F': COLORS['red']}
         it_let = QtWidgets.QTableWidgetItem(letter)
         it_let.setTextAlignment(Qt.AlignCenter)
         it_let.setForeground(QColor(grade_colors.get(letter, COLORS['text_mid'])))
         it_let.setFlags(it_let.flags() & ~Qt.ItemIsEditable)
-        tbl.setItem(r, 6, it_let)
+        tbl.setItem(r, 7, it_let)
         self._grades_recalc_lock = False
 
     def _save_tea_grades(self):
@@ -4160,11 +4196,12 @@ class TeacherWindow(QtWidgets.QWidget):
             gv_user_id = MOCK_TEACHER.get('user_id')
             lop_id = cbo.currentText() if cbo and cbo.currentIndex() > 0 else None
             if tbl and lop_id and gv_user_id:
+                # cot moi: STT|MaHV|HoTen|CC(3)|QT(4)|Thi(5)|TK|XL|Action
                 for r in range(tbl.rowCount()):
                     try:
                         msv = tbl.item(r, 1).text()
-                        qt = float(tbl.item(r, 3).text().replace(',', '.'))
-                        thi = float(tbl.item(r, 4).text().replace(',', '.'))
+                        qt = float(tbl.item(r, 4).text().replace(',', '.'))
+                        thi = float(tbl.item(r, 5).text().replace(',', '.'))
                         hv = db.fetch_one("SELECT user_id FROM students WHERE msv = %s", (msv,))
                         if hv:
                             GradeService.save_grade(hv['user_id'], lop_id, qt, thi, gv_user_id)
