@@ -789,12 +789,13 @@ class MainWindow(QtWidgets.QWidget):
         tbl.setColumnWidth(0, 45)
         for i in range(1, 7):
             tbl.setColumnWidth(i, 92)
+        # font lon hon va row cao hon de doc lich hoc de hon
         for r in range(len(hours)):
-            tbl.setRowHeight(r, 45)
+            tbl.setRowHeight(r, 55)
             item = QtWidgets.QTableWidgetItem(hours[r])
             item.setTextAlignment(Qt.AlignRight | Qt.AlignTop)
             item.setForeground(QColor('#718096'))
-            item.setFont(QFont('Segoe UI', 8))
+            item.setFont(QFont('Segoe UI', 9))
             tbl.setItem(r, 0, item)
 
         for r in range(len(hours)):
@@ -806,12 +807,12 @@ class MainWindow(QtWidgets.QWidget):
             f = QtWidgets.QFrame()
             f.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #d2d6dc; border-radius: 4px; border-top: 3px solid {color}; margin: 1px; }}')
             vb = QtWidgets.QVBoxLayout(f)
-            vb.setContentsMargins(4, 3, 4, 3)
-            vb.setSpacing(1)
-            for txt, st in [(ten, f'color: {color}; font-size: 9px; font-weight: bold; border: none;'),
-                            (ts, 'color: #4a5568; font-size: 8px; border: none;'),
-                            (f'Tòa {toa} - {phong}', 'color: #718096; font-size: 8px; border: none;'),
-                            (gv, 'color: #4a5568; font-size: 8px; border: none;')]:
+            vb.setContentsMargins(5, 4, 5, 4)
+            vb.setSpacing(2)
+            for txt, st in [(ten, f'color: {color}; font-size: 11px; font-weight: bold; border: none;'),
+                            (ts, 'color: #4a5568; font-size: 10px; border: none;'),
+                            (f'Tòa {toa} - {phong}', 'color: #718096; font-size: 9px; border: none;'),
+                            (gv, 'color: #4a5568; font-size: 9px; border: none;')]:
                 l = QtWidgets.QLabel(txt)
                 l.setStyleSheet(st)
                 l.setWordWrap(True)
@@ -964,21 +965,22 @@ class MainWindow(QtWidgets.QWidget):
             if w:
                 w.setText(val)
                 w.setStyleSheet(f'color: {color}; font-size: 22px; font-weight: bold; background: transparent;')
-        # export button (PDF - tinh nang se bo sung sau)
+        # nut "Tien do CT" - dat ben trai cboSemester, khong de tran tieu de
+        # bo nut "Xuat PDF" cu vi chua co tinh nang that
         header = page.findChild(QtWidgets.QFrame, 'headerBar')
-        if header and not header.findChild(QtWidgets.QPushButton, 'btnExportPDF'):
-            btn_export = QtWidgets.QPushButton('Xuất PDF', header)
-            btn_export.setObjectName('btnExportPDF')
-            btn_export.setGeometry(720, 14, 90, 28)
-            btn_export.setCursor(Qt.PointingHandCursor)
-            btn_export.setStyleSheet(f'QPushButton {{ background: white; color: {COLORS["navy"]}; border: 1px solid {COLORS["navy"]}; border-radius: 4px; padding: 4px 12px; font-size: 11px; }} QPushButton:hover {{ background: {COLORS["navy"]}; color: white; }}')
-            btn_export.show()
-            btn_export.clicked.connect(lambda: msg_info(self, 'Thông báo', 'Chức năng xuất PDF đang phát triển, sẽ bổ sung ở bản cập nhật tới.'))
-        # nut "Tien do CT" - lien ket khung CT voi diem cua HV
+        # don dep nut cu (neu co tu lan render truoc)
+        if header:
+            old = header.findChild(QtWidgets.QPushButton, 'btnExportPDF')
+            if old:
+                old.deleteLater()
+        # thu nho cboSemester de co cho cho nut Tien do
+        cbo_sem = page.findChild(QtWidgets.QComboBox, 'cboSemester')
+        if cbo_sem:
+            cbo_sem.setGeometry(660, 12, 195, 32)
         if header and not header.findChild(QtWidgets.QPushButton, 'btnProgressCT'):
-            btn_prog = QtWidgets.QPushButton('Tiến độ CT', header)
+            btn_prog = QtWidgets.QPushButton('Xem tiến độ CT', header)
             btn_prog.setObjectName('btnProgressCT')
-            btn_prog.setGeometry(615, 14, 95, 28)
+            btn_prog.setGeometry(515, 14, 135, 28)
             btn_prog.setCursor(Qt.PointingHandCursor)
             btn_prog.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; padding: 4px 12px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
             btn_prog.show()
@@ -4645,11 +4647,11 @@ class EmployeeWindow(QtWidgets.QWidget):
             color = COLORS['green'] if st == 'Đã thanh toán' else COLORS['orange'] if st == 'Chờ thanh toán' else COLORS['red']
             item_st.setForeground(QColor(color))
             tbl.setItem(r, 5, item_st)
-            # action
-            btn = QtWidgets.QPushButton('Chi tiết')
+            # action - nut nho hon de khong tran row
+            btn = QtWidgets.QPushButton('Xem')
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFixedSize(76, 26)
-            btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
+            btn.setFixedSize(54, 22)
+            btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 3px; font-size: 10px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
             btn.clicked.connect(lambda ch, rdata=row: show_detail_dialog(
                 self, 'Chi tiết đăng ký',
                 [('Mã đăng ký', rdata[0]), ('Ngày đăng ký', rdata[1]),
@@ -4663,11 +4665,11 @@ class EmployeeWindow(QtWidgets.QWidget):
             hl.addWidget(btn)
             tbl.setCellWidget(r, 6, w)
         tbl.horizontalHeader().setStretchLastSection(True)
-        for c, cw in enumerate([70, 95, 195, 90, 110, 125, 96]):
+        for c, cw in enumerate([70, 95, 195, 90, 110, 125, 70]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
-            tbl.setRowHeight(r, 40)
+            tbl.setRowHeight(r, 36)
 
         widen_search(page, 'txtSearchReg', 300, ['cboRegStatus', 'cboRegDate'])
         # search + filter + export
@@ -4957,11 +4959,11 @@ class EmployeeWindow(QtWidgets.QWidget):
             item_tt.setTextAlignment(Qt.AlignCenter)
             item_tt.setForeground(QColor(COLORS['red'] if trang_thai == 'Đầy' else COLORS['green']))
             tbl.setItem(r, 6, item_tt)
-            # nut chi tiet lop (NV chi duoc xem + chinh si so, khong sua thong tin lop)
-            btn_detail = QtWidgets.QPushButton('Chi tiết')
+            # nut chi tiet lop - thu nho de hop voi row (NV chi xem)
+            btn_detail = QtWidgets.QPushButton('Xem')
             btn_detail.setCursor(Qt.PointingHandCursor)
-            btn_detail.setFixedSize(78, 26)
-            btn_detail.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
+            btn_detail.setFixedSize(54, 22)
+            btn_detail.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 3px; font-size: 10px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
             btn_detail.clicked.connect(lambda ch, cls_data=cls: show_detail_dialog(
                 self, 'Chi tiết lớp',
                 [('Mã lớp', cls_data[0]), ('Môn học', cls_data[2]),
@@ -4977,11 +4979,11 @@ class EmployeeWindow(QtWidgets.QWidget):
             hl.addWidget(btn_detail)
             tbl.setCellWidget(r, 7, w)
         tbl.horizontalHeader().setStretchLastSection(True)
-        for c, cw in enumerate([78, 150, 125, 140, 68, 100, 85, 90]):
+        for c, cw in enumerate([78, 150, 125, 140, 68, 100, 85, 70]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(MOCK_CLASSES)):
-            tbl.setRowHeight(r, 40)
+            tbl.setRowHeight(r, 36)
 
         widen_search(page, 'txtSearchEmpCls', 290, ['cboEmpClsCourse', 'cboEmpClsStatus'])
         # search + filter
