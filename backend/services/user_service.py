@@ -138,6 +138,17 @@ class TeacherService:
     def delete(user_id: int):
         db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
 
+    @staticmethod
+    def get_by_code(ma_gv: str):
+        """Lookup teacher user_id + info from ma_gv code."""
+        sql = """
+            SELECT u.id AS user_id, u.full_name, u.email, t.ma_gv, t.hoc_vi, t.khoa
+              FROM users u
+              JOIN teachers t ON t.user_id = u.id
+             WHERE t.ma_gv = %s AND u.is_active = TRUE
+        """
+        return db.fetch_one(sql, (ma_gv,))
+
 
 class EmployeeService:
     @staticmethod
@@ -179,6 +190,17 @@ class EmployeeService:
     @staticmethod
     def delete(user_id: int):
         db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
+
+    @staticmethod
+    def get_by_code(ma_nv: str):
+        """Lookup employee user_id + info from ma_nv code."""
+        sql = """
+            SELECT u.id AS user_id, u.full_name, u.email, e.ma_nv, e.chuc_vu, e.phong_ban
+              FROM users u
+              JOIN employees e ON e.user_id = u.id
+             WHERE e.ma_nv = %s AND u.is_active = TRUE
+        """
+        return db.fetch_one(sql, (ma_nv,))
 
 
 class ReviewService:

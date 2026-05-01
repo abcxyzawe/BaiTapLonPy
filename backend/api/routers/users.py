@@ -1,5 +1,5 @@
 """Users router: Students, Teachers, Employees, Reviews."""
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from backend.api.schemas import (EmployeeCreate, EmployeeUpdate, ReviewSubmit,
                                   StudentCreate, StudentUpdate, TeacherCreate, TeacherUpdate)
@@ -54,6 +54,15 @@ def teachers_for_review():
     return TeacherService.get_for_review()
 
 
+@router.get('/teachers/by-code/{ma_gv}')
+def get_teacher_by_code(ma_gv: str):
+    """Lookup teacher info by ma_gv code (vd 'GV001')."""
+    row = TeacherService.get_by_code(ma_gv)
+    if not row:
+        raise HTTPException(status_code=404, detail=f'Teacher {ma_gv} not found')
+    return row
+
+
 @router.post('/teachers')
 def create_teacher(req: TeacherCreate):
     uid = TeacherService.create(
@@ -81,6 +90,15 @@ def delete_teacher(user_id: int):
 @router.get('/employees')
 def list_employees():
     return EmployeeService.get_all()
+
+
+@router.get('/employees/by-code/{ma_nv}')
+def get_employee_by_code(ma_nv: str):
+    """Lookup employee info by ma_nv code."""
+    row = EmployeeService.get_by_code(ma_nv)
+    if not row:
+        raise HTTPException(status_code=404, detail=f'Employee {ma_nv} not found')
+    return row
 
 
 @router.post('/employees')

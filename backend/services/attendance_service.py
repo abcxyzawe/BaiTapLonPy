@@ -50,6 +50,33 @@ class AttendanceService:
         )
 
     @staticmethod
+    def class_summary(lop_id: str):
+        """Summary diem danh tat ca HV trong 1 lop. Tra ve list dict {msv, present_cnt, total, rate}.
+        Dung de tinh diem chuyen can hang loat - tranh N+1 query."""
+        sql = """
+            SELECT s.msv,
+                   COUNT(*) FILTER (WHERE a.trang_thai IN ('present','late')) AS present_cnt,
+                   COUNT(*) AS total
+              FROM students s
+              JOIN attendance a ON a.hv_id = s.user_id
+              JOIN schedules sc ON sc.id = a.schedule_id
+             WHERE sc.lop_id = %s
+          GROUP BY s.msv
+        """
+        rows = db.fetch_all(sql, (lop_id,))
+        out = []
+        for r in rows:
+            total = r.get('total') or 0
+            present = r.get('present_cnt') or 0
+            out.append({
+                'msv': r['msv'],
+                'present_cnt': present,
+                'total': total,
+                'rate': round(present / total * 100, 1) if total else 0.0,
+            })
+        return out
+
+    @staticmethod
     def attendance_rate(hv_id: int, lop_id: str) -> float:
         """Ty le diem danh cua HV trong 1 lop (present + late / tong)"""
         row = db.fetch_one(

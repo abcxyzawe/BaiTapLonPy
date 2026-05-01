@@ -5,8 +5,10 @@ Docs: http://localhost:8000/docs (Swagger UI auto-generated)
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+import psycopg2
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.api.routers import (
     attendance, audit, auth, courses, curriculum, exams, grades,
@@ -57,6 +59,59 @@ app.include_router(schedules.router, prefix='/schedules', tags=['Schedules'])
 app.include_router(exams.router, prefix='/exams', tags=['Exams'])
 app.include_router(attendance.router, prefix='/attendance', tags=['Attendance'])
 app.include_router(audit.router, prefix='/audit', tags=['Audit'])
+
+
+# ===== Global exception handlers =====
+# Convert psycopg2 errors thanh HTTP response co message ro rang
+# (thay vi 500 Internal Server Error) - giup frontend hien error popup chinh xac
+
+# Map ten constraint -> message tieng Viet de bao loi
+_FK_MESSAGES = {
+    'classes_ma_mon_fkey': 'Môn học này đang có lớp tham chiếu, không xóa được. Hãy xóa các lớp trước.',
+    'registrations_lop_id_fkey': 'Lớp này đang có học viên đăng ký, không xóa được. Hãy hủy đăng ký trước.',
+    'grades_lop_id_fkey': 'Lớp này đã có điểm. Xóa sẽ mất dữ liệu điểm.',
+    'curriculum_ma_mon_fkey': 'Môn này đang trong khung chương trình.',
+    'students_user_id_fkey': 'Học viên đang có dữ liệu liên quan.',
+    'teachers_user_id_fkey': 'Giảng viên đang dạy lớp.',
+    'employees_user_id_fkey': 'Nhân viên có ràng buộc dữ liệu.',
+}
+
+
+@app.exception_handler(psycopg2.errors.ForeignKeyViolation)
+async def fk_violation_handler(request: Request, exc):
+    """Tra ve 409 Conflict voi message ro rang khi co FK violation."""
+    detail = str(exc.diag.message_detail or exc.diag.constraint_name or '') if exc.diag else str(exc)
+    msg = 'Không thể xóa: dữ liệu này đang được tham chiếu ở bảng khác.'
+    # Map ten constraint cu the
+    cn = exc.diag.constraint_name if exc.diag else None
+    if cn and cn in _FK_MESSAGES:
+        msg = _FK_MESSAGES[cn]
+    return JSONResponse(status_code=409, content={'detail': msg, 'constraint': cn})
+
+
+@app.exception_handler(psycopg2.errors.UniqueViolation)
+async def unique_violation_handler(request: Request, exc):
+    """Tra ve 409 Conflict khi vi pham unique."""
+    cn = exc.diag.constraint_name if exc.diag else None
+    return JSONResponse(
+        status_code=409,
+        content={'detail': f'Dữ liệu trùng (đã tồn tại): {cn}', 'constraint': cn},
+    )
+
+
+@app.exception_handler(psycopg2.errors.CheckViolation)
+async def check_violation_handler(request: Request, exc):
+    cn = exc.diag.constraint_name if exc.diag else None
+    return JSONResponse(
+        status_code=400,
+        content={'detail': f'Dữ liệu không hợp lệ (vi phạm CHECK): {cn}', 'constraint': cn},
+    )
+
+
+@app.exception_handler(psycopg2.IntegrityError)
+async def integrity_error_handler(request: Request, exc):
+    """Catch-all cho cac IntegrityError khac chua co handler rieng."""
+    return JSONResponse(status_code=409, content={'detail': f'Lỗi ràng buộc dữ liệu: {exc}'})
 
 
 @app.get('/', tags=['Health'])

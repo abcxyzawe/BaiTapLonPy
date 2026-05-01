@@ -19,38 +19,47 @@ from datetime import date, time
 from typing import Any, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
 
 API_URL = os.environ.get('EAUT_API_URL', 'http://localhost:8000').rstrip('/')
-TIMEOUT = 10  # seconds
+TIMEOUT = 4  # seconds - giam tu 10s xuong 4s de UI khong freeze qua lau khi API down
+
+# Session voi keep-alive + connection pool - giam latency moi request
+# Truoc day moi call mo socket moi (3-way handshake) -> lag UI khi switch page
+# Voi Session: reuse TCP connection, ~10-20x nhanh hon cho cac call lien tiep
+_session = requests.Session()
+_adapter = HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=0)
+_session.mount('http://', _adapter)
+_session.mount('https://', _adapter)
 
 
 # ===== HTTP helpers =====
 def _get(path: str, **params) -> Any:
-    r = requests.get(API_URL + path, params=_clean(params), timeout=TIMEOUT)
+    r = _session.get(API_URL + path, params=_clean(params), timeout=TIMEOUT)
     r.raise_for_status()
     return r.json()
 
 
 def _post(path: str, json: Optional[dict] = None) -> Any:
-    r = requests.post(API_URL + path, json=_serialize(json or {}), timeout=TIMEOUT)
+    r = _session.post(API_URL + path, json=_serialize(json or {}), timeout=TIMEOUT)
     r.raise_for_status()
     return r.json()
 
 
 def _put(path: str, json: Optional[dict] = None) -> Any:
-    r = requests.put(API_URL + path, json=_serialize(json or {}), timeout=TIMEOUT)
+    r = _session.put(API_URL + path, json=_serialize(json or {}), timeout=TIMEOUT)
     r.raise_for_status()
     return r.json()
 
 
 def _patch(path: str, json: Optional[dict] = None) -> Any:
-    r = requests.patch(API_URL + path, json=_serialize(json or {}), timeout=TIMEOUT)
+    r = _session.patch(API_URL + path, json=_serialize(json or {}), timeout=TIMEOUT)
     r.raise_for_status()
     return r.json()
 
 
 def _delete(path: str, **params) -> Any:
-    r = requests.delete(API_URL + path, params=_clean(params), timeout=TIMEOUT)
+    r = _session.delete(API_URL + path, params=_clean(params), timeout=TIMEOUT)
     r.raise_for_status()
     return r.json()
 
@@ -72,9 +81,9 @@ def _to_iso(v):
 
 
 def is_alive() -> bool:
-    """Check API server reachable."""
+    """Check API server reachable. Dung session de reuse TCP connection."""
     try:
-        r = requests.get(API_URL + '/health', timeout=3)
+        r = _session.get(API_URL + '/health', timeout=2)
         return r.status_code == 200 and r.json().get('db') == 'connected'
     except Exception:
         return False
@@ -94,20 +103,40 @@ class _ApiUser:
         self.role = data.get('role')
         self.full_name = data.get('full_name', '')
         self.name = self.full_name  # alias frontend hay dung
-        # role_data sub-fields
+        # initials: tinh tu full_name (vd "Nguyen Duc Thien" -> "NT")
+        self.initials = self._compute_initials(self.full_name)
+        # Default rong cho cac attr role-specific de tranh AttributeError
+        for attr in ('msv', 'ma_gv', 'ma_nv', 'khoa', 'hoc_vi', 'chuc_vu',
+                     'phong_ban', 'email', 'sdt', 'diachi', 'ngaysinh',
+                     'gioitinh', 'tham_nien', 'lop'):
+            setattr(self, attr, '')
+        # Override bang role_data thuc te
         for k, v in (data.get('role_data') or {}).items():
             setattr(self, k, v)
+
+    @staticmethod
+    def _compute_initials(name: str) -> str:
+        """Tinh viet tat tu ten - "Nguyen Duc Thien" -> "NT"."""
+        if not name:
+            return '?'
+        parts = name.strip().split()
+        if len(parts) == 1:
+            return parts[0][:2].upper()
+        # Lay chu cai dau cua HO va TEN
+        return (parts[0][0] + parts[-1][0]).upper()
 
     def __getitem__(self, k):
         # Frontend doi khi dung user['id'] thay vi user.id
         if k in ('id', 'user_id'):
             return self.id
+        if hasattr(self, k):
+            return getattr(self, k)
         return self._d.get(k) or self._d.get('role_data', {}).get(k)
 
     def get(self, k, default=None):
         try:
             v = self[k]
-            return v if v is not None else default
+            return v if v is not None and v != '' else default
         except Exception:
             return default
 
@@ -299,6 +328,9 @@ class TeacherService:
     def get_for_review(): return _get('/teachers/for-review')
 
     @staticmethod
+    def get_by_code(ma_gv): return _get(f'/teachers/by-code/{ma_gv}')
+
+    @staticmethod
     def create(username, password, full_name, ma_gv, email=None, sdt=None,
                hoc_vi=None, khoa=None, chuyen_nganh=None, tham_nien=0):
         r = _post('/teachers', {
@@ -319,6 +351,9 @@ class TeacherService:
 class EmployeeService:
     @staticmethod
     def get_all(): return _get('/employees')
+
+    @staticmethod
+    def get_by_code(ma_nv): return _get(f'/employees/by-code/{ma_nv}')
 
     @staticmethod
     def create(username, password, full_name, ma_nv, email=None, sdt=None,
@@ -505,6 +540,11 @@ class AttendanceService:
     @staticmethod
     def attendance_rate(hv_id, lop_id):
         return _get(f'/attendance/rate/{hv_id}/{lop_id}').get('rate', 0.0)
+
+    @staticmethod
+    def class_summary(lop_id):
+        """Tra ve list [{msv, present_cnt, total, rate}, ...] cho tat ca HV trong lop."""
+        return _get(f'/attendance/class/{lop_id}/summary')
 
 
 class AuditService:
