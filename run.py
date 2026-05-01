@@ -208,38 +208,71 @@ def start_postgres():
 # -> infinite loop spam process. Threading tranh van de nay.
 _api_thread = None
 _api_server = None
+API_LOG_FILE = os.path.join(tempfile.gettempdir(), 'eaut_api_error.log')
+
+
+def _log_api_error(msg):
+    """Ghi loi vao file de user share khi report bug (vi console=False)."""
+    try:
+        with open(API_LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write('[' + time.strftime('%H:%M:%S') + '] ' + msg + '\n')
+    except Exception:
+        pass
 
 
 def _run_api_inline():
-    """Chay uvicorn server trong thread hien tai (asyncio loop rieng)."""
-    import asyncio
-    sys.path.insert(0, BASE)
+    """Chay uvicorn server trong thread. Catch BAT KY exception nao + log."""
+    import traceback
     try:
-        import uvicorn
-        from backend.api.main import app
-    except Exception as e:
-        sys.stderr.write('[API] Import loi: ' + str(e) + '\n')
-        return
+        import asyncio
+        sys.path.insert(0, BASE)
+        # Test import truoc khi config uvicorn de log loi cu the
+        try:
+            import uvicorn
+        except Exception as e:
+            _log_api_error('Import uvicorn fail: ' + repr(e) + '\n' + traceback.format_exc())
+            return
+        try:
+            from backend.api.main import app
+        except Exception as e:
+            _log_api_error('Import backend.api.main fail: ' + repr(e) + '\n' + traceback.format_exc())
+            return
 
-    global _api_server
-    config = uvicorn.Config(app, host='127.0.0.1', port=8000, log_level='warning',
-                            access_log=False)
-    _api_server = uvicorn.Server(config)
-    # uvicorn su dung asyncio - phai tao loop moi cho thread
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(_api_server.serve())
-    except Exception as e:
-        sys.stderr.write('[API] Server crash: ' + str(e) + '\n')
-    finally:
-        loop.close()
+        global _api_server
+        try:
+            # lifespan='off' tranh @asynccontextmanager startup hook block khi DB cham
+            config = uvicorn.Config(app, host='127.0.0.1', port=8000,
+                                     log_level='warning', access_log=False,
+                                     lifespan='off')
+            _api_server = uvicorn.Server(config)
+        except Exception as e:
+            _log_api_error('Create uvicorn config fail: ' + repr(e) + '\n' + traceback.format_exc())
+            return
+
+        # Tao asyncio loop moi cho thread (main thread co loop khac)
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(_api_server.serve())
+        except Exception as e:
+            _log_api_error('uvicorn.serve fail: ' + repr(e) + '\n' + traceback.format_exc())
+        finally:
+            try: loop.close()
+            except Exception: pass
+    except BaseException as e:
+        # KeyboardInterrupt / SystemExit - bat tat ca
+        _log_api_error('Outer exception: ' + repr(e) + '\n' + traceback.format_exc())
 
 
 def start_api_server():
-    """Spawn API server trong daemon thread. Tra ve True neu thread start OK."""
+    """Spawn API server trong daemon thread."""
     global _api_thread
     import threading
+    # Reset log file moi run
+    try:
+        if os.path.exists(API_LOG_FILE):
+            os.remove(API_LOG_FILE)
+    except Exception: pass
     try:
         _api_thread = threading.Thread(target=_run_api_inline, daemon=True,
                                         name='eaut-api-server')
@@ -265,8 +298,18 @@ def wait_for_api(timeout=30):
             pass
         # Kiem tra thread crash
         if _api_thread and not _api_thread.is_alive():
-            show_error('API server bi crash',
-                       'Thread uvicorn da tat. Xem console log.')
+            err_log = ''
+            try:
+                if os.path.exists(API_LOG_FILE):
+                    with open(API_LOG_FILE, encoding='utf-8') as f:
+                        err_log = f.read()[:1500]
+            except Exception: pass
+            show_error(
+                'API server bi crash',
+                'Thread uvicorn da tat.\n\n'
+                'Log file: ' + API_LOG_FILE + '\n\n'
+                'Noi dung loi:\n' + (err_log if err_log else '(khong ghi duoc log)')
+            )
             return False
         time.sleep(1)
     return False
