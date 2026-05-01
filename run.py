@@ -220,10 +220,26 @@ def _log_api_error(msg):
         pass
 
 
+def _ensure_stdio():
+    """Trong PyInstaller --onefile + console=False, sys.stdout/stderr la None.
+    Uvicorn logging crash khi goi sys.stdout.isatty(). Fix bang fake stdio."""
+    import io
+    if sys.stdout is None:
+        sys.stdout = io.StringIO()
+    if sys.stderr is None:
+        sys.stderr = io.StringIO()
+    # Fake .isatty() neu thieu
+    for stream in (sys.stdout, sys.stderr):
+        if not hasattr(stream, 'isatty'):
+            try: stream.isatty = lambda: False
+            except Exception: pass
+
+
 def _run_api_inline():
     """Chay uvicorn server trong thread. Catch BAT KY exception nao + log."""
     import traceback
     try:
+        _ensure_stdio()  # fix uvicorn.logging crash khi sys.stdout=None
         import asyncio
         sys.path.insert(0, BASE)
         # Test import truoc khi config uvicorn de log loi cu the
@@ -240,10 +256,11 @@ def _run_api_inline():
 
         global _api_server
         try:
-            # lifespan='off' tranh @asynccontextmanager startup hook block khi DB cham
+            # lifespan='off' + log_config=None: tat default logging cua uvicorn
+            # (default config dung sys.stdout.isatty() -> crash khi bundled)
             config = uvicorn.Config(app, host='127.0.0.1', port=8000,
                                      log_level='warning', access_log=False,
-                                     lifespan='off')
+                                     lifespan='off', log_config=None)
             _api_server = uvicorn.Server(config)
         except Exception as e:
             _log_api_error('Create uvicorn config fail: ' + repr(e) + '\n' + traceback.format_exc())
