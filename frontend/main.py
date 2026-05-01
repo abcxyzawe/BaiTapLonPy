@@ -50,6 +50,22 @@ except Exception as _e:
     print(f'[API] Khong load duoc api_client ({_e}) - frontend chay che do offline')
 
 
+# ===== Cache layer cho courses/classes =====
+# Load 1 lan luc startup, refresh sau admin CRUD.
+# Khong dung mock hardcode - lay tu API thuc.
+
+def _load_app_data():
+    """Goi sau khi import api_client thanh cong de prefetch cache."""
+    if not DB_AVAILABLE:
+        return
+    try:
+        _load_courses_cache()
+        _load_classes_cache()
+        print(f'[CACHE] Loaded {len(MOCK_COURSES)} courses + {len(MOCK_CLASSES)} classes')
+    except Exception as e:
+        print(f'[CACHE] Loi prefetch: {e}')
+
+
 # ===== helpers popup =====
 def _style_msgbox(box):
     """Apply Segoe UI + kich co hop ly cho QMessageBox"""
@@ -386,59 +402,94 @@ UI = os.path.join(BASE, 'ui')
 RES = os.path.join(BASE, 'resources')
 ICONS = os.path.join(RES, 'icons')
 
-# mock data - 4 role
-MOCK_USER = {
-    'username': 'user', 'password': 'passuser', 'role': 'Học viên',
-    'name': 'Đào Viết Quang Huy', 'msv': 'HV2024001', 'lop': 'IT001-A',
-    'khoa': 'Công nghệ thông tin', 'ngaysinh': '15/03/2004', 'gioitinh': 'Nam',
-    'nienkhoa': '2024 - 2028', 'hedt': 'Chính quy',
-    'email': 'quanghuy@sv.eaut.edu.vn', 'sdt': '0912345678',
-    'diachi': 'Đà Nẵng', 'initials': 'QH',
+# Current user placeholder - duoc fill sau khi login tu API.
+# 4 dict tuong ung 4 role, sidebar/profile binding default truoc khi co data that.
+# Sau login, _sync_current_from_user(user) overwrite cac field tu /auth/login response.
+CURRENT_USER = {
+    'username': '', 'password': '', 'role': 'Học viên',
+    'name': '', 'msv': '', 'lop': '',
+    'khoa': '', 'ngaysinh': '', 'gioitinh': '',
+    'nienkhoa': '', 'hedt': '',
+    'email': '', 'sdt': '',
+    'diachi': '', 'initials': '?',
 }
 
-MOCK_ADMIN = {
-    'username': 'admin', 'password': 'passadmin',
-    'name': 'Admin', 'role': 'Quản trị viên', 'initials': 'AD',
+CURRENT_ADMIN = {
+    'username': '', 'password': '',
+    'name': '', 'role': 'Quản trị viên', 'initials': 'AD',
 }
 
-MOCK_TEACHER = {
-    'username': 'teacher', 'password': 'passtea', 'role': 'Giảng viên',
-    'id': 'GV001', 'name': 'Nguyễn Đức Thiện', 'initials': 'NT',
-    'khoa': 'Công nghệ thông tin', 'hocvi': 'Tiến sĩ',
-    'email': 'thien@eaut.edu.vn', 'sdt': '0901234567',
+CURRENT_TEACHER = {
+    'username': '', 'password': '', 'role': 'Giảng viên',
+    'id': '', 'name': '', 'initials': '?',
+    'khoa': '', 'hocvi': '',
+    'email': '', 'sdt': '',
 }
 
-MOCK_EMPLOYEE = {
-    'username': 'employee', 'password': 'passemp', 'role': 'Nhân viên',
-    'id': 'NV001', 'name': 'Trần Thu Hương', 'initials': 'TH',
-    'chucvu': 'Nhân viên đăng ký',
-    'email': 'huongtt@eaut.edu.vn', 'sdt': '0987654321',
+CURRENT_EMPLOYEE = {
+    'username': '', 'password': '', 'role': 'Nhân viên',
+    'id': '', 'name': '', 'initials': '?',
+    'chucvu': '',
+    'email': '', 'sdt': '',
 }
 
-# mock classes - mỗi môn có nhiều lớp với giá khác nhau
-MOCK_COURSES = [
-    ('IT001', 'Lập trình Python'),
-    ('IT002', 'Cơ sở dữ liệu'),
-    ('IT003', 'Mạng máy tính'),
-    ('IT004', 'Trí tuệ nhân tạo'),
-    ('MA001', 'Toán rời rạc'),
-]
+# Backward-compat aliases - de tranh break code cu chua sua het
+MOCK_USER = CURRENT_USER
+MOCK_ADMIN = CURRENT_ADMIN
+MOCK_TEACHER = CURRENT_TEACHER
+MOCK_EMPLOYEE = CURRENT_EMPLOYEE
 
-MOCK_CLASSES = [
-    # (ma_lop, ma_mon, ten_mon, gv, lich, phong, sisoMax, siso, gia)
-    ('IT001-A', 'IT001', 'Lập trình Python', 'Nguyễn Đức Thiện', 'T3, T5 (7:00-9:30)', 'P.A301', 40, 35, 2500000),
-    ('IT001-B', 'IT001', 'Lập trình Python', 'Lê Trung Thực', 'T4, T6 (13:00-15:30)', 'P.B205', 40, 28, 1800000),
-    ('IT001-C', 'IT001', 'Lập trình Python', 'Ngô Thảo Anh', 'T2, T7 (15:40-18:10)', 'P.C102', 35, 35, 2000000),
-    ('IT002-A', 'IT002', 'Cơ sở dữ liệu', 'Lê Thị C', 'T5 (7:00-9:30)', 'P.A202', 40, 35, 2200000),
-    ('IT002-B', 'IT002', 'Cơ sở dữ liệu', 'Phạm Văn K', 'T3 (13:00-15:30)', 'P.B108', 40, 22, 1800000),
-    ('IT003-A', 'IT003', 'Mạng máy tính', 'Phạm Văn D', 'T6 (7:00-9:30)', 'P.A105', 30, 18, 2000000),
-    ('IT004-A', 'IT004', 'Trí tuệ nhân tạo', 'Nguyễn Đức Thiện', 'T3 (7:00-9:30)', 'P.A301', 40, 28, 2800000),
-    ('IT004-B', 'IT004', 'Trí tuệ nhân tạo', 'Hoàng Minh Tuấn', 'T5 (13:00-15:30)', 'P.B301', 35, 20, 2200000),
-    ('MA001-A', 'MA001', 'Toán rời rạc', 'Nguyễn Thị E', 'T2 (9:30-12:00)', 'P.A203', 40, 30, 1500000),
-    ('MA001-B', 'MA001', 'Toán rời rạc', 'Lê Văn M', 'T4 (9:30-12:00)', 'P.B204', 40, 25, 1200000),
-    ('IT002-C', 'IT002', 'Cơ sở dữ liệu', 'Nguyễn Đức Thiện', 'T2 (13:00-15:30)', 'P.A205', 40, 32, 2200000),
-    ('IT009-A', 'IT009', 'Phát triển web', 'Nguyễn Đức Thiện', 'T7 (9:30-12:00)', 'P.C201', 35, 28, 2500000),
-]
+# Cache classes/courses tu API - thay vi hardcode mock data
+# Lazy-loaded boi _load_courses_cache() / _load_classes_cache()
+# Empty list = chua load hoac API loi -> UI hien empty state
+MOCK_COURSES = []  # alias backward compat - actually populated tu API
+MOCK_CLASSES = []  # alias backward compat - actually populated tu API
+
+
+def _load_courses_cache():
+    """Load courses tu API. Cache vao MOCK_COURSES de cac code cu reuse.
+    Tra ve list of (ma_mon, ten_mon)."""
+    global MOCK_COURSES
+    if MOCK_COURSES:
+        return MOCK_COURSES
+    try:
+        rows = CourseService.get_all_courses() or []
+        MOCK_COURSES = [(r['ma_mon'], r.get('ten_mon', '')) for r in rows]
+    except Exception as e:
+        print(f'[CACHE] Load courses loi: {e}')
+        MOCK_COURSES = []
+    return MOCK_COURSES
+
+
+def _load_classes_cache():
+    """Load classes tu API. Cache vao MOCK_CLASSES.
+    Format: list of (ma_lop, ma_mon, ten_mon, ten_gv, lich, phong, smax, scur, gia)."""
+    global MOCK_CLASSES
+    if MOCK_CLASSES:
+        return MOCK_CLASSES
+    try:
+        rows = CourseService.get_all_classes() or []
+        MOCK_CLASSES = [(
+            r.get('ma_lop', ''), r.get('ma_mon', ''), r.get('ten_mon', ''),
+            r.get('ten_gv', '') or '', r.get('lich', '') or '',
+            r.get('phong', '') or '',
+            int(r.get('siso_max') or 40),
+            int(r.get('siso_hien_tai') or 0),
+            int(r.get('gia') or 0),
+        ) for r in rows]
+    except Exception as e:
+        print(f'[CACHE] Load classes loi: {e}')
+        MOCK_CLASSES = []
+    return MOCK_CLASSES
+
+
+def _refresh_cache():
+    """Force refresh cache - goi sau khi admin them/sua/xoa."""
+    global MOCK_COURSES, MOCK_CLASSES
+    MOCK_COURSES = []
+    MOCK_CLASSES = []
+    _load_courses_cache()
+    _load_classes_cache()
 
 
 # STUDENT pages
@@ -5668,6 +5719,8 @@ class App:
     def __init__(self):
         self.qapp = QtWidgets.QApplication(sys.argv)
         load_theme(self.qapp)
+        # Prefetch courses + classes tu API (cache de cac combo dung lai)
+        _load_app_data()
         self.main_win = None
         self.login_win = None
 
