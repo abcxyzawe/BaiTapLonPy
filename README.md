@@ -17,23 +17,44 @@ docker compose up -d postgres
 
 ## Chay app
 
-Mo 2 terminal:
+App tach 2 phan: backend (DB + REST API) va frontend (PyQt5 UI).
+Backend chay nen, frontend goi vao API qua HTTP.
 
-Terminal 1 (API server):
-```bash
-uvicorn backend.api.main:app --reload --port 8000
+### Cach 1 - dung script san (Windows)
+
+Mo 2 cua so cmd, chay tung script:
+
+```cmd
+start_backend.bat    : DB + API tai http://localhost:8000
+start_frontend.bat   : UI PyQt5
 ```
 
-Terminal 2 (UI):
+### Cach 2 - go lenh tay
+
+Terminal 1 (database):
+```bash
+docker compose up -d postgres
+```
+
+Terminal 2 (API server):
+```bash
+python -m uvicorn backend.api.main:app --port 8000 --reload
+```
+
+Terminal 3 (UI):
 ```bash
 python frontend/main.py
 ```
 
-Hoac dung 1 file build san:
+### Cach 3 - 1-click build san
+
 ```bash
 build_exe.bat
-dist\run.exe
+dist\run.exe         # bundle ca backend + frontend trong 1 process
 ```
+
+> Cach 1/2 tach process backend rieng (chuan deploy production hon).
+> Cach 3 bundle cho user cuoi - khi click .exe se tu spawn API thread.
 
 ## Tai khoan test
 
