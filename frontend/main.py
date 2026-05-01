@@ -8,60 +8,43 @@ from PyQt5.QtCore import Qt, QDate
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
 
-# thu ket noi DB - fallback MOCK neu khong co docker
-# ---- core services (ban 1 + ban 2 cu) ----
+# Goi REST API server (backend/api) thay vi import truc tiep service
+# Neu API server khong chay -> fallback MOCK data
 DB_AVAILABLE = False
 try:
-    from backend.database.db import db
-    from backend.services.auth_service import AuthService
-    from backend.services.course_service import CourseService
-    from backend.services.registration_service import RegistrationService
-    from backend.services.grade_service import GradeService
-    from backend.services.notification_service import NotificationService
-    from backend.services.user_service import (StudentService, TeacherService,
-                                                EmployeeService, ReviewService)
-    from backend.services.stats_service import StatsService
-    DB_AVAILABLE = db.is_connected()
-    if DB_AVAILABLE:
-        print('[DB] Ket noi PostgreSQL OK - dung du lieu that')
-    else:
-        print('[DB] Khong ket noi duoc - fallback MOCK data')
-except Exception as _e:
-    print(f'[DB] Khong load duoc core services ({_e}) - fallback MOCK data')
+    from api_client import (AuthService, CourseService, RegistrationService, GradeService,
+                            NotificationService, StudentService, TeacherService,
+                            EmployeeService, ReviewService, StatsService,
+                            SemesterService, CurriculumService, ScheduleService,
+                            ExamService, AttendanceService, AuditService, is_alive)
+    # Class shim cho code cu - frontend doi khi dung db.fetch_one truc tiep
+    # (deprecated - se sua sau, tam de ko break)
+    class _ApiDb:
+        @staticmethod
+        def fetch_one(sql, params=None):
+            print(f'[WARN] db.fetch_one called from frontend - bypass API: {sql[:50]}')
+            return None
+        @staticmethod
+        def fetch_all(sql, params=None):
+            print(f'[WARN] db.fetch_all called from frontend - bypass API: {sql[:50]}')
+            return []
+        @staticmethod
+        def execute(sql, params=None):
+            print(f'[WARN] db.execute called from frontend - bypass API: {sql[:50]}')
+        @staticmethod
+        def execute_returning(sql, params=None):
+            print(f'[WARN] db.execute_returning called from frontend - bypass API: {sql[:50]}')
+            return None
+    db = _ApiDb()
 
-# ---- optional services (ban 2: them sau) ----
-# neu chua ton tai thi gan None, cac cho dung se check `if X` truoc
-SemesterService = None
-CurriculumService = None
-ScheduleService = None
-ExamService = None
-AttendanceService = None
-AuditService = None
-if DB_AVAILABLE:
-    try:
-        from backend.services.semester_service import SemesterService
-    except ImportError: pass
-    try:
-        from backend.services.curriculum_service import CurriculumService
-    except ImportError: pass
-    try:
-        from backend.services.schedule_service import ScheduleService
-    except ImportError: pass
-    try:
-        from backend.services.exam_service import ExamService
-    except ImportError: pass
-    try:
-        from backend.services.attendance_service import AttendanceService
-    except ImportError: pass
-    try:
-        from backend.services.audit_service import AuditService
-    except ImportError: pass
-    _missing = [n for n, s in [('Semester', SemesterService), ('Curriculum', CurriculumService),
-                                ('Schedule', ScheduleService), ('Exam', ExamService),
-                                ('Attendance', AttendanceService), ('Audit', AuditService)]
-                if s is None]
-    if _missing:
-        print(f'[DB] Service phu chua co: {", ".join(_missing)} - se dung MOCK cho tinh nang moi')
+    DB_AVAILABLE = is_alive()
+    if DB_AVAILABLE:
+        print('[API] Ket noi REST API server OK - dung du lieu that')
+    else:
+        print('[API] Khong ket noi duoc API server - fallback MOCK data')
+        print('      Hay chay: uvicorn backend.api.main:app --port 8000')
+except Exception as _e:
+    print(f'[API] Khong load duoc api_client ({_e}) - fallback MOCK data')
 
 
 # ===== helpers popup =====
