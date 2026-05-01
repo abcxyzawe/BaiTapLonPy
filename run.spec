@@ -15,9 +15,10 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 # Bundle toan bo cay project (truoc UI/icons/SQL)
 DATAS = [
-    # frontend - .py source files de exec (main.py + theme_helper.py)
+    # frontend - .py source files de exec (main.py + theme_helper.py + api_client.py)
     ('frontend/main.py', 'frontend'),
     ('frontend/theme_helper.py', 'frontend'),
+    ('frontend/api_client.py', 'frontend'),
     # frontend - tat ca .ui, qss, images, icons
     ('frontend/ui', 'frontend/ui'),
     ('frontend/styles', 'frontend/styles'),
@@ -29,19 +30,45 @@ DATAS = [
 ]
 
 # Hidden imports - PyInstaller doi khi bo sot
+# Note: dung TEN IMPORT (vd 'dotenv'), KHONG dung ten pip package ('python-dotenv')
 HIDDEN = [
     'psycopg2',
     'psycopg2.extras',
     'psycopg2.extensions',
-    'python-dotenv',
     'dotenv',
     'PyQt5',
     'PyQt5.QtCore',
     'PyQt5.QtGui',
     'PyQt5.QtWidgets',
     'PyQt5.uic',
+    # FastAPI + uvicorn (REST API server bundle)
+    'fastapi',
+    'uvicorn',
+    'uvicorn.lifespan',
+    'uvicorn.lifespan.on',
+    'uvicorn.protocols',
+    'uvicorn.protocols.http',
+    'uvicorn.protocols.http.h11_impl',
+    'uvicorn.protocols.websockets',
+    'uvicorn.protocols.websockets.websockets_impl',
+    'uvicorn.loops',
+    'uvicorn.loops.asyncio',
+    'uvicorn.loops.auto',
+    'uvicorn.logging',
+    'pydantic',
+    'pydantic.fields',
+    'pydantic_core',
+    'starlette',
+    'starlette.middleware',
+    'h11',
+    # Frontend HTTP client
+    'requests',
+    'urllib3',
+    'certifi',
+    'charset_normalizer',
+    'idna',
 ]
-# Backend services - PyInstaller co the bo sot do dynamic import
+# Backend services + API routers - PyInstaller co the bo sot do dynamic import
 HIDDEN += [
     'backend.database.db',
     'backend.services.auth_service',
@@ -57,9 +84,25 @@ HIDDEN += [
     'backend.services.exam_service',
     'backend.services.attendance_service',
     'backend.services.audit_service',
+    # API server modules
+    'backend.api.main',
+    'backend.api.schemas',
+    'backend.api.routers.auth',
+    'backend.api.routers.courses',
+    'backend.api.routers.registrations',
+    'backend.api.routers.grades',
+    'backend.api.routers.notifications',
+    'backend.api.routers.users',
+    'backend.api.routers.stats',
+    'backend.api.routers.semesters',
+    'backend.api.routers.curriculum',
+    'backend.api.routers.schedules',
+    'backend.api.routers.exams',
+    'backend.api.routers.attendance',
+    'backend.api.routers.audit',
 ]
 # Frontend module
-HIDDEN += ['theme_helper']
+HIDDEN += ['theme_helper', 'api_client']
 
 
 a = Analysis(

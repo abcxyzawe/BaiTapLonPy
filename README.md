@@ -1,29 +1,57 @@
-# He Thong Dang Ki Khoa Hoc
+# He thong Dang ky Khoa hoc - EAUT
+
+Bai tap lon mon Python. App quan ly trung tam dao tao - 4 vai tro:
+hoc vien, giang vien, nhan vien, quan tri vien.
+
+## Stack
+- Frontend: PyQt5
+- Backend: FastAPI (REST API)
+- DB: PostgreSQL chay trong Docker
+
+## Cai dat
+
+```bash
+pip install -r requirements.txt
+docker compose up -d postgres
+```
+
+## Chay app
+
+Mo 2 terminal:
+
+Terminal 1 (API server):
+```bash
+uvicorn backend.api.main:app --reload --port 8000
+```
+
+Terminal 2 (UI):
+```bash
+python frontend/main.py
+```
+
+Hoac dung 1 file build san:
+```bash
+build_exe.bat
+dist\run.exe
+```
+
+## Tai khoan test
+
+| Role | User | Pass |
+|------|------|------|
+| Hoc vien | student | passuser |
+| Giang vien | teacher | passtea |
+| Nhan vien | employee | passemp |
+| Admin | admin | passadmin |
+
+## Doc
+
+- API docs: http://localhost:8000/docs (sau khi chay uvicorn)
+- Mo ta chuc nang: `docs/mo-ta-chuc-nang.md`
+- Mo ta he thong: `docs/mo-ta-he-thong.md`
+- Mockups: `docs/mockups/`
 
 ## Thanh vien
 - Do Quoc Anh
 - Dao Viet Quang Huy
 - Tran Trung Duc
-
-## Mo ta
-Ung dung quan ly dang ki khoa hoc danh cho sinh vien, ho tro chuc nang dang nhap, xem danh sach khoa hoc, dang ki/huy khoa hoc va quan ly thong tin ca nhan.
-
-## Cong nghe su dung
-- **Frontend:** PyQt5 + Qt Designer
-- **Backend:** Flask (REST API)
-- **Database:** MySQL
-
-## Cau truc thu muc
-```
-BaiTapLonPy/
-├── backend/        # API server (Flask)
-├── frontend/       # Giao dien nguoi dung (PyQt5)
-├── docs/           # Tai lieu, mockup, mo ta chuc nang
-├── requirements.txt
-└── README.md
-```
-
-## Cai dat
-```bash
-pip install -r requirements.txt
-```
