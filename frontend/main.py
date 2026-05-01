@@ -8,8 +8,10 @@ from PyQt5.QtCore import Qt, QDate
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
 
-# Goi REST API server (backend/api) thay vi import truc tiep service
-# Neu API server khong chay -> fallback MOCK data
+# Goi REST API server (backend/api) qua HTTP client wrapper
+# DB_AVAILABLE = True ngay khi api_client import OK. Tung call rieng se
+# tu xu ly loi khi server tam thoi down. KHONG cache 1 lan luc startup
+# (truoc day cache False -> moi action sau bi 'Khong luu duoc' du API up).
 DB_AVAILABLE = False
 try:
     from api_client import (AuthService, CourseService, RegistrationService, GradeService,
@@ -18,7 +20,7 @@ try:
                             SemesterService, CurriculumService, ScheduleService,
                             ExamService, AttendanceService, AuditService, is_alive)
     # Class shim cho code cu - frontend doi khi dung db.fetch_one truc tiep
-    # (deprecated - se sua sau, tam de ko break)
+    # (deprecated path - cac call nay da duoc thay bang API tuong ung)
     class _ApiDb:
         @staticmethod
         def fetch_one(sql, params=None):
@@ -37,14 +39,15 @@ try:
             return None
     db = _ApiDb()
 
-    DB_AVAILABLE = is_alive()
-    if DB_AVAILABLE:
-        print('[API] Ket noi REST API server OK - dung du lieu that')
+    DB_AVAILABLE = True  # Co api_client = co the goi API. Loi tam thoi xu ly tai cho.
+    # 1 lan check optional cho user biet trang thai luc startup
+    if is_alive():
+        print('[API] Ket noi REST API server OK')
     else:
-        print('[API] Khong ket noi duoc API server - fallback MOCK data')
+        print('[API] CANH BAO: API server chua chay - cac action se loi cho den khi server len')
         print('      Hay chay: uvicorn backend.api.main:app --port 8000')
 except Exception as _e:
-    print(f'[API] Khong load duoc api_client ({_e}) - fallback MOCK data')
+    print(f'[API] Khong load duoc api_client ({_e}) - frontend chay che do offline')
 
 
 # ===== helpers popup =====
@@ -3674,37 +3677,26 @@ class TeacherWindow(QtWidgets.QWidget):
         self._update_attend_stats()
 
     def _load_class_students(self, ma_lop):
-        """Lay danh sach HV cua 1 lop (paid). Tra ve [(hv_id, msv, full_name)]"""
+        """Lay danh sach HV cua 1 lop tu API. Tra ve [(hv_id, msv, full_name)].
+        Cache ket qua trong _attend_hv_by_class."""
         if ma_lop in self._attend_hv_by_class:
             return self._attend_hv_by_class[ma_lop]
         hvs = []
         if DB_AVAILABLE:
             try:
-                rows = db.fetch_all(
-                    """SELECT s.user_id AS hv_id, s.msv, u.full_name
-                         FROM registrations r
-                         JOIN students s ON s.user_id = r.hv_id
-                         JOIN users u ON u.id = s.user_id
-                        WHERE r.lop_id = %s AND r.trang_thai IN ('paid', 'completed')
-                     ORDER BY u.full_name""",
-                    (ma_lop,)
-                )
-                hvs = [(r['hv_id'], r['msv'], r['full_name']) for r in rows]
+                # API endpoint: GET /classes/{ma_lop}/students
+                rows = CourseService.get_students_in_class(ma_lop) or []
+                for r in rows:
+                    # API tra ve {user_id, full_name, msv, sdt, reg_status}
+                    uid = r.get('user_id') or r.get('hv_id')
+                    msv = r.get('msv', '')
+                    name = r.get('full_name', '')
+                    if uid and msv:
+                        hvs.append((uid, msv, name))
             except Exception as e:
-                print(f'[TEA_ATTEND] DB loi load HV lop {ma_lop}: {e}')
-        if not hvs:
-            grade_data = getattr(self, '_tea_grades_by_class', {}).get(ma_lop, [])
-            for r in grade_data:
-                msv = r[1]
-                ten = r[2]
-                hvs.append((-(hash(msv) & 0xFFFFFF), msv, ten))
-            if not hvs:
-                hvs = [
-                    (-1001, 'HV2024001', 'Đào Viết Quang Huy'),
-                    (-1002, 'HV2024002', 'Trần Thị Bích'),
-                    (-1015, 'HV2024015', 'Hoàng Văn Em'),
-                    (-1020, 'HV2024020', 'Vũ Thị Phương'),
-                ]
+                print(f'[TEA_ATTEND] API loi load HV lop {ma_lop}: {e}')
+        # Khong co API -> KHONG fake data (de tranh hv_id am gay 500 khi save)
+        # Bang se hien rong + user thay rang lop chua co HV
         self._attend_hv_by_class[ma_lop] = hvs
         return hvs
 
@@ -3865,31 +3857,36 @@ class TeacherWindow(QtWidgets.QWidget):
                         buoi_info = info
                         break
                 buoi_info = buoi_info or {}
-                # Tao schedule moi trong DB
+                # Tao schedule moi qua API ScheduleService.create() roi load lai
                 try:
                     from datetime import date as _date
                     ngay_val = buoi_info.get('ngay') or _date.today()
-                    new_id = db.execute_returning(
-                        """INSERT INTO schedules (lop_id, ngay, gio_bat_dau, gio_ket_thuc,
-                                                  buoi_so, trang_thai)
-                           VALUES (%s, %s, %s, %s,
-                                   COALESCE((SELECT MAX(buoi_so)+1 FROM schedules WHERE lop_id=%s), 1),
-                                   'completed')
-                           RETURNING id""",
-                        (ma_lop, ngay_val,
-                         str(buoi_info.get('gio_bat_dau', '07:00'))[:5],
-                         str(buoi_info.get('gio_ket_thuc', '09:30'))[:5],
-                         ma_lop)
+                    gio_bd = str(buoi_info.get('gio_bat_dau', '07:00'))[:5]
+                    gio_kt = str(buoi_info.get('gio_ket_thuc', '09:30'))[:5]
+                    ScheduleService.create(
+                        ma_lop, ngay_val, gio_bd, gio_kt,
+                        trang_thai='completed'
                     )
-                    if new_id:
-                        buoi_id = new_id['id']
+                    # Re-query schedule list de lay id moi tao
+                    new_schedules = ScheduleService.get_for_class(ma_lop) or []
+                    # Tim schedule co ngay khop (moi tao gan day nhat)
+                    matched = [s for s in new_schedules
+                               if str(s.get('ngay', ''))[:10] == str(ngay_val)[:10]]
+                    if matched:
+                        buoi_id = matched[-1].get('id')  # lay id cao nhat
                         print(f'[TEA_ATTEND] Tao schedule moi cho {ma_lop}, id={buoi_id}')
+                    if not buoi_id or buoi_id <= 0:
+                        msg_warn(self, 'Lỗi', 'Đã tạo buổi học nhưng không lấy được mã. Vui lòng thử lại.')
+                        return
                 except Exception as e:
                     print(f'[TEA_ATTEND] Khong tao duoc schedule: {e}')
                     msg_warn(self, 'Lỗi tạo buổi', f'Không thể tạo buổi học mới:\n{e}')
                     return
+            else:
+                return  # User chọn "Không" -> hủy
 
         saved = 0
+        last_err = None
         if DB_AVAILABLE and AttendanceService and buoi_id and buoi_id > 0:
             for hv_id, code, gio_vao, ghi_chu in records:
                 try:
@@ -3899,11 +3896,16 @@ class TeacherWindow(QtWidgets.QWidget):
                                            ghi_chu=ghi_chu or None)
                     saved += 1
                 except Exception as e:
+                    last_err = str(e)[:120]
                     print(f'[TEA_ATTEND] save hv_id={hv_id}: {e}')
-            msg_info(self, 'Lưu điểm danh thành công',
-                     f'Đã lưu điểm danh cho {saved}/{len(records)} học viên - lớp {ma_lop}.\n\n'
-                     f'Vào trang "Nhập điểm" và bấm "↻ CC từ điểm danh" '
-                     f'để cập nhật cột Chuyên cần.')
+            if saved > 0:
+                msg_info(self, 'Lưu điểm danh thành công',
+                         f'Đã lưu điểm danh cho {saved}/{len(records)} học viên - lớp {ma_lop}.\n\n'
+                         f'Vào trang "Nhập điểm" và bấm "↻ CC từ điểm danh" '
+                         f'để cập nhật cột Chuyên cần.')
+            else:
+                msg_warn(self, 'Lưu điểm danh thất bại',
+                         f'Không lưu được học viên nào.\n\nLỗi: {last_err or "không rõ"}')
         else:
             msg_warn(self, 'Không lưu được',
                      'Hiện chưa kết nối được hệ thống. Vui lòng kiểm tra kết nối '
