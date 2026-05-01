@@ -4320,9 +4320,60 @@ class TeacherWindow(QtWidgets.QWidget):
         btn = page.findChild(QtWidgets.QPushButton, 'btnSaveGrades')
         if btn:
             btn.clicked.connect(self._save_tea_grades)
+        # them nut "Cap nhat tu diem danh" canh nut Luu (1 lan)
+        header = page.findChild(QtWidgets.QFrame, 'headerBar')
+        if header and not header.findChild(QtWidgets.QPushButton, 'btnSyncAttend'):
+            btn_sync = QtWidgets.QPushButton('↻ CC từ điểm danh', header)
+            btn_sync.setObjectName('btnSyncAttend')
+            btn_sync.setGeometry(560, 12, 145, 32)
+            btn_sync.setCursor(Qt.PointingHandCursor)
+            btn_sync.setToolTip('Tự động fill cột Chuyên cần = % điểm danh × 10')
+            btn_sync.setStyleSheet(
+                'QPushButton { background: white; color: #276749; border: 1px solid #276749; '
+                'border-radius: 6px; font-size: 12px; font-weight: bold; } '
+                'QPushButton:hover { background: #276749; color: white; }'
+            )
+            btn_sync.clicked.connect(lambda: self._sync_cc_from_attendance(tbl, cbo))
+            btn_sync.show()
         # cbo chon lop -> load students cua lop do
         if cbo:
             cbo.currentIndexChanged.connect(lambda idx: self._tea_grades_render(tbl, cbo.currentText() if idx > 0 else None))
+
+    def _sync_cc_from_attendance(self, tbl, cbo):
+        """Fill cot Chuyen can (col 3) tu attendance_rate cua tung HV
+        Cong thuc: CC = round(attendance_rate / 10, 1)  (= rate% / 10)"""
+        if not (tbl and cbo):
+            return
+        ma_lop = cbo.currentText() if cbo.currentIndex() > 0 else None
+        if not ma_lop:
+            msg_info(self, 'Chưa chọn lớp', 'Chọn 1 lớp cụ thể trước khi đồng bộ điểm chuyên cần.')
+            return
+        if not (DB_AVAILABLE and AttendanceService):
+            msg_info(self, 'Không có DB',
+                     'Cần kết nối database để tính chuyên cần từ điểm danh thực tế.')
+            return
+
+        self._grades_recalc_lock = True
+        updated = 0
+        for r in range(tbl.rowCount()):
+            it_msv = tbl.item(r, 1)
+            if not it_msv: continue
+            msv = it_msv.text().strip()
+            if not msv: continue
+            try:
+                hv = db.fetch_one("SELECT user_id FROM students WHERE msv = %s", (msv,))
+                if not hv: continue
+                rate = AttendanceService.attendance_rate(hv['user_id'], ma_lop)
+                cc = round(rate / 10, 1)  # rate la % (0-100) -> diem 0-10
+                it_cc = tbl.item(r, 3)
+                if it_cc:
+                    it_cc.setText(f'{cc:.1f}' if cc > 0 else '')
+                    updated += 1
+            except Exception as e:
+                print(f'[GRADE_SYNC_CC] {msv}: {e}')
+        self._grades_recalc_lock = False
+        msg_info(self, 'Đã đồng bộ',
+                 f'Đã cập nhật cột Chuyên cần cho {updated} học viên từ điểm danh thực tế.')
 
     def _tea_grades_render(self, tbl, ma_lop):
         """Render bang nhap diem theo lop. ma_lop=None = hien tat ca HV o moi lop
