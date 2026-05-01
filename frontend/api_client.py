@@ -94,20 +94,40 @@ class _ApiUser:
         self.role = data.get('role')
         self.full_name = data.get('full_name', '')
         self.name = self.full_name  # alias frontend hay dung
-        # role_data sub-fields
+        # initials: tinh tu full_name (vd "Nguyen Duc Thien" -> "NT")
+        self.initials = self._compute_initials(self.full_name)
+        # Default rong cho cac attr role-specific de tranh AttributeError
+        for attr in ('msv', 'ma_gv', 'ma_nv', 'khoa', 'hoc_vi', 'chuc_vu',
+                     'phong_ban', 'email', 'sdt', 'diachi', 'ngaysinh',
+                     'gioitinh', 'tham_nien', 'lop'):
+            setattr(self, attr, '')
+        # Override bang role_data thuc te
         for k, v in (data.get('role_data') or {}).items():
             setattr(self, k, v)
+
+    @staticmethod
+    def _compute_initials(name: str) -> str:
+        """Tinh viet tat tu ten - "Nguyen Duc Thien" -> "NT"."""
+        if not name:
+            return '?'
+        parts = name.strip().split()
+        if len(parts) == 1:
+            return parts[0][:2].upper()
+        # Lay chu cai dau cua HO va TEN
+        return (parts[0][0] + parts[-1][0]).upper()
 
     def __getitem__(self, k):
         # Frontend doi khi dung user['id'] thay vi user.id
         if k in ('id', 'user_id'):
             return self.id
+        if hasattr(self, k):
+            return getattr(self, k)
         return self._d.get(k) or self._d.get('role_data', {}).get(k)
 
     def get(self, k, default=None):
         try:
             v = self[k]
-            return v if v is not None else default
+            return v if v is not None and v != '' else default
         except Exception:
             return default
 

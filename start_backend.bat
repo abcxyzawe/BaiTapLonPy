@@ -43,4 +43,5 @@ echo  Nhan Ctrl+C de tat API server.
 echo  Postgres van chay nen sau khi tat API.
 echo.
 
-python -m uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --reload
+REM --reload-dir backend: chi watch backend/ - khong restart khi sua frontend/
+python -m uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir backend
