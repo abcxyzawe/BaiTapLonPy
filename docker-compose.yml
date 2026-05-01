@@ -26,6 +26,10 @@ services:
       timeout: 5s
       retries: 5
 
+  # Note: REST API server (FastAPI/uvicorn) khong chay trong Docker
+  # ma duoc spawn boi run.py dang Python subprocess - de bundle vao run.exe
+  # va tranh Docker volume mount issues tren Windows.
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: eaut_pgadmin
