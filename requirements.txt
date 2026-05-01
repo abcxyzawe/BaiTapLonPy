@@ -1,3 +1,11 @@
 PyQt5==5.15.10
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
+
+# Backend REST API server
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+
+# Frontend HTTP client
+requests==2.32.3
