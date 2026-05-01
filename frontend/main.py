@@ -8,8 +8,10 @@ from PyQt5.QtCore import Qt, QDate
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
 
-# Goi REST API server (backend/api) thay vi import truc tiep service
-# Neu API server khong chay -> fallback MOCK data
+# Goi REST API server (backend/api) qua HTTP client wrapper
+# DB_AVAILABLE = True ngay khi api_client import OK. Tung call rieng se
+# tu xu ly loi khi server tam thoi down. KHONG cache 1 lan luc startup
+# (truoc day cache False -> moi action sau bi 'Khong luu duoc' du API up).
 DB_AVAILABLE = False
 try:
     from api_client import (AuthService, CourseService, RegistrationService, GradeService,
@@ -18,7 +20,7 @@ try:
                             SemesterService, CurriculumService, ScheduleService,
                             ExamService, AttendanceService, AuditService, is_alive)
     # Class shim cho code cu - frontend doi khi dung db.fetch_one truc tiep
-    # (deprecated - se sua sau, tam de ko break)
+    # (deprecated path - cac call nay da duoc thay bang API tuong ung)
     class _ApiDb:
         @staticmethod
         def fetch_one(sql, params=None):
@@ -37,14 +39,31 @@ try:
             return None
     db = _ApiDb()
 
-    DB_AVAILABLE = is_alive()
-    if DB_AVAILABLE:
-        print('[API] Ket noi REST API server OK - dung du lieu that')
+    DB_AVAILABLE = True  # Co api_client = co the goi API. Loi tam thoi xu ly tai cho.
+    # 1 lan check optional cho user biet trang thai luc startup
+    if is_alive():
+        print('[API] Ket noi REST API server OK')
     else:
-        print('[API] Khong ket noi duoc API server - fallback MOCK data')
+        print('[API] CANH BAO: API server chua chay - cac action se loi cho den khi server len')
         print('      Hay chay: uvicorn backend.api.main:app --port 8000')
 except Exception as _e:
-    print(f'[API] Khong load duoc api_client ({_e}) - fallback MOCK data')
+    print(f'[API] Khong load duoc api_client ({_e}) - frontend chay che do offline')
+
+
+# ===== Cache layer cho courses/classes =====
+# Load 1 lan luc startup, refresh sau admin CRUD.
+# Khong dung mock hardcode - lay tu API thuc.
+
+def _load_app_data():
+    """Goi sau khi import api_client thanh cong de prefetch cache."""
+    if not DB_AVAILABLE:
+        return
+    try:
+        _load_courses_cache()
+        _load_classes_cache()
+        print(f'[CACHE] Loaded {len(MOCK_COURSES)} courses + {len(MOCK_CLASSES)} classes')
+    except Exception as e:
+        print(f'[CACHE] Loi prefetch: {e}')
 
 
 # ===== helpers popup =====
@@ -383,59 +402,94 @@ UI = os.path.join(BASE, 'ui')
 RES = os.path.join(BASE, 'resources')
 ICONS = os.path.join(RES, 'icons')
 
-# mock data - 4 role
-MOCK_USER = {
-    'username': 'user', 'password': 'passuser', 'role': 'Học viên',
-    'name': 'Đào Viết Quang Huy', 'msv': 'HV2024001', 'lop': 'IT001-A',
-    'khoa': 'Công nghệ thông tin', 'ngaysinh': '15/03/2004', 'gioitinh': 'Nam',
-    'nienkhoa': '2024 - 2028', 'hedt': 'Chính quy',
-    'email': 'quanghuy@sv.eaut.edu.vn', 'sdt': '0912345678',
-    'diachi': 'Đà Nẵng', 'initials': 'QH',
+# Current user placeholder - duoc fill sau khi login tu API.
+# 4 dict tuong ung 4 role, sidebar/profile binding default truoc khi co data that.
+# Sau login, _sync_current_from_user(user) overwrite cac field tu /auth/login response.
+CURRENT_USER = {
+    'username': '', 'password': '', 'role': 'Học viên',
+    'name': '', 'msv': '', 'lop': '',
+    'khoa': '', 'ngaysinh': '', 'gioitinh': '',
+    'nienkhoa': '', 'hedt': '',
+    'email': '', 'sdt': '',
+    'diachi': '', 'initials': '?',
 }
 
-MOCK_ADMIN = {
-    'username': 'admin', 'password': 'passadmin',
-    'name': 'Admin', 'role': 'Quản trị viên', 'initials': 'AD',
+CURRENT_ADMIN = {
+    'username': '', 'password': '',
+    'name': '', 'role': 'Quản trị viên', 'initials': 'AD',
 }
 
-MOCK_TEACHER = {
-    'username': 'teacher', 'password': 'passtea', 'role': 'Giảng viên',
-    'id': 'GV001', 'name': 'Nguyễn Đức Thiện', 'initials': 'NT',
-    'khoa': 'Công nghệ thông tin', 'hocvi': 'Tiến sĩ',
-    'email': 'thien@eaut.edu.vn', 'sdt': '0901234567',
+CURRENT_TEACHER = {
+    'username': '', 'password': '', 'role': 'Giảng viên',
+    'id': '', 'name': '', 'initials': '?',
+    'khoa': '', 'hocvi': '',
+    'email': '', 'sdt': '',
 }
 
-MOCK_EMPLOYEE = {
-    'username': 'employee', 'password': 'passemp', 'role': 'Nhân viên',
-    'id': 'NV001', 'name': 'Trần Thu Hương', 'initials': 'TH',
-    'chucvu': 'Nhân viên đăng ký',
-    'email': 'huongtt@eaut.edu.vn', 'sdt': '0987654321',
+CURRENT_EMPLOYEE = {
+    'username': '', 'password': '', 'role': 'Nhân viên',
+    'id': '', 'name': '', 'initials': '?',
+    'chucvu': '',
+    'email': '', 'sdt': '',
 }
 
-# mock classes - mỗi môn có nhiều lớp với giá khác nhau
-MOCK_COURSES = [
-    ('IT001', 'Lập trình Python'),
-    ('IT002', 'Cơ sở dữ liệu'),
-    ('IT003', 'Mạng máy tính'),
-    ('IT004', 'Trí tuệ nhân tạo'),
-    ('MA001', 'Toán rời rạc'),
-]
+# Backward-compat aliases - de tranh break code cu chua sua het
+MOCK_USER = CURRENT_USER
+MOCK_ADMIN = CURRENT_ADMIN
+MOCK_TEACHER = CURRENT_TEACHER
+MOCK_EMPLOYEE = CURRENT_EMPLOYEE
 
-MOCK_CLASSES = [
-    # (ma_lop, ma_mon, ten_mon, gv, lich, phong, sisoMax, siso, gia)
-    ('IT001-A', 'IT001', 'Lập trình Python', 'Nguyễn Đức Thiện', 'T3, T5 (7:00-9:30)', 'P.A301', 40, 35, 2500000),
-    ('IT001-B', 'IT001', 'Lập trình Python', 'Lê Trung Thực', 'T4, T6 (13:00-15:30)', 'P.B205', 40, 28, 1800000),
-    ('IT001-C', 'IT001', 'Lập trình Python', 'Ngô Thảo Anh', 'T2, T7 (15:40-18:10)', 'P.C102', 35, 35, 2000000),
-    ('IT002-A', 'IT002', 'Cơ sở dữ liệu', 'Lê Thị C', 'T5 (7:00-9:30)', 'P.A202', 40, 35, 2200000),
-    ('IT002-B', 'IT002', 'Cơ sở dữ liệu', 'Phạm Văn K', 'T3 (13:00-15:30)', 'P.B108', 40, 22, 1800000),
-    ('IT003-A', 'IT003', 'Mạng máy tính', 'Phạm Văn D', 'T6 (7:00-9:30)', 'P.A105', 30, 18, 2000000),
-    ('IT004-A', 'IT004', 'Trí tuệ nhân tạo', 'Nguyễn Đức Thiện', 'T3 (7:00-9:30)', 'P.A301', 40, 28, 2800000),
-    ('IT004-B', 'IT004', 'Trí tuệ nhân tạo', 'Hoàng Minh Tuấn', 'T5 (13:00-15:30)', 'P.B301', 35, 20, 2200000),
-    ('MA001-A', 'MA001', 'Toán rời rạc', 'Nguyễn Thị E', 'T2 (9:30-12:00)', 'P.A203', 40, 30, 1500000),
-    ('MA001-B', 'MA001', 'Toán rời rạc', 'Lê Văn M', 'T4 (9:30-12:00)', 'P.B204', 40, 25, 1200000),
-    ('IT002-C', 'IT002', 'Cơ sở dữ liệu', 'Nguyễn Đức Thiện', 'T2 (13:00-15:30)', 'P.A205', 40, 32, 2200000),
-    ('IT009-A', 'IT009', 'Phát triển web', 'Nguyễn Đức Thiện', 'T7 (9:30-12:00)', 'P.C201', 35, 28, 2500000),
-]
+# Cache classes/courses tu API - thay vi hardcode mock data
+# Lazy-loaded boi _load_courses_cache() / _load_classes_cache()
+# Empty list = chua load hoac API loi -> UI hien empty state
+MOCK_COURSES = []  # alias backward compat - actually populated tu API
+MOCK_CLASSES = []  # alias backward compat - actually populated tu API
+
+
+def _load_courses_cache():
+    """Load courses tu API. Cache vao MOCK_COURSES de cac code cu reuse.
+    Tra ve list of (ma_mon, ten_mon)."""
+    global MOCK_COURSES
+    if MOCK_COURSES:
+        return MOCK_COURSES
+    try:
+        rows = CourseService.get_all_courses() or []
+        MOCK_COURSES = [(r['ma_mon'], r.get('ten_mon', '')) for r in rows]
+    except Exception as e:
+        print(f'[CACHE] Load courses loi: {e}')
+        MOCK_COURSES = []
+    return MOCK_COURSES
+
+
+def _load_classes_cache():
+    """Load classes tu API. Cache vao MOCK_CLASSES.
+    Format: list of (ma_lop, ma_mon, ten_mon, ten_gv, lich, phong, smax, scur, gia)."""
+    global MOCK_CLASSES
+    if MOCK_CLASSES:
+        return MOCK_CLASSES
+    try:
+        rows = CourseService.get_all_classes() or []
+        MOCK_CLASSES = [(
+            r.get('ma_lop', ''), r.get('ma_mon', ''), r.get('ten_mon', ''),
+            r.get('ten_gv', '') or '', r.get('lich', '') or '',
+            r.get('phong', '') or '',
+            int(r.get('siso_max') or 40),
+            int(r.get('siso_hien_tai') or 0),
+            int(r.get('gia') or 0),
+        ) for r in rows]
+    except Exception as e:
+        print(f'[CACHE] Load classes loi: {e}')
+        MOCK_CLASSES = []
+    return MOCK_CLASSES
+
+
+def _refresh_cache():
+    """Force refresh cache - goi sau khi admin them/sua/xoa."""
+    global MOCK_COURSES, MOCK_CLASSES
+    MOCK_COURSES = []
+    MOCK_CLASSES = []
+    _load_courses_cache()
+    _load_classes_cache()
 
 
 # STUDENT pages
@@ -3674,37 +3728,26 @@ class TeacherWindow(QtWidgets.QWidget):
         self._update_attend_stats()
 
     def _load_class_students(self, ma_lop):
-        """Lay danh sach HV cua 1 lop (paid). Tra ve [(hv_id, msv, full_name)]"""
+        """Lay danh sach HV cua 1 lop tu API. Tra ve [(hv_id, msv, full_name)].
+        Cache ket qua trong _attend_hv_by_class."""
         if ma_lop in self._attend_hv_by_class:
             return self._attend_hv_by_class[ma_lop]
         hvs = []
         if DB_AVAILABLE:
             try:
-                rows = db.fetch_all(
-                    """SELECT s.user_id AS hv_id, s.msv, u.full_name
-                         FROM registrations r
-                         JOIN students s ON s.user_id = r.hv_id
-                         JOIN users u ON u.id = s.user_id
-                        WHERE r.lop_id = %s AND r.trang_thai IN ('paid', 'completed')
-                     ORDER BY u.full_name""",
-                    (ma_lop,)
-                )
-                hvs = [(r['hv_id'], r['msv'], r['full_name']) for r in rows]
+                # API endpoint: GET /classes/{ma_lop}/students
+                rows = CourseService.get_students_in_class(ma_lop) or []
+                for r in rows:
+                    # API tra ve {user_id, full_name, msv, sdt, reg_status}
+                    uid = r.get('user_id') or r.get('hv_id')
+                    msv = r.get('msv', '')
+                    name = r.get('full_name', '')
+                    if uid and msv:
+                        hvs.append((uid, msv, name))
             except Exception as e:
-                print(f'[TEA_ATTEND] DB loi load HV lop {ma_lop}: {e}')
-        if not hvs:
-            grade_data = getattr(self, '_tea_grades_by_class', {}).get(ma_lop, [])
-            for r in grade_data:
-                msv = r[1]
-                ten = r[2]
-                hvs.append((-(hash(msv) & 0xFFFFFF), msv, ten))
-            if not hvs:
-                hvs = [
-                    (-1001, 'HV2024001', 'Đào Viết Quang Huy'),
-                    (-1002, 'HV2024002', 'Trần Thị Bích'),
-                    (-1015, 'HV2024015', 'Hoàng Văn Em'),
-                    (-1020, 'HV2024020', 'Vũ Thị Phương'),
-                ]
+                print(f'[TEA_ATTEND] API loi load HV lop {ma_lop}: {e}')
+        # Khong co API -> KHONG fake data (de tranh hv_id am gay 500 khi save)
+        # Bang se hien rong + user thay rang lop chua co HV
         self._attend_hv_by_class[ma_lop] = hvs
         return hvs
 
@@ -3865,31 +3908,36 @@ class TeacherWindow(QtWidgets.QWidget):
                         buoi_info = info
                         break
                 buoi_info = buoi_info or {}
-                # Tao schedule moi trong DB
+                # Tao schedule moi qua API ScheduleService.create() roi load lai
                 try:
                     from datetime import date as _date
                     ngay_val = buoi_info.get('ngay') or _date.today()
-                    new_id = db.execute_returning(
-                        """INSERT INTO schedules (lop_id, ngay, gio_bat_dau, gio_ket_thuc,
-                                                  buoi_so, trang_thai)
-                           VALUES (%s, %s, %s, %s,
-                                   COALESCE((SELECT MAX(buoi_so)+1 FROM schedules WHERE lop_id=%s), 1),
-                                   'completed')
-                           RETURNING id""",
-                        (ma_lop, ngay_val,
-                         str(buoi_info.get('gio_bat_dau', '07:00'))[:5],
-                         str(buoi_info.get('gio_ket_thuc', '09:30'))[:5],
-                         ma_lop)
+                    gio_bd = str(buoi_info.get('gio_bat_dau', '07:00'))[:5]
+                    gio_kt = str(buoi_info.get('gio_ket_thuc', '09:30'))[:5]
+                    ScheduleService.create(
+                        ma_lop, ngay_val, gio_bd, gio_kt,
+                        trang_thai='completed'
                     )
-                    if new_id:
-                        buoi_id = new_id['id']
+                    # Re-query schedule list de lay id moi tao
+                    new_schedules = ScheduleService.get_for_class(ma_lop) or []
+                    # Tim schedule co ngay khop (moi tao gan day nhat)
+                    matched = [s for s in new_schedules
+                               if str(s.get('ngay', ''))[:10] == str(ngay_val)[:10]]
+                    if matched:
+                        buoi_id = matched[-1].get('id')  # lay id cao nhat
                         print(f'[TEA_ATTEND] Tao schedule moi cho {ma_lop}, id={buoi_id}')
+                    if not buoi_id or buoi_id <= 0:
+                        msg_warn(self, 'Lỗi', 'Đã tạo buổi học nhưng không lấy được mã. Vui lòng thử lại.')
+                        return
                 except Exception as e:
                     print(f'[TEA_ATTEND] Khong tao duoc schedule: {e}')
                     msg_warn(self, 'Lỗi tạo buổi', f'Không thể tạo buổi học mới:\n{e}')
                     return
+            else:
+                return  # User chọn "Không" -> hủy
 
         saved = 0
+        last_err = None
         if DB_AVAILABLE and AttendanceService and buoi_id and buoi_id > 0:
             for hv_id, code, gio_vao, ghi_chu in records:
                 try:
@@ -3899,11 +3947,16 @@ class TeacherWindow(QtWidgets.QWidget):
                                            ghi_chu=ghi_chu or None)
                     saved += 1
                 except Exception as e:
+                    last_err = str(e)[:120]
                     print(f'[TEA_ATTEND] save hv_id={hv_id}: {e}')
-            msg_info(self, 'Lưu điểm danh thành công',
-                     f'Đã lưu điểm danh cho {saved}/{len(records)} học viên - lớp {ma_lop}.\n\n'
-                     f'Vào trang "Nhập điểm" và bấm "↻ CC từ điểm danh" '
-                     f'để cập nhật cột Chuyên cần.')
+            if saved > 0:
+                msg_info(self, 'Lưu điểm danh thành công',
+                         f'Đã lưu điểm danh cho {saved}/{len(records)} học viên - lớp {ma_lop}.\n\n'
+                         f'Vào trang "Nhập điểm" và bấm "↻ CC từ điểm danh" '
+                         f'để cập nhật cột Chuyên cần.')
+            else:
+                msg_warn(self, 'Lưu điểm danh thất bại',
+                         f'Không lưu được học viên nào.\n\nLỗi: {last_err or "không rõ"}')
         else:
             msg_warn(self, 'Không lưu được',
                      'Hiện chưa kết nối được hệ thống. Vui lòng kiểm tra kết nối '
@@ -5666,6 +5719,8 @@ class App:
     def __init__(self):
         self.qapp = QtWidgets.QApplication(sys.argv)
         load_theme(self.qapp)
+        # Prefetch courses + classes tu API (cache de cac combo dung lai)
+        _load_app_data()
         self.main_win = None
         self.login_win = None
 
