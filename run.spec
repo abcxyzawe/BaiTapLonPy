@@ -30,11 +30,11 @@ DATAS = [
 ]
 
 # Hidden imports - PyInstaller doi khi bo sot
+# Note: dung TEN IMPORT (vd 'dotenv'), KHONG dung ten pip package ('python-dotenv')
 HIDDEN = [
     'psycopg2',
     'psycopg2.extras',
     'psycopg2.extensions',
-    'python-dotenv',
     'dotenv',
     'PyQt5',
     'PyQt5.QtCore',
