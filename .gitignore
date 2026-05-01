@@ -26,3 +26,8 @@ Thumbs.db
 # env
 .env
 *.log
+
+# Agent test outputs
+frontend/screenshots/
+test_ui_screenshot.py
+test_output.log
