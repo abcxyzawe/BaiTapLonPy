@@ -1,9 +1,15 @@
 """run.py - EAUT app launcher
-1 click bat docker (postgres) + launch PyQt5 frontend.
+1 click bat 2 service docker (postgres + api) + launch PyQt5 frontend.
+
+Kien truc client-server:
+    PyQt5 (frontend) --HTTP--> FastAPI server (container eaut_api)
+                                    |
+                                    v psycopg2
+                              PostgreSQL (container eaut_postgres)
 
 Khi chay duoi dang script: cd vao folder roi `python run.py`
-Khi build .exe: PyInstaller bundle file nay + toan bo project, doi gianh
-file mot click duy nhat -> Docker compose up -> wait DB -> launch UI.
+Khi build .exe: PyInstaller bundle file nay + toan bo project, double-click
+mot file -> Docker compose up -> wait DB+API -> launch UI.
 """
 import os
 import shutil
@@ -146,6 +152,66 @@ def start_postgres():
     return True
 
 
+# API process duoc spawn boi launcher - ref de kill khi tat app
+_api_proc = None
+
+
+def start_api_server():
+    """Spawn uvicorn subprocess. Tra ve True neu start OK."""
+    global _api_proc
+    sys.path.insert(0, BASE)  # de import duoc backend.api.main
+
+    # Cach 1: chay nhu module python
+    cmd = [sys.executable, '-m', 'uvicorn', 'backend.api.main:app',
+           '--host', '127.0.0.1', '--port', '8000', '--log-level', 'warning']
+    try:
+        _api_proc = subprocess.Popen(
+            cmd, cwd=BASE,
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            creationflags=NO_WIN
+        )
+    except Exception as e:
+        show_error('Khong start duoc API server', str(e))
+        return False
+    return True
+
+
+def wait_for_api(timeout=30):
+    """Poll http://127.0.0.1:8000/health cho den khi API san sang."""
+    import urllib.request
+    import urllib.error
+    import json
+    for _ in range(timeout):
+        try:
+            with urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2) as r:
+                data = json.loads(r.read())
+                if data.get('api') == 'ok' and data.get('db') == 'connected':
+                    return True
+        except (urllib.error.URLError, ConnectionError, OSError, ValueError):
+            pass
+        # Kiem tra xem subprocess co chet khong
+        if _api_proc and _api_proc.poll() is not None:
+            err = (_api_proc.stderr.read() or b'').decode('utf-8', errors='ignore')
+            show_error('API server bi crash',
+                       'uvicorn process exit code = ' + str(_api_proc.returncode) +
+                       '\n\nStderr:\n' + err[-1000:])
+            return False
+        time.sleep(1)
+    return False
+
+
+def stop_api_server():
+    """Tat API subprocess khi user dong app."""
+    global _api_proc
+    if _api_proc and _api_proc.poll() is None:
+        try:
+            _api_proc.terminate()
+            _api_proc.wait(timeout=5)
+        except Exception:
+            try: _api_proc.kill()
+            except Exception: pass
+
+
 def wait_for_db(timeout=60):
     """Poll pg_isready trong container."""
     for i in range(timeout):
@@ -182,6 +248,9 @@ def launch_frontend(qapp, splash):
 
 
 def main():
+    import atexit
+    atexit.register(stop_api_server)  # cleanup khi tat app
+
     qapp, splash = show_splash('Kiem tra Docker...')
     try:
         if not check_docker():
@@ -193,15 +262,23 @@ def main():
         update_splash(splash, qapp, 'Doi database san sang...')
         if not wait_for_db():
             show_error('Database khong phan hoi',
-                       'PostgreSQL khong san sang sau 60 giay.\n'
-                       'Hay kiem tra Docker Desktop.')
+                       'PostgreSQL khong san sang sau 60 giay.')
+            return
+        update_splash(splash, qapp, 'Khoi dong REST API server...')
+        if not start_api_server():
+            return
+        if not wait_for_api():
+            show_error('API server khong phan hoi',
+                       'FastAPI server khong san sang sau 30 giay.')
             return
         update_splash(splash, qapp, 'Mo giao dien dang nhap...')
         time.sleep(0.3)
         launch_frontend(qapp, splash)
     except KeyboardInterrupt:
+        stop_api_server()
         sys.exit(0)
     except Exception as e:
+        stop_api_server()
         show_error('Loi khoi dong', type(e).__name__ + ': ' + str(e))
 
 
