@@ -464,6 +464,7 @@ TEACHER_PAGES = [
     ('btnTeaSchedule', 'schedule.ui'),
     ('btnTeaClasses', 'teacher_classes.ui'),
     ('btnTeaStudents', 'teacher_students.ui'),
+    ('btnTeaAttend', 'teacher_attendance.ui'),
     ('btnTeaNotice', 'teacher_notice.ui'),
     ('btnTeaGrades', 'teacher_grades.ui'),
     ('btnTeaProfile', 'profile.ui'),
@@ -474,6 +475,7 @@ TEACHER_MENU = [
     ('btnTeaSchedule', 'iconTeaSchedule', 'calendar', 'Lịch dạy'),
     ('btnTeaClasses', 'iconTeaClasses', 'layers', 'Lớp của tôi'),
     ('btnTeaStudents', 'iconTeaStudents', 'users', 'Học viên'),
+    ('btnTeaAttend', 'iconTeaAttend', 'check-circle', 'Điểm danh'),
     ('btnTeaNotice', 'iconTeaNotice', 'bell', 'Gửi thông báo'),
     ('btnTeaGrades', 'iconTeaGrades', 'edit', 'Nhập điểm'),
     ('btnTeaProfile', 'iconTeaProfile', 'user', 'Thông tin cá nhân'),
@@ -3453,10 +3455,15 @@ class TeacherWindow(QtWidgets.QWidget):
         if not self.pages_filled[index]:
             fill = [self._fill_tea_dashboard, self._fill_tea_schedule,
                     self._fill_tea_classes, self._fill_tea_students,
+                    self._fill_tea_attendance,
                     self._fill_tea_notice, self._fill_tea_grades,
                     self._fill_tea_profile]
             fill[index]()
             self.pages_filled[index] = True
+
+    def _fill_tea_attendance(self):
+        """STUB: se duoc bo sung o commit sau (Quang Huy)"""
+        pass
 
     def _switch_page(self, index):
         self.stack.setCurrentIndex(index)
@@ -3778,7 +3785,7 @@ class TeacherWindow(QtWidgets.QWidget):
                 tbl.setRowHidden(r, it.text() != sel if it else False)
 
     def _fill_tea_notice(self):
-        page = self.page_widgets[4]
+        page = self.page_widgets[5]
         cbo = page.findChild(QtWidgets.QComboBox, 'cboTargetClass')
         if cbo:
             cbo.clear()
@@ -3834,7 +3841,7 @@ class TeacherWindow(QtWidgets.QWidget):
         return card
 
     def _tea_send_notice(self):
-        page = self.page_widgets[4]
+        page = self.page_widgets[5]
         subj = page.findChild(QtWidgets.QLineEdit, 'txtSubject')
         content = page.findChild(QtWidgets.QTextEdit, 'txtContent')
         cbo = page.findChild(QtWidgets.QComboBox, 'cboTargetClass')
@@ -3866,7 +3873,7 @@ class TeacherWindow(QtWidgets.QWidget):
         subj.clear(); content.clear()
 
     def _tea_clear_notice(self):
-        page = self.page_widgets[4]
+        page = self.page_widgets[5]
         for name in ('txtSubject',):
             w = page.findChild(QtWidgets.QLineEdit, name)
             if w: w.clear()
@@ -3874,7 +3881,7 @@ class TeacherWindow(QtWidgets.QWidget):
         if w: w.clear()
 
     def _fill_tea_grades(self):
-        page = self.page_widgets[5]
+        page = self.page_widgets[6]
         cbo = page.findChild(QtWidgets.QComboBox, 'cboGradeClass')
 
         # lay danh sach lop cua GV tu DB
@@ -4153,7 +4160,7 @@ class TeacherWindow(QtWidgets.QWidget):
         c = item.column()
         if c not in (3, 4, 5):
             return
-        page = self.page_widgets[5]
+        page = self.page_widgets[6]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherGrades')
         if not tbl:
             return
@@ -4192,7 +4199,7 @@ class TeacherWindow(QtWidgets.QWidget):
         # Neu co DB va biet lop, ghi that
         saved = 0
         if DB_AVAILABLE:
-            page = self.page_widgets[5]
+            page = self.page_widgets[6]
             tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherGrades')
             cbo = page.findChild(QtWidgets.QComboBox, 'cboGradeClass')
             gv_user_id = MOCK_TEACHER.get('user_id')
@@ -4216,7 +4223,7 @@ class TeacherWindow(QtWidgets.QWidget):
             msg_info(self, 'Thành công', 'Đã lưu điểm (chế độ MOCK).')
 
     def _fill_tea_profile(self):
-        page = self.page_widgets[6]
+        page = self.page_widgets[7]
         u = MOCK_TEACHER
         for attr, val in [('lblProfileName', u['name']), ('lblProfileRole', f"Giảng viên - Khoa {u['khoa']}"),
                           ('lblProfileAvatar', u['initials']), ('valMaSV', u['id']), ('valHoTen', u['name']),
