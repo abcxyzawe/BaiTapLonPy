@@ -301,6 +301,29 @@ def show_detail_dialog(parent, title, fields, avatar_text=None, subtitle=None):
     dlg.exec_()
 
 
+def toggle_max_window(win):
+    """Toggle phong to / thu nho cua so"""
+    if win.isMaximized():
+        win.showNormal()
+    else:
+        win.showMaximized()
+
+
+def add_maximize_button(sidebar, win):
+    """Them nut phong to/thu nho o goc tren ben phai cua sidebar"""
+    btn = QtWidgets.QPushButton('⛶', sidebar)
+    btn.setGeometry(195, 20, 24, 24)
+    btn.setCursor(Qt.PointingHandCursor)
+    btn.setToolTip('Phóng to / Thu nhỏ cửa sổ')
+    btn.setStyleSheet(
+        'QPushButton { background: transparent; border: none; '
+        'font-size: 18px; color: #4a5568; font-weight: bold; } '
+        'QPushButton:hover { background: #edf2f7; border-radius: 4px; color: #002060; }'
+    )
+    btn.clicked.connect(lambda: toggle_max_window(win))
+    return btn
+
+
 def widen_search(page, txt_name, new_width, shift_after=None):
     """noi rong o tim kiem va day widget ben phai neu can"""
     txt = page.findChild(QtWidgets.QLineEdit, txt_name)
@@ -507,7 +530,8 @@ class MainWindow(QtWidgets.QWidget):
         self.app_ref = app_ref
         self.setObjectName('MainWindow')
         self.setWindowTitle('EAUT - Hệ thống Đăng ký Khóa học')
-        self.setFixedSize(1100, 700)
+        self.setMinimumSize(1100, 700)
+        self.resize(1100, 700)
         self.setWindowIcon(QIcon(os.path.join(RES, 'logo.png')))
 
         # layout chinh
@@ -556,8 +580,10 @@ class MainWindow(QtWidgets.QWidget):
         self.lblSidebarSchool.setStyleSheet(f'color: {COLORS["navy"]}; font-size: 13px; font-weight: bold; background: transparent;')
 
         self.lblSidebarSub = QtWidgets.QLabel('Đăng ký khóa học', sidebar)
-        self.lblSidebarSub.setGeometry(68, 40, 150, 16)
+        self.lblSidebarSub.setGeometry(68, 40, 120, 16)
         self.lblSidebarSub.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 11px; background: transparent;')
+        # Nut phong to/thu nho cua so
+        add_maximize_button(sidebar, self)
 
         # duong ke
         sep = QtWidgets.QFrame(sidebar)
@@ -1347,7 +1373,8 @@ class AdminWindow(QtWidgets.QWidget):
         self.app_ref = app_ref
         self.setObjectName('MainWindow')
         self.setWindowTitle('EAUT - Quản trị hệ thống')
-        self.setFixedSize(1250, 720)
+        self.setMinimumSize(1250, 720)
+        self.resize(1250, 720)
         self.setWindowIcon(QIcon(os.path.join(RES, 'logo.png')))
 
         layout = QtWidgets.QHBoxLayout(self)
@@ -1390,8 +1417,9 @@ class AdminWindow(QtWidgets.QWidget):
         lbl_school.setStyleSheet(f'color: {COLORS["navy"]}; font-size: 13px; font-weight: bold; background: transparent;')
 
         lbl_sub = QtWidgets.QLabel('Quản trị hệ thống', sidebar)
-        lbl_sub.setGeometry(68, 40, 150, 16)
+        lbl_sub.setGeometry(68, 40, 120, 16)
         lbl_sub.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 11px; background: transparent;')
+        add_maximize_button(sidebar, self)
 
         sep = QtWidgets.QFrame(sidebar)
         sep.setGeometry(15, 74, 200, 1)
@@ -1689,7 +1717,8 @@ class AdminWindow(QtWidgets.QWidget):
                         btns[0].clicked.connect(lambda ch, ma=row[0], nm=row[1]: self._admin_edit_course(ma, nm))
                         btns[1].clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'môn học'))
 
-        widen_search(page, 'txtSearchCourse', 320, ['btnSearchCourse', 'cboFilterDept'])
+        # Khong day btnSearchCourse vi no o sat mep phai roi - chi day combo + separator
+        widen_search(page, 'txtSearchCourse', 300, ['sepFilter1', 'cboFilterDept'])
         # wire search / filter / add
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCourse')
         if txt:
@@ -1931,7 +1960,8 @@ class AdminWindow(QtWidgets.QWidget):
                             avatar_text=rd[1].split()[-1] if rd[1] else '?', subtitle=rd[0]))
                         btns[1].clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'học viên'))
 
-        widen_search(page, 'txtSearchStudent', 300, ['btnSearchStudent', 'cboFilterClass', 'cboFilterDeptSt'])
+        # btnSearchStudent o sat phai - khong day, chi day combo
+        widen_search(page, 'txtSearchStudent', 300, ['cboFilterClass', 'cboFilterDeptSt'])
         # search / filter / add
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchStudent')
         if txt:
@@ -2304,7 +2334,8 @@ class AdminWindow(QtWidgets.QWidget):
                 hl.addWidget(btn_edit)
                 hl.addWidget(btn_del)
                 tbl.setCellWidget(r, 8, w)
-            for c, cw in enumerate([32, 65, 150, 28, 90, 48, 95, 90, 130]):
+            # tang cot Hoc ky tu 48 -> 70 cho "Hoc ky X" hien thi du
+            for c, cw in enumerate([32, 65, 150, 28, 90, 70, 95, 90, 130]):
                 tbl.setColumnWidth(c, cw)
             tbl.horizontalHeader().setStretchLastSection(True)
             tbl.verticalHeader().setVisible(False)
@@ -2319,7 +2350,8 @@ class AdminWindow(QtWidgets.QWidget):
                         btns[0].clicked.connect(lambda ch, rr=r: self._admin_edit_curriculum(rr))
                         btns[1].clicked.connect(lambda ch, ma=row[1], nm=row[2], t=tbl: self._admin_del_row(t, ma, nm, 'môn trong CT'))
 
-        widen_search(page, 'txtSearchCurr', 280, ['cboNganh', 'cboLoai', 'cboHocKy', 'btnExportCurr'])
+        # btnExportCurr o frame khac va o phai - khong day
+        widen_search(page, 'txtSearchCurr', 280, ['cboNganh', 'cboLoai', 'cboHocKy'])
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCurr')
         if txt:
             txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[1, 2]))
@@ -3297,7 +3329,8 @@ class TeacherWindow(QtWidgets.QWidget):
         self.app_ref = app_ref
         self.setObjectName('MainWindow')
         self.setWindowTitle('EAUT - Hệ thống giảng viên')
-        self.setFixedSize(1100, 700)
+        self.setMinimumSize(1100, 700)
+        self.resize(1100, 700)
         self.setWindowIcon(QIcon(os.path.join(RES, 'logo.png')))
 
         layout = QtWidgets.QHBoxLayout(self)
@@ -3338,8 +3371,9 @@ class TeacherWindow(QtWidgets.QWidget):
         lbl_school.setGeometry(68, 20, 150, 20)
         lbl_school.setStyleSheet(f'color: {COLORS["navy"]}; font-size: 13px; font-weight: bold; background: transparent;')
         lbl_sub = QtWidgets.QLabel('Giảng viên', sidebar)
-        lbl_sub.setGeometry(68, 40, 150, 16)
+        lbl_sub.setGeometry(68, 40, 120, 16)
         lbl_sub.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 11px; background: transparent;')
+        add_maximize_button(sidebar, self)
 
         sep = QtWidgets.QFrame(sidebar)
         sep.setGeometry(15, 74, 200, 1)
@@ -4180,7 +4214,8 @@ class EmployeeWindow(QtWidgets.QWidget):
         self.app_ref = app_ref
         self.setObjectName('MainWindow')
         self.setWindowTitle('EAUT - Hệ thống nhân viên')
-        self.setFixedSize(1100, 700)
+        self.setMinimumSize(1100, 700)
+        self.resize(1100, 700)
         self.setWindowIcon(QIcon(os.path.join(RES, 'logo.png')))
         # luu ma DK da thanh toan de sync giua 2 bang
         self._paid_dks = set()
@@ -4223,8 +4258,9 @@ class EmployeeWindow(QtWidgets.QWidget):
         lbl_school.setGeometry(68, 20, 150, 20)
         lbl_school.setStyleSheet(f'color: {COLORS["navy"]}; font-size: 13px; font-weight: bold; background: transparent;')
         lbl_sub = QtWidgets.QLabel('Nhân viên', sidebar)
-        lbl_sub.setGeometry(68, 40, 150, 16)
+        lbl_sub.setGeometry(68, 40, 120, 16)
         lbl_sub.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 11px; background: transparent;')
+        add_maximize_button(sidebar, self)
 
         sep = QtWidgets.QFrame(sidebar)
         sep.setGeometry(15, 74, 200, 1)
