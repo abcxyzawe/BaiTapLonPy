@@ -2562,16 +2562,11 @@ class AdminWindow(QtWidgets.QWidget):
                 ['14', 'IT011', 'Lập trình di động', '3', 'Tự chọn', 'HK6', 'IT003'],
             ]
         # tinh trang thai mo lop cho moi mon (de show "Đang mở X lớp")
-        # query DB neu co, khong thi check trong MOCK_CLASSES
+        # Tinh so lop per ma_mon - lay tu cache MOCK_CLASSES (da load tu API)
+        # tranh dung db.fetch_all shim (returns []) gay [WARN] khi walkthrough
         ma_mon_count = {}
-        if DB_AVAILABLE:
-            try:
-                rows = db.fetch_all('SELECT ma_mon, COUNT(*) AS n FROM classes GROUP BY ma_mon')
-                ma_mon_count = {r['ma_mon']: r['n'] for r in rows}
-            except Exception: pass
-        if not ma_mon_count:
-            for c in MOCK_CLASSES:
-                ma_mon_count[c[1]] = ma_mon_count.get(c[1], 0) + 1
+        for c in MOCK_CLASSES:
+            ma_mon_count[c[1]] = ma_mon_count.get(c[1], 0) + 1
 
         # Stats summary tren cung trang
         n_total = len(data)
