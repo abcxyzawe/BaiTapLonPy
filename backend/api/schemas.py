@@ -2,9 +2,14 @@
 Optional fields = client co the omit, server tu fill default hoac null.
 """
 from datetime import date, time
-from typing import Optional, Any
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+# Enum values khop voi DB CHECK constraint (schema.sql)
+AttendanceStatus = Literal['present', 'absent', 'late', 'excused']
+NotificationType = Literal['info', 'warning', 'urgent']
+SemesterStatus = Literal['open', 'closed', 'upcoming']
 
 
 # ===== Auth =====
@@ -97,7 +102,7 @@ class NotificationSend(BaseModel):
     tieu_de: str
     noi_dung: str
     den_lop: Optional[str] = None
-    loai: str = 'info'
+    loai: NotificationType = 'info'
 
 
 # ===== Users (Student/Teacher/Employee) =====
@@ -182,7 +187,7 @@ class SemesterCreate(BaseModel):
 
 
 class SemesterStatusUpdate(BaseModel):
-    trang_thai: str  # 'open' | 'closed'
+    trang_thai: SemesterStatus  # open | closed | upcoming
 
 
 # ===== Curriculum =====
@@ -237,7 +242,7 @@ class ExamCreate(BaseModel):
 class AttendanceMark(BaseModel):
     schedule_id: int
     hv_id: int
-    trang_thai: str  # present|absent|late|excused
+    trang_thai: AttendanceStatus  # present|absent|late|excused
     gio_vao: Optional[time] = None
     recorded_by: Optional[int] = None
     ghi_chu: Optional[str] = None
