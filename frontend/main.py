@@ -4643,21 +4643,27 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.setHorizontalHeaderItem(6, QtWidgets.QTableWidgetItem('Tổng kết'))
         tbl.setHorizontalHeaderItem(7, QtWidgets.QTableWidgetItem('Xếp loại'))
         tbl.setHorizontalHeaderItem(8, QtWidgets.QTableWidgetItem('Thao tác'))
-        for c, cw in enumerate([36, 90, 165, 75, 70, 70, 70, 65, 95]):
+        # Col widths: 8 cot dau fixed, cot Thao tac (last) auto-stretch
+        for c, cw in enumerate([40, 95, 175, 70, 70, 70, 70, 65]):
             tbl.setColumnWidth(c, cw)
         tbl.horizontalHeader().setStretchLastSection(True)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
-            tbl.setRowHeight(r, 46)
-            # nut nhap diem (dialog dang)
+            tbl.setRowHeight(r, 50)  # PATTERN tblReview: row 50 cho button 24 co cho center
+            # Nut Nhap diem - DUNG PATTERN tblReview
             btn_enter = QtWidgets.QPushButton('Nhập điểm')
             btn_enter.setCursor(Qt.PointingHandCursor)
-            btn_enter.setFixedSize(84, 28)
-            btn_enter.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
+            btn_enter.setFixedSize(82, 24)
+            btn_enter.setStyleSheet(
+                f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; '
+                f'border-radius: 5px; font-size: 11px; font-weight: bold; }} '
+                f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
+            )
             btn_enter.clicked.connect(lambda ch, rr=r: self._tea_grade_dialog(tbl, rr))
             w = QtWidgets.QWidget()
             hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(0, 0, 0, 0); hl.setAlignment(Qt.AlignCenter)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setAlignment(Qt.AlignCenter)
             hl.addWidget(btn_enter)
             tbl.setCellWidget(r, 8, w)
         self._grades_recalc_lock = False
