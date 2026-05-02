@@ -4172,7 +4172,9 @@ class TeacherWindow(QtWidgets.QWidget):
             siso_item.setForeground(QColor(COLORS['red'] if pct >= 95 else COLORS['gold'] if pct >= 70 else COLORS['green']))
             tbl.setItem(r, 2, siso_item)
             # lich, phong
-            tbl.setItem(r, 3, QtWidgets.QTableWidgetItem(lich))
+            item_l = QtWidgets.QTableWidgetItem(lich)
+            item_l.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            tbl.setItem(r, 3, item_l)
             item_p = QtWidgets.QTableWidgetItem(phong)
             item_p.setTextAlignment(Qt.AlignCenter)
             tbl.setItem(r, 4, item_p)
@@ -4197,14 +4199,13 @@ class TeacherWindow(QtWidgets.QWidget):
                     ('Sĩ số', f'{s}/{mx}'),
                     ('Học phí', f'{g:,}'.replace(',', '.') + ' đ'),
                 ], avatar_text=m, subtitle=n))
-            # Wrapper voi fixed height de tranh button overflow row
+            # Wrapper auto-fit cell + center button (vertical + horizontal)
             w = QtWidgets.QWidget()
-            w.setFixedHeight(34)
             hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(2, 2, 2, 2)
+            hl.setContentsMargins(0, 0, 0, 0)
             hl.setSpacing(0)
             hl.setAlignment(Qt.AlignCenter)
-            hl.addWidget(btn)
+            hl.addWidget(btn, 0, Qt.AlignCenter)
             tbl.setCellWidget(r, 6, w)
         tbl.horizontalHeader().setStretchLastSection(True)
         for c, cw in enumerate([100, 180, 80, 160, 80, 120, 90]):
