@@ -364,6 +364,54 @@ def widen_search(page, txt_name, new_width, shift_after=None):
                     w.setGeometry(gw.x() + diff, gw.y(), gw.width(), gw.height())
 
 
+def make_action_cell(buttons):
+    """Tao 1 cell widget chua 2 nut thao tac (Sua/Xoa/Chi tiet/Duyet/...).
+
+    Args:
+        buttons: list of (text, color_key) - color_key la key trong COLORS
+                 (vd 'navy', 'red', 'green', 'orange', 'gold')
+                 Hoac (text, color_key, hover) neu muon hover effect
+
+    Returns:
+        (widget, [QPushButton]) - caller phai connect button.clicked
+
+    Pattern dong bo voi _fill_admin_courses (mau chuan):
+    - Button: 50x24 (60x24 cho text >4 chars), font 11px bold, white
+    - Container: QHBoxLayout no margin, spacing 6, center align
+    - Row height ben goi nen set 44, column width 150
+    """
+    w = QtWidgets.QWidget()
+    hl = QtWidgets.QHBoxLayout(w)
+    hl.setContentsMargins(0, 0, 0, 0)
+    hl.setSpacing(6)
+    hl.setAlignment(Qt.AlignCenter)
+    btns = []
+    for spec in buttons:
+        if len(spec) == 2:
+            text, color_key = spec
+            with_hover = True  # mac dinh co hover cho tat ca color (da co _hover variants)
+        else:
+            text, color_key, with_hover = spec
+        b = QtWidgets.QPushButton(text)
+        b.setCursor(Qt.PointingHandCursor)
+        # Size theo do dai text
+        width = 70 if len(text) >= 7 else 60 if len(text) >= 4 else 50
+        b.setFixedSize(width, 24)
+        bg = COLORS.get(color_key, COLORS['navy'])
+        hover_css = ''
+        if with_hover:
+            hover_key = f'{color_key}_hover'
+            hover_bg = COLORS.get(hover_key, bg)
+            hover_css = f' QPushButton:hover {{ background: {hover_bg}; }}'
+        b.setStyleSheet(
+            f'QPushButton {{ background: {bg}; color: white; border: none; '
+            f'border-radius: 4px; font-size: 11px; font-weight: bold; }}{hover_css}'
+        )
+        hl.addWidget(b)
+        btns.append(b)
+    return w, btns
+
+
 def export_table_csv(parent, tbl, default_name='export.csv', title='Xuất file'):
     """ghi bang ra CSV, hoi nguoi dung chon noi luu"""
     import csv
@@ -989,13 +1037,14 @@ class MainWindow(QtWidgets.QWidget):
         if nav_lbl:
             nav_lbl.setText(f'{monday.toString("dd/MM/yyyy")}\n→ {monday.addDays(5).toString("dd/MM/yyyy")}')
 
-        # Xoa cell cu (cellWidget va span)
+        # Xoa cell cu (cellWidget va span) - chi un-span neu cell co span > 1
         for r in range(len(hours)):
             for c in range(1, 7):
                 cw = tbl.cellWidget(r, c)
                 if cw:
                     tbl.removeCellWidget(r, c)
-                tbl.setSpan(r, c, 1, 1)
+                if tbl.rowSpan(r, c) > 1 or tbl.columnSpan(r, c) > 1:
+                    tbl.setSpan(r, c, 1, 1)
                 tbl.setItem(r, c, QtWidgets.QTableWidgetItem(''))
 
         def mk_card(ma_lop, ten_mon, ts, phong, gv, color):
@@ -2146,36 +2195,17 @@ class AdminWindow(QtWidgets.QWidget):
                 color = COLORS['red'] if pct >= 90 else COLORS['gold'] if pct >= 60 else COLORS['green']
                 item_ss.setForeground(QColor(color))
                 tbl.setItem(r, 5, item_ss)
-                btn_edit = QtWidgets.QPushButton('Sửa')
-                btn_edit.setCursor(Qt.PointingHandCursor)
-                btn_edit.setFixedSize(50, 24)
-                btn_edit.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
-                btn_del = QtWidgets.QPushButton('Xóa')
-                btn_del.setCursor(Qt.PointingHandCursor)
-                btn_del.setFixedSize(50, 24)
-                btn_del.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-                w = QtWidgets.QWidget()
-                hl = QtWidgets.QHBoxLayout(w)
-                hl.setContentsMargins(0, 0, 0, 0)
-                hl.setSpacing(6)
-                hl.setAlignment(Qt.AlignCenter)
-                hl.addWidget(btn_edit)
-                hl.addWidget(btn_del)
-                tbl.setCellWidget(r, 6, w)
+                # thao tac - pattern chuan
+                cell, (btn_edit, btn_del) = make_action_cell([('Sửa', 'navy'), ('Xóa', 'red')])
+                tbl.setCellWidget(r, 6, cell)
+                btn_edit.clicked.connect(lambda ch, ma=row[0], nm=row[1]: self._admin_edit_course(ma, nm))
+                btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'môn học'))
             tbl.horizontalHeader().setStretchLastSection(True)
             for c, cw in enumerate([70, 180, 30, 140, 130, 110, 150]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 44)
-            # wire edit/del each row
-            for r, row in enumerate(data):
-                w = tbl.cellWidget(r, 6)
-                if w:
-                    btns = w.findChildren(QtWidgets.QPushButton)
-                    if len(btns) >= 2:
-                        btns[0].clicked.connect(lambda ch, ma=row[0], nm=row[1]: self._admin_edit_course(ma, nm))
-                        btns[1].clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'môn học'))
 
         # Khong day btnSearchCourse vi no o sat mep phai roi - chi day combo + separator
         widen_search(page, 'txtSearchCourse', 300, ['sepFilter1', 'cboFilterDept'])
@@ -2249,22 +2279,11 @@ class AdminWindow(QtWidgets.QWidget):
             item_ss.setForeground(QColor(COLORS['green']))
             tbl.setItem(r, 5, item_ss)
             tbl.setRowHeight(r, 44)
-            # them nut sua/xoa cho row moi (giong cac row cu)
-            btn_edit = QtWidgets.QPushButton('Sửa')
-            btn_edit.setCursor(Qt.PointingHandCursor)
-            btn_edit.setFixedSize(50, 24)
-            btn_edit.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
+            # them nut sua/xoa cho row moi - pattern chuan
+            cell, (btn_edit, btn_del) = make_action_cell([('Sửa', 'navy'), ('Xóa', 'red')])
+            tbl.setCellWidget(r, 6, cell)
             btn_edit.clicked.connect(lambda ch, ma=new_code, nm=new_name: self._admin_edit_course(ma, nm))
-            btn_del = QtWidgets.QPushButton('Xóa')
-            btn_del.setCursor(Qt.PointingHandCursor)
-            btn_del.setFixedSize(50, 24)
-            btn_del.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
             btn_del.clicked.connect(lambda ch, ma=new_code, nm=new_name: self._admin_del_row(tbl, ma, nm, 'môn học'))
-            w = QtWidgets.QWidget()
-            hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(0, 0, 0, 0); hl.setSpacing(6); hl.setAlignment(Qt.AlignCenter)
-            hl.addWidget(btn_edit); hl.addWidget(btn_del)
-            tbl.setCellWidget(r, 6, w)
         # them vao MOCK_COURSES
         MOCK_COURSES.append((txt_code.text().upper(), txt_name.text()))
         # ghi DB neu co
@@ -2391,41 +2410,22 @@ class AdminWindow(QtWidgets.QWidget):
             for r, row in enumerate(data):
                 for c, val in enumerate(row):
                     tbl.setItem(r, c, QtWidgets.QTableWidgetItem(val))
-                btn_detail = QtWidgets.QPushButton('Chi tiết')
-                btn_detail.setCursor(Qt.PointingHandCursor)
-                btn_detail.setFixedSize(62, 24)
-                btn_detail.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
-                btn_del = QtWidgets.QPushButton('Xóa')
-                btn_del.setCursor(Qt.PointingHandCursor)
-                btn_del.setFixedSize(50, 24)
-                btn_del.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-                w = QtWidgets.QWidget()
-                hl = QtWidgets.QHBoxLayout(w)
-                hl.setContentsMargins(0, 0, 0, 0)
-                hl.setSpacing(6)
-                hl.setAlignment(Qt.AlignCenter)
-                hl.addWidget(btn_detail)
-                hl.addWidget(btn_del)
-                tbl.setCellWidget(r, 6, w)
+                # thao tac - pattern chuan
+                cell, (btn_detail, btn_del) = make_action_cell([('Chi tiết', 'navy'), ('Xóa', 'red')])
+                tbl.setCellWidget(r, 6, cell)
+                btn_detail.clicked.connect(lambda ch, rd=row: show_detail_dialog(
+                    self, 'Chi tiết học viên',
+                    [('MSV', rd[0]), ('Họ tên', rd[1]), ('Lớp', rd[2]),
+                     ('Khoa', rd[3]), ('Số điện thoại', rd[4]),
+                     ('Số môn đăng ký', rd[5])],
+                    avatar_text=rd[1].split()[-1] if rd[1] else '?', subtitle=rd[0]))
+                btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'học viên'))
             tbl.horizontalHeader().setStretchLastSection(True)
             for c, cw in enumerate([75, 140, 100, 95, 90, 100, 150]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 44)
-            # wire buttons
-            for r, row in enumerate(data):
-                w = tbl.cellWidget(r, 6)
-                if w:
-                    btns = w.findChildren(QtWidgets.QPushButton)
-                    if len(btns) >= 2:
-                        btns[0].clicked.connect(lambda ch, rd=row: show_detail_dialog(
-                            self, 'Chi tiết học viên',
-                            [('MSV', rd[0]), ('Họ tên', rd[1]), ('Lớp', rd[2]),
-                             ('Khoa', rd[3]), ('Số điện thoại', rd[4]),
-                             ('Số môn đăng ký', rd[5])],
-                            avatar_text=rd[1].split()[-1] if rd[1] else '?', subtitle=rd[0]))
-                        btns[1].clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'học viên'))
 
         # btnSearchStudent o sat phai - khong day, chi day combo
         widen_search(page, 'txtSearchStudent', 300, ['cboFilterClass', 'cboFilterDeptSt'])
@@ -2584,32 +2584,18 @@ class AdminWindow(QtWidgets.QWidget):
                 else:
                     item_st.setForeground(QColor(COLORS['text_light']))
                 tbl.setItem(r, 5, item_st)
-                btn_toggle = QtWidgets.QPushButton('Đóng ĐK' if is_open else 'Mở ĐK')
-                btn_toggle.setCursor(Qt.PointingHandCursor)
-                btn_toggle.setFixedSize(72, 24)
-                if is_open:
-                    btn_toggle.setStyleSheet(f'QPushButton {{ background: white; color: {COLORS["orange"]}; border: 1px solid {COLORS["orange"]}; border-radius: 4px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["orange"]}; color: white; }}')
-                else:
-                    btn_toggle.setStyleSheet(f'QPushButton {{ background: white; color: {COLORS["green"]}; border: 1px solid {COLORS["green"]}; border-radius: 4px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["green"]}; color: white; }}')
-                w = QtWidgets.QWidget()
-                hl = QtWidgets.QHBoxLayout(w)
-                hl.setContentsMargins(0, 0, 0, 0)
-                hl.setAlignment(Qt.AlignCenter)
-                hl.addWidget(btn_toggle)
-                tbl.setCellWidget(r, 6, w)
+                # Toggle button: doi mau theo trang thai - dung pattern chuan
+                toggle_text = 'Đóng ĐK' if is_open else 'Mở ĐK'
+                toggle_color = 'orange' if is_open else 'green'
+                cell, (btn_toggle,) = make_action_cell([(toggle_text, toggle_color)])
+                tbl.setCellWidget(r, 6, cell)
+                btn_toggle.clicked.connect(lambda ch, ma=row[0], b=btn_toggle: self._admin_toggle_sem(ma, b))
             tbl.horizontalHeader().setStretchLastSection(True)
             for c, cw in enumerate([95, 90, 95, 105, 105, 95, 130]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 44)
-            # wire toggle button
-            for r, row in enumerate(data):
-                w = tbl.cellWidget(r, 6)
-                if w:
-                    btn = w.findChild(QtWidgets.QPushButton)
-                    if btn:
-                        btn.clicked.connect(lambda ch, ma=row[0], b=btn: self._admin_toggle_sem(ma, b))
 
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddSemester')
         if btn_add:
@@ -2628,7 +2614,18 @@ class AdminWindow(QtWidgets.QWidget):
                 SemesterService.set_status(ma, 'closed' if is_open else 'open')
             except Exception as e:
                 print(f'[ADM_TOGGLE_SEM] DB loi: {e}')
-        btn.setText('Mở ĐK' if is_open else 'Đóng ĐK')
+                msg_warn(self, 'Lỗi', f'Không cập nhật được trạng thái:\n{e}')
+                return
+        # Doi text + mau button (orange neu se Dong, green neu se Mo)
+        new_text = 'Mở ĐK' if is_open else 'Đóng ĐK'
+        new_color = COLORS['green'] if is_open else COLORS['orange']
+        new_hover = COLORS.get('green_hover', new_color) if is_open else COLORS.get('orange_hover', new_color)
+        btn.setText(new_text)
+        btn.setStyleSheet(
+            f'QPushButton {{ background: {new_color}; color: white; border: none; '
+            f'border-radius: 4px; font-size: 11px; font-weight: bold; }} '
+            f'QPushButton:hover {{ background: {new_hover}; }}'
+        )
         msg_info(self, 'Thành công', f'Đã {new_state} đăng ký cho {ma}')
 
     def _admin_add_semester(self):
@@ -2779,23 +2776,11 @@ class AdminWindow(QtWidgets.QWidget):
                 tt.setTextAlignment(Qt.AlignCenter)
                 tt.setFont(QFont('Segoe UI', 10, QFont.Bold))
                 tbl.setItem(r, 7, tt)
-                # cot 8: nut sua/xoa
-                btn_edit = QtWidgets.QPushButton('Sửa')
-                btn_edit.setCursor(Qt.PointingHandCursor)
-                btn_edit.setFixedSize(50, 24)
-                btn_edit.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
-                btn_del = QtWidgets.QPushButton('Xóa')
-                btn_del.setCursor(Qt.PointingHandCursor)
-                btn_del.setFixedSize(50, 24)
-                btn_del.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-                w = QtWidgets.QWidget()
-                hl = QtWidgets.QHBoxLayout(w)
-                hl.setContentsMargins(0, 0, 0, 0)
-                hl.setSpacing(4)
-                hl.setAlignment(Qt.AlignCenter)
-                hl.addWidget(btn_edit)
-                hl.addWidget(btn_del)
-                tbl.setCellWidget(r, 8, w)
+                # cot 8: nut sua/xoa - pattern chuan
+                cell, (btn_edit, btn_del) = make_action_cell([('Sửa', 'navy'), ('Xóa', 'red')])
+                tbl.setCellWidget(r, 8, cell)
+                btn_edit.clicked.connect(lambda ch, rr=r: self._admin_edit_curriculum(rr))
+                btn_del.clicked.connect(lambda ch, ma=row[1], nm=row[2], t=tbl: self._admin_del_row(t, ma, nm, 'môn trong CT'))
             # tang cot Hoc ky tu 48 -> 70 cho "Hoc ky X" hien thi du
             for c, cw in enumerate([32, 65, 150, 28, 90, 70, 95, 90, 130]):
                 tbl.setColumnWidth(c, cw)
@@ -2803,14 +2788,6 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 44)
-            # wire action
-            for r, row in enumerate(data):
-                w = tbl.cellWidget(r, 8)
-                if w:
-                    btns = w.findChildren(QtWidgets.QPushButton)
-                    if len(btns) >= 2:
-                        btns[0].clicked.connect(lambda ch, rr=r: self._admin_edit_curriculum(rr))
-                        btns[1].clicked.connect(lambda ch, ma=row[1], nm=row[2], t=tbl: self._admin_del_row(t, ma, nm, 'môn trong CT'))
 
         # btnExportCurr o frame khac va o phai - khong day
         widen_search(page, 'txtSearchCurr', 280, ['cboNganh', 'cboLoai', 'cboHocKy'])
@@ -3308,24 +3285,9 @@ class AdminWindow(QtWidgets.QWidget):
             gia_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             gia_item.setForeground(QColor(COLORS['gold']))
             tbl.setItem(r, 6, gia_item)
-            # thao tac
-            btn_edit = QtWidgets.QPushButton('Sửa')
-            btn_edit.setCursor(Qt.PointingHandCursor)
-            btn_edit.setFixedSize(50, 24)
-            btn_edit.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-            btn_del = QtWidgets.QPushButton('Xóa')
-            btn_del.setCursor(Qt.PointingHandCursor)
-            btn_del.setFixedSize(50, 24)
-            btn_del.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-            w = QtWidgets.QWidget()
-            hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(0, 0, 0, 0)
-            hl.setSpacing(6)
-            hl.setAlignment(Qt.AlignCenter)
-            hl.addWidget(btn_edit)
-            hl.addWidget(btn_del)
-            tbl.setCellWidget(r, 7, w)
-            # wire
+            # thao tac - dung pattern chuan tu _fill_admin_courses
+            cell, (btn_edit, btn_del) = make_action_cell([('Sửa', 'navy'), ('Xóa', 'red')])
+            tbl.setCellWidget(r, 7, cell)
             btn_edit.clicked.connect(lambda ch, cls_ma=ma: self._admin_edit_class(cls_ma))
             btn_del.clicked.connect(lambda ch, cls_ma=ma, cls_mon=tmon, t=tbl: self._admin_del_row(t, cls_ma, cls_mon, 'lớp'))
         tbl.horizontalHeader().setStretchLastSection(True)
@@ -3614,23 +3576,9 @@ class AdminWindow(QtWidgets.QWidget):
             item_dg.setTextAlignment(Qt.AlignCenter)
             item_dg.setForeground(QColor(COLORS['green'] if diem >= 4.5 else COLORS['navy'] if diem >= 4.0 else COLORS['orange']))
             tbl.setItem(r, 6, item_dg)
-            # thao tac
-            btn_edit = QtWidgets.QPushButton('Chi tiết')
-            btn_edit.setCursor(Qt.PointingHandCursor)
-            btn_edit.setFixedSize(62, 24)
-            btn_edit.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-            btn_del = QtWidgets.QPushButton('Xóa')
-            btn_del.setCursor(Qt.PointingHandCursor)
-            btn_del.setFixedSize(50, 24)
-            btn_del.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-            w = QtWidgets.QWidget()
-            hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(0, 0, 0, 0)
-            hl.setSpacing(6)
-            hl.setAlignment(Qt.AlignCenter)
-            hl.addWidget(btn_edit)
-            hl.addWidget(btn_del)
-            tbl.setCellWidget(r, 7, w)
+            # thao tac - pattern chuan
+            cell, (btn_edit, btn_del) = make_action_cell([('Chi tiết', 'navy'), ('Xóa', 'red')])
+            tbl.setCellWidget(r, 7, cell)
             btn_edit.clicked.connect(lambda ch, rd=row: show_detail_dialog(
                 self, 'Chi tiết giảng viên',
                 [('Mã GV', rd[0]), ('Họ tên', rd[1]), ('Khoa', rd[2]),
@@ -3791,23 +3739,9 @@ class AdminWindow(QtWidgets.QWidget):
             item_st.setTextAlignment(Qt.AlignCenter)
             item_st.setForeground(QColor(COLORS['green'] if row[5] == 'Đang làm' else COLORS['orange']))
             tbl.setItem(r, 5, item_st)
-            # thao tac
-            btn_edit = QtWidgets.QPushButton('Chi tiết')
-            btn_edit.setCursor(Qt.PointingHandCursor)
-            btn_edit.setFixedSize(62, 24)
-            btn_edit.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-            btn_del = QtWidgets.QPushButton('Xóa')
-            btn_del.setCursor(Qt.PointingHandCursor)
-            btn_del.setFixedSize(50, 24)
-            btn_del.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: bold; }}')
-            w = QtWidgets.QWidget()
-            hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(0, 0, 0, 0)
-            hl.setSpacing(6)
-            hl.setAlignment(Qt.AlignCenter)
-            hl.addWidget(btn_edit)
-            hl.addWidget(btn_del)
-            tbl.setCellWidget(r, 6, w)
+            # thao tac - pattern chuan
+            cell, (btn_edit, btn_del) = make_action_cell([('Chi tiết', 'navy'), ('Xóa', 'red')])
+            tbl.setCellWidget(r, 6, cell)
             btn_edit.clicked.connect(lambda ch, rd=row: show_detail_dialog(
                 self, 'Chi tiết nhân viên',
                 [('Mã NV', rd[0]), ('Họ tên', rd[1]), ('Chức vụ', rd[2]),
@@ -4623,7 +4557,8 @@ class TeacherWindow(QtWidgets.QWidget):
                 cw = tbl.cellWidget(r, c)
                 if cw:
                     tbl.removeCellWidget(r, c)
-                tbl.setSpan(r, c, 1, 1)
+                if tbl.rowSpan(r, c) > 1 or tbl.columnSpan(r, c) > 1:
+                    tbl.setSpan(r, c, 1, 1)
                 tbl.setItem(r, c, QtWidgets.QTableWidgetItem(''))
 
         def mk(ma_lop, ten_mon, ts, phong, ss, color):
