@@ -24,6 +24,12 @@ def attendance_rate(hv_id: int, lop_id: str):
     return {'rate': AttendanceService.attendance_rate(hv_id, lop_id)}
 
 
+@router.get('/class/{lop_id}/summary')
+def class_summary(lop_id: str):
+    """Summary diem danh tat ca HV trong lop - dung de tinh CC hang loat."""
+    return AttendanceService.class_summary(lop_id)
+
+
 @router.post('')
 def mark(req: AttendanceMark):
     AttendanceService.mark(

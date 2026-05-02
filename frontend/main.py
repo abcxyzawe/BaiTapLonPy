@@ -848,67 +848,190 @@ class MainWindow(QtWidgets.QWidget):
     def _fill_schedule(self):
         page = self.page_widgets[1]
 
-        # dieu chinh kich thuoc schedule
+        # Header bar phai resize de khong overflow ra ngoai contentArea (870 wide)
+        hb = page.findChild(QtWidgets.QFrame, 'headerBar')
+        if hb:
+            hb.setGeometry(0, 0, 870, 56)
+
+        # Schedule frame to, calendar Frame giu nhung an cal widget va dat prev/next button
         sf = page.findChild(QtWidgets.QFrame, 'scheduleFrame')
         if sf:
-            sf.setGeometry(15, 68, 610, 618)
+            sf.setGeometry(15, 68, 615, 618)
         cf = page.findChild(QtWidgets.QFrame, 'calendarFrame')
         if cf:
-            cf.setGeometry(638, 68, 220, 230)
+            cf.setGeometry(635, 68, 225, 230)
         lf = page.findChild(QtWidgets.QFrame, 'legendFrame')
         if lf:
-            lf.setGeometry(638, 310, 220, 180)
+            lf.setGeometry(635, 308, 225, 190)
+
+        # An calendar widget cu (Qt khong fit 7 cot tot trong frame nay), thay bang nav button
+        cal_w = page.findChild(QtWidgets.QCalendarWidget, 'calendarWidget')
+        if cal_w:
+            cal_w.hide()
+
+        # Tao nav panel inside calendarFrame: tieu de + 3 nut (prev/today/next)
+        if cf and not cf.findChild(QtWidgets.QPushButton, 'btnPrevWeek'):
+            nav_title = QtWidgets.QLabel('Điều hướng tuần', cf)
+            nav_title.setObjectName('lblNavTitle')
+            nav_title.setGeometry(15, 12, 195, 20)
+            nav_title.setStyleSheet('color: #1a1a2e; font-size: 13px; font-weight: bold; background: transparent;')
+            nav_title.show()
+
+            self._lblNavWeek = QtWidgets.QLabel('—', cf)
+            self._lblNavWeek.setObjectName('lblNavWeek')
+            self._lblNavWeek.setGeometry(15, 38, 195, 40)
+            self._lblNavWeek.setStyleSheet('color: #002060; font-size: 12px; font-weight: bold; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px;')
+            self._lblNavWeek.setAlignment(Qt.AlignCenter)
+            self._lblNavWeek.setWordWrap(True)
+            self._lblNavWeek.show()
+
+            btn_prev = QtWidgets.QPushButton('‹ Tuần trước', cf)
+            btn_prev.setObjectName('btnPrevWeek')
+            btn_prev.setGeometry(15, 92, 95, 32)
+            btn_prev.setStyleSheet('QPushButton { background: white; color: #4a5568; border: 1px solid #d2d6dc; border-radius: 6px; font-size: 11px; } QPushButton:hover { background: #edf2f7; border-color: #002060; color: #002060; }')
+            btn_prev.setCursor(Qt.PointingHandCursor)
+            btn_prev.show()
+
+            btn_next = QtWidgets.QPushButton('Tuần sau ›', cf)
+            btn_next.setObjectName('btnNextWeek')
+            btn_next.setGeometry(115, 92, 95, 32)
+            btn_next.setStyleSheet(btn_prev.styleSheet())
+            btn_next.setCursor(Qt.PointingHandCursor)
+            btn_next.show()
+
+            btn_today = QtWidgets.QPushButton('Tuần hiện tại', cf)
+            btn_today.setObjectName('btnTodayWeek')
+            btn_today.setGeometry(15, 132, 195, 32)
+            btn_today.setStyleSheet('QPushButton { background: #002060; color: white; border: none; border-radius: 6px; font-size: 11px; font-weight: bold; } QPushButton:hover { background: #003080; }')
+            btn_today.setCursor(Qt.PointingHandCursor)
+            btn_today.show()
+
+            hint = QtWidgets.QLabel('Dùng nút trên để chuyển tuần', cf)
+            hint.setObjectName('lblNavHint')
+            hint.setGeometry(15, 175, 195, 40)
+            hint.setStyleSheet('color: #a0aec0; font-size: 10px; background: transparent;')
+            hint.setWordWrap(True)
+            hint.setAlignment(Qt.AlignCenter)
+            hint.show()
 
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblSchedule')
         if not tbl:
             return
+        tbl.setGeometry(0, 0, 615, 618)
 
         hours = ['7:00','8:00','9:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00']
         tbl.setRowCount(len(hours))
         tbl.verticalHeader().setVisible(False)
-
-        today = QDate.currentDate()
-        monday = today.addDays(-(today.dayOfWeek() - 1))
         days_vn = ['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7']
-        for i in range(6):
-            d = monday.addDays(i)
-            tbl.horizontalHeaderItem(i+1).setText(f'{d.toString("dd/MM/yyyy")}\n{days_vn[i]}')
 
+        # Day col = 92: 45 + 6*92 = 597 + scrollbar 16 = 613 fits 615
         tbl.setColumnWidth(0, 45)
         for i in range(1, 7):
             tbl.setColumnWidth(i, 92)
-        # font lon hon va row cao hon de doc lich hoc de hon
+
+        # Row cao hon → card co cho tho cho 5 dong text
         for r in range(len(hours)):
-            tbl.setRowHeight(r, 55)
+            tbl.setRowHeight(r, 50)
             item = QtWidgets.QTableWidgetItem(hours[r])
             item.setTextAlignment(Qt.AlignRight | Qt.AlignTop)
             item.setForeground(QColor('#718096'))
             item.setFont(QFont('Segoe UI', 9))
             tbl.setItem(r, 0, item)
 
+        # Khoi tao label hien thi tuan dang xem (ngay tren scheduleFrame, ke tieu de)
+        title = page.findChild(QtWidgets.QLabel, 'lblPageTitle')
+        if title and not page.findChild(QtWidgets.QLabel, 'lblWeekRange'):
+            wr = QtWidgets.QLabel(page)
+            wr.setObjectName('lblWeekRange')
+            wr.setGeometry(180, 0, 450, 56)
+            wr.setStyleSheet('color: #4a5568; font-size: 13px; background: transparent;')
+            wr.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            wr.show()
+
+        # State: tuan dang xem
+        today = QDate.currentDate()
+        self._stu_current_monday = today.addDays(-(today.dayOfWeek() - 1))
+        self._load_student_schedule_week(page, tbl, self._stu_current_monday, hours, days_vn)
+
+        # Wire prev/next/today buttons
+        btn_prev = cf.findChild(QtWidgets.QPushButton, 'btnPrevWeek') if cf else None
+        btn_next = cf.findChild(QtWidgets.QPushButton, 'btnNextWeek') if cf else None
+        btn_today = cf.findChild(QtWidgets.QPushButton, 'btnTodayWeek') if cf else None
+        if btn_prev:
+            btn_prev.clicked.connect(lambda: (
+                setattr(self, '_stu_current_monday', self._stu_current_monday.addDays(-7)),
+                self._load_student_schedule_week(page, tbl, self._stu_current_monday, hours, days_vn)
+            ))
+        if btn_next:
+            btn_next.clicked.connect(lambda: (
+                setattr(self, '_stu_current_monday', self._stu_current_monday.addDays(7)),
+                self._load_student_schedule_week(page, tbl, self._stu_current_monday, hours, days_vn)
+            ))
+        if btn_today:
+            btn_today.clicked.connect(lambda: (
+                setattr(self, '_stu_current_monday', QDate.currentDate().addDays(-(QDate.currentDate().dayOfWeek() - 1))),
+                self._load_student_schedule_week(page, tbl, self._stu_current_monday, hours, days_vn)
+            ))
+
+    def _load_student_schedule_week(self, page, tbl, monday, hours, days_vn):
+        """Reload lich hoc HV cho tuan bat dau bang `monday` (QDate)."""
+        # Update header cot ngay + label tuan
+        for i in range(6):
+            d = monday.addDays(i)
+            hi = tbl.horizontalHeaderItem(i+1)
+            if hi:
+                hi.setText(f'{d.toString("dd/MM/yyyy")}\n{days_vn[i]}')
+        wr_lbl = page.findChild(QtWidgets.QLabel, 'lblWeekRange')
+        if wr_lbl:
+            wr_lbl.setText(f'Tuần: {monday.toString("dd/MM/yyyy")} → {monday.addDays(5).toString("dd/MM/yyyy")}')
+        # Update label nav week
+        nav_lbl = page.findChild(QtWidgets.QLabel, 'lblNavWeek')
+        if nav_lbl:
+            nav_lbl.setText(f'{monday.toString("dd/MM/yyyy")}\n→ {monday.addDays(5).toString("dd/MM/yyyy")}')
+
+        # Xoa cell cu (cellWidget va span)
         for r in range(len(hours)):
             for c in range(1, 7):
-                if not tbl.item(r, c) and not tbl.cellWidget(r, c):
-                    tbl.setItem(r, c, QtWidgets.QTableWidgetItem(''))
+                cw = tbl.cellWidget(r, c)
+                if cw:
+                    tbl.removeCellWidget(r, c)
+                tbl.setSpan(r, c, 1, 1)
+                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(''))
 
-        def mk_card(ten, ts, toa, phong, gv, color):
+        def mk_card(ma_lop, ten_mon, ts, phong, gv, color):
             f = QtWidgets.QFrame()
             f.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #d2d6dc; border-radius: 4px; border-top: 3px solid {color}; margin: 1px; }}')
             vb = QtWidgets.QVBoxLayout(f)
-            vb.setContentsMargins(5, 4, 5, 4)
-            vb.setSpacing(2)
-            for txt, st in [(ten, f'color: {color}; font-size: 11px; font-weight: bold; border: none;'),
-                            (ts, 'color: #4a5568; font-size: 10px; border: none;'),
-                            (f'Tòa {toa} - {phong}', 'color: #718096; font-size: 9px; border: none;'),
-                            (gv, 'color: #4a5568; font-size: 9px; border: none;')]:
-                l = QtWidgets.QLabel(txt)
-                l.setStyleSheet(st)
-                l.setWordWrap(True)
-                vb.addWidget(l)
+            vb.setContentsMargins(4, 3, 4, 3)
+            vb.setSpacing(1)
+            # Dong 1: ma lop (bold, mau chu de)
+            l1 = QtWidgets.QLabel(ma_lop)
+            l1.setStyleSheet(f'color: {color}; font-size: 11px; font-weight: bold; border: none; background: transparent;')
+            l1.setWordWrap(False)
+            vb.addWidget(l1)
+            # Dong 2: ten mon (wrap neu dai)
+            l2 = QtWidgets.QLabel(ten_mon)
+            l2.setStyleSheet('color: #2d3748; font-size: 10px; border: none; background: transparent;')
+            l2.setWordWrap(True)
+            vb.addWidget(l2)
+            # Dong 3: gio
+            l3 = QtWidgets.QLabel(ts)
+            l3.setStyleSheet('color: #4a5568; font-size: 9px; font-weight: bold; border: none; background: transparent;')
+            vb.addWidget(l3)
+            # Dong 4: phong (smart prefix: chi them "P. " neu chua co)
+            phong_disp = phong if phong.lower().startswith(('p.', 'p ', 'phòng', 'phong')) else f'P. {phong}'
+            l4 = QtWidgets.QLabel(phong_disp)
+            l4.setStyleSheet('color: #718096; font-size: 9px; border: none; background: transparent;')
+            vb.addWidget(l4)
+            # Dong 5: gv (rut gon neu qua dai)
+            gv_short = gv if len(gv) <= 18 else gv[:16] + '…'
+            l5 = QtWidgets.QLabel(gv_short)
+            l5.setStyleSheet('color: #4a5568; font-size: 9px; border: none; background: transparent;')
+            vb.addWidget(l5)
             vb.addStretch()
             return f
 
-        # Lay lich tu API thuc - ScheduleService.get_for_student_week(hv_id, monday)
+        # Lay lich tu API
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
         sched = []
         if DB_AVAILABLE and hv_id:
@@ -916,25 +1039,22 @@ class MainWindow(QtWidgets.QWidget):
                 rows = ScheduleService.get_for_student_week(hv_id, monday.toPyDate()) or []
                 color_palette = ['#002060', '#c68a1e', '#276749', '#c53030', '#3182ce']
                 color_by_lop = {}
+                from datetime import date as _date
                 for r in rows:
-                    # Map ngay -> col index 1-6 (T2-T7)
                     try:
-                        from datetime import date as _date
                         d = r['ngay'] if isinstance(r['ngay'], _date) else _date.fromisoformat(str(r['ngay'])[:10])
-                        wd = d.weekday()  # 0=Mon..6=Sun
-                        if wd > 5:  # CN: skip
+                        wd = d.weekday()
+                        if wd > 5:
                             continue
-                        col = wd + 1  # 1=T2..6=T7
+                        col = wd + 1
                         gio_bd = str(r.get('gio_bat_dau', ''))[:5]
                         gio_kt = str(r.get('gio_ket_thuc', ''))[:5]
-                        # Row index tu gio_bd (vd '07:00' -> row 0)
                         try:
                             hour_idx = int(gio_bd.split(':')[0]) - 7
                         except Exception:
                             hour_idx = 0
                         if hour_idx < 0 or hour_idx >= len(hours):
                             continue
-                        # Span: tinh tu so phut chenh
                         try:
                             h1, m1 = gio_bd.split(':'); h2, m2 = gio_kt.split(':')
                             duration_min = (int(h2) * 60 + int(m2)) - (int(h1) * 60 + int(m1))
@@ -946,9 +1066,10 @@ class MainWindow(QtWidgets.QWidget):
                             color_by_lop[ma_lop] = color_palette[len(color_by_lop) % len(color_palette)]
                         sched.append((
                             hour_idx, span, col,
-                            f'{ma_lop} {r.get("ten_mon", "")}'.strip(),
+                            ma_lop,
+                            r.get("ten_mon", "") or '',
                             f'{gio_bd}-{gio_kt}',
-                            'EAUT', r.get('phong', '') or '—',
+                            r.get('phong', '') or '—',
                             r.get('ten_gv', '') or '',
                             color_by_lop[ma_lop],
                         ))
@@ -957,25 +1078,27 @@ class MainWindow(QtWidgets.QWidget):
             except Exception as e:
                 print(f'[STU_SCHED] API loi: {e}')
 
-        for rs, span, col, ten, ts, toa, phong, gv, color in sched:
-            tbl.setCellWidget(rs, col, mk_card(ten, ts, toa, phong, gv, color))
-            tbl.setSpan(rs, col, span, 1)
-
-        # Wire calendar: click 1 ngay → cap nhat header tuan + popup ngay do
-        cal = page.findChild(QtWidgets.QCalendarWidget, 'calendarWidget')
-        if cal:
-            def on_cal_clicked(qdate):
-                # tinh ngay dau tuan (thu 2)
-                mon = qdate.addDays(-(qdate.dayOfWeek() - 1))
-                for i in range(6):
-                    d = mon.addDays(i)
-                    tbl.horizontalHeaderItem(i+1).setText(f'{d.toString("dd/MM/yyyy")}\n{days_vn[i]}')
-                # hien popup ngay chon
-                thu_vn = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][qdate.dayOfWeek() % 7]
-                msg_info(self, 'Xem lịch',
-                         f'{thu_vn}, ngày {qdate.toString("dd/MM/yyyy")}\n'
-                         f'Tuần: {mon.toString("dd/MM")} → {mon.addDays(5).toString("dd/MM")}')
-            cal.clicked.connect(on_cal_clicked)
+        # Empty state - hien card placeholder o giua bang neu tuan rong
+        if not sched:
+            ph = QtWidgets.QFrame()
+            ph.setStyleSheet('QFrame { background: #f7fafc; border: 1px dashed #cbd5e0; border-radius: 6px; }')
+            vb = QtWidgets.QVBoxLayout(ph)
+            vb.setContentsMargins(12, 12, 12, 12)
+            vb.setAlignment(Qt.AlignCenter)
+            l1 = QtWidgets.QLabel('Tuần này không có lịch học')
+            l1.setStyleSheet('color: #4a5568; font-size: 13px; font-weight: bold; border: none; background: transparent;')
+            l1.setAlignment(Qt.AlignCenter)
+            l2 = QtWidgets.QLabel('Chọn tuần khác trên lịch bên phải')
+            l2.setStyleSheet('color: #718096; font-size: 11px; border: none; background: transparent;')
+            l2.setAlignment(Qt.AlignCenter)
+            vb.addWidget(l1)
+            vb.addWidget(l2)
+            tbl.setCellWidget(3, 1, ph)
+            tbl.setSpan(3, 1, 4, 6)
+        else:
+            for rs, span, col, ma_lop, ten_mon, ts, phong, gv, color in sched:
+                tbl.setCellWidget(rs, col, mk_card(ma_lop, ten_mon, ts, phong, gv, color))
+                tbl.setSpan(rs, col, span, 1)
 
     def _fill_exam(self):
         page = self.page_widgets[2]
@@ -1050,15 +1173,19 @@ class MainWindow(QtWidgets.QWidget):
                 hv_id = MOCK_USER.get('id')
                 if hv_id:
                     rows = GradeService.get_grades_by_student(hv_id)
-                    # group theo semester_id (tu lop)
+                    # group theo semester_id (lay 1 lan tu API classes)
                     from collections import defaultdict
                     by_sem = defaultdict(list)
+                    # Cache class semester_id de tranh N+1 query
+                    sem_cache = {}
+                    try:
+                        all_classes = CourseService.get_all_classes() or []
+                        for c in all_classes:
+                            sem_cache[c.get('ma_lop')] = c.get('semester_id') or 'HK2-2526'
+                    except Exception as _e:
+                        pass
                     for g in rows:
-                        sem = db.fetch_one(
-                            'SELECT semester_id FROM classes WHERE ma_lop = %s',
-                            (g['lop_id'],)
-                        )
-                        sid = sem['semester_id'] if sem and sem.get('semester_id') else 'HK2-2526'
+                        sid = sem_cache.get(g['lop_id'], 'HK2-2526')
                         by_sem[sid].append([
                             g['ma_mon'], g['ten_mon'], '3',
                             f"{float(g['diem_qt']):.1f}" if g.get('diem_qt') else '',
@@ -1205,18 +1332,20 @@ class MainWindow(QtWidgets.QWidget):
 
         # Lay danh sach GV tu API + diem danh gia trung binh
         data = []
+        gv_ids = []  # song song voi data, luu gv_id de pass vao dialog
         if DB_AVAILABLE:
             try:
                 gvs = TeacherService.get_for_review() or []
                 for i, gv in enumerate(gvs, start=1):
                     avg = gv.get('avg_rating') or gv.get('diem_tb') or 0
-                    cnt = gv.get('review_count') or gv.get('so_dg') or 0
+                    cnt = gv.get('review_count') or gv.get('so_danh_gia') or gv.get('so_dg') or 0
                     data.append([
                         str(i), gv.get('full_name', '') or '',
                         gv.get('khoa', '') or '',
                         f'{float(avg):.1f}' if avg else '0.0',
                         str(cnt),
                     ])
+                    gv_ids.append(gv.get('gv_id') or gv.get('user_id') or gv.get('id'))
             except Exception as e:
                 print(f'[REVIEW] API loi: {e}')
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblReview')
@@ -1257,14 +1386,17 @@ class MainWindow(QtWidgets.QWidget):
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
                 tbl.setRowHeight(r, 50)
-            # connect nut danh gia
+            # connect nut danh gia - pass ca gv_id (de submit_review chinh xac)
             for r, row in enumerate(data):
                 w = tbl.cellWidget(r, 5)
                 if w:
                     b = w.findChild(QtWidgets.QPushButton)
                     if b:
                         gv_name = row[1]
-                        b.clicked.connect(lambda ch, gv=gv_name: self._open_review_dialog(gv))
+                        gv_id = gv_ids[r] if r < len(gv_ids) else None
+                        b.clicked.connect(
+                            lambda ch, gv=gv_name, gid=gv_id: self._open_review_dialog(gv, gid)
+                        )
 
         widen_search(page, 'txtSearchReview', 280, ['cboSubject', 'cboDept'])
         # search + filter
@@ -1293,7 +1425,7 @@ class MainWindow(QtWidgets.QWidget):
             else:
                 tbl.setRowHidden(r, it.text() != want if it else False)
 
-    def _open_review_dialog(self, gv_name):
+    def _open_review_dialog(self, gv_name, gv_id=None):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle('Đánh giá giảng viên')
@@ -1312,104 +1444,132 @@ class MainWindow(QtWidgets.QWidget):
         lay.addWidget(btns)
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
-        # ghi DB
-        if DB_AVAILABLE:
-            try:
-                hv_id = MOCK_USER.get('id')
-                gv_row = db.fetch_one(
-                    "SELECT id FROM users WHERE full_name = %s AND role = 'teacher'",
-                    (gv_name,)
-                )
-                if hv_id and gv_row:
-                    # lay 1 lop bat ky ma HV + GV cung co
-                    lop = db.fetch_one(
-                        """SELECT r.lop_id FROM registrations r
-                             JOIN classes c ON c.ma_lop = r.lop_id
-                            WHERE r.hv_id = %s AND c.gv_id = %s LIMIT 1""",
-                        (hv_id, gv_row['id'])
-                    )
-                    lop_id = lop['lop_id'] if lop else 'NA'
-                    ReviewService.submit_review(hv_id, gv_row['id'], lop_id,
-                                                sp.value(), ta.toPlainText().strip())
-                    print(f'[REVIEW] da ghi DB: {sp.value()}/5 cho {gv_name}')
-            except Exception as e:
-                print(f'[REVIEW] loi: {e}')
-        msg_info(self, 'Đánh giá', f'Đã gửi đánh giá {sp.value()}/5 cho {gv_name}')
+
+        # Validate
+        hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        if not (DB_AVAILABLE and hv_id and gv_id):
+            msg_warn(self, 'Đánh giá', 'Không xác định được học viên/giảng viên. Hãy đăng nhập lại.')
+            return
+
+        diem = sp.value()
+        nhan_xet = ta.toPlainText().strip()
+
+        # Tim 1 lop ma HV + GV cung co (qua API class-by-student)
+        lop_id = None
+        try:
+            classes = CourseService.get_classes_by_student(hv_id) or []
+            for cls in classes:
+                if cls.get('gv_id') == gv_id:
+                    lop_id = cls.get('ma_lop')
+                    break
+        except Exception as e:
+            print(f'[REVIEW] tim lop loi: {e}')
+
+        if not lop_id:
+            msg_warn(self, 'Đánh giá',
+                     f'Bạn chưa học lớp nào của giảng viên {gv_name}. Chỉ HV đã đăng ký lớp mới có thể đánh giá.')
+            return
+
+        # Submit qua API
+        try:
+            ReviewService.submit_review(hv_id, gv_id, lop_id, diem, nhan_xet)
+            print(f'[REVIEW] OK: HV {hv_id} → GV {gv_id} ({gv_name}) lop {lop_id}: {diem}/5')
+            msg_info(self, 'Đánh giá', f'Đã gửi đánh giá {diem}/5 cho {gv_name}')
+            # Reload bang de cap nhat diem TB + so danh gia
+            self._fill_review()
+        except Exception as e:
+            print(f'[REVIEW] submit loi: {e}')
+            msg_warn(self, 'Đánh giá', f'Lưu đánh giá thất bại:\n{e}')
 
     def _fill_notifications(self):
+        """Generate cards dong theo so notif tu API, giu design cua .ui (border-left mau theo loai)."""
         page = self.page_widgets[5]
-        # fix scroll - set minimum height cho scrollContent
         sc = page.findChild(QtWidgets.QWidget, 'scrollContent')
-        if sc:
-            sc.setMinimumHeight(760)
-
-        # Render thong bao tu API: /notifications/student/{hv_id}
-        hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
-        if not (DB_AVAILABLE and hv_id and sc):
+        if not sc:
             return
-        notifs = []
-        try:
-            notifs = NotificationService.get_for_student(hv_id) or []
-        except Exception as e:
-            print(f'[STU_NOTIF] API loi: {e}')
 
-        # Tim layout container - clear cu
-        if sc.layout() is None:
-            vlay = QtWidgets.QVBoxLayout(sc)
-            vlay.setContentsMargins(8, 8, 8, 8)
-            vlay.setSpacing(8)
-        else:
-            vlay = sc.layout()
-            # clear cu
-            while vlay.count():
-                item = vlay.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
+        # An 6 card hardcode cua .ui (dung lam template thoi)
+        for i in range(1, 7):
+            c = page.findChild(QtWidgets.QFrame, f'card{i}')
+            if c:
+                c.hide()
+
+        # Xoa cac card dynamic da render lan truoc
+        for old in sc.findChildren(QtWidgets.QFrame):
+            if old.objectName().startswith('dynNotifCard'):
+                old.deleteLater()
+        old_empty = sc.findChild(QtWidgets.QLabel, 'lblNoNotif')
+        if old_empty:
+            old_empty.deleteLater()
+
+        # Lay notifs tu API
+        hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        notifs = []
+        if DB_AVAILABLE and hv_id:
+            try:
+                notifs = NotificationService.get_for_student(hv_id) or []
+            except Exception as e:
+                print(f'[STU_NOTIF] API loi: {e}')
 
         if not notifs:
-            empty_lbl = QtWidgets.QLabel('Không có thông báo nào')
-            empty_lbl.setStyleSheet(f'color: {COLORS["text_light"]}; font-size: 13px; padding: 20px;')
-            empty_lbl.setAlignment(Qt.AlignCenter)
-            vlay.addWidget(empty_lbl)
-            vlay.addStretch()
+            empty = QtWidgets.QLabel('Không có thông báo nào', sc)
+            empty.setObjectName('lblNoNotif')
+            empty.setGeometry(25, 20, 820, 80)
+            empty.setStyleSheet(f'color: {COLORS["text_light"]}; font-size: 13px; padding: 20px; background: white; border: 1px dashed #cbd5e0; border-radius: 8px;')
+            empty.setAlignment(Qt.AlignCenter)
+            empty.show()
+            sc.setMinimumHeight(120)
             return
 
-        type_color = {'urgent': COLORS['red'], 'warning': COLORS['orange'], 'info': COLORS['navy']}
-        type_label = {'urgent': 'Khẩn', 'warning': 'Cảnh báo', 'info': 'Thông tin'}
-        for n in notifs:
-            card = QtWidgets.QFrame()
-            color = type_color.get(n.get('loai', 'info'), COLORS['navy'])
+        # Mau border-left theo loai
+        color_map = {'urgent': '#c53030', 'warning': '#e8710a', 'info': '#002060'}
+
+        # Render moi notif thanh 1 card voi absolute geometry → scrollContent expand theo so card
+        card_x = 25
+        card_w = 820
+        card_h = 105
+        gap = 14
+        y = 20
+
+        for i, n in enumerate(notifs):
+            loai = n.get('loai', 'info')
+            color = color_map.get(loai, '#002060')
+
+            card = QtWidgets.QFrame(sc)
+            card.setObjectName(f'dynNotifCard{i}')
+            card.setGeometry(card_x, y, card_w, card_h)
             card.setStyleSheet(
-                f'QFrame {{ background: white; border: 1px solid #d2d6dc; '
-                f'border-left: 4px solid {color}; border-radius: 6px; padding: 12px; }}'
+                f'QFrame#dynNotifCard{i} {{ background: white; border: 1px solid #d2d6dc; '
+                f'border-radius: 10px; border-left: 4px solid {color}; }}'
             )
-            cv = QtWidgets.QVBoxLayout(card)
-            cv.setContentsMargins(10, 8, 10, 8)
-            cv.setSpacing(4)
 
-            row1 = QtWidgets.QHBoxLayout()
-            t = QtWidgets.QLabel(n.get('tieu_de', '') or '(Không tiêu đề)')
-            t.setStyleSheet(f'color: {COLORS["text_dark"]}; font-size: 13px; font-weight: bold;')
-            row1.addWidget(t)
-            row1.addStretch()
-            badge = QtWidgets.QLabel(type_label.get(n.get('loai', 'info'), 'TB'))
-            badge.setStyleSheet(f'color: white; background: {color}; padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: bold;')
-            row1.addWidget(badge)
-            cv.addLayout(row1)
+            # Title
+            title_lbl = QtWidgets.QLabel(n.get('tieu_de', '') or '(Không tiêu đề)', card)
+            title_lbl.setGeometry(20, 14, 780, 22)
+            title_lbl.setStyleSheet('color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent; border: none;')
+            title_lbl.show()
 
-            body = QtWidgets.QLabel(n.get('noi_dung', ''))
-            body.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 12px;')
-            body.setWordWrap(True)
-            cv.addWidget(body)
+            # Date - source
+            date_lbl = QtWidgets.QLabel(card)
+            date_str = fmt_date(n.get('ngay_tao'), fmt='%d/%m/%Y')
+            src = n.get('tu_ten') or 'Hệ thống'
+            date_lbl.setText(f'{date_str} - {src}')
+            date_lbl.setGeometry(20, 40, 400, 16)
+            date_lbl.setStyleSheet('color: #718096; font-size: 11px; background: transparent; border: none;')
+            date_lbl.show()
 
-            meta = QtWidgets.QLabel(
-                f"Tu: {n.get('tu_ten', 'He thong')} · {fmt_date(n.get('ngay_tao'), fmt='%d/%m/%Y %H:%M')}"
-            )
-            meta.setStyleSheet(f'color: {COLORS["text_light"]}; font-size: 11px;')
-            cv.addWidget(meta)
+            # Content
+            content_lbl = QtWidgets.QLabel(n.get('noi_dung', '') or '', card)
+            content_lbl.setGeometry(20, 62, 780, 32)
+            content_lbl.setStyleSheet('color: #4a5568; font-size: 12px; background: transparent; border: none;')
+            content_lbl.setWordWrap(True)
+            content_lbl.show()
 
-            vlay.addWidget(card)
-        vlay.addStretch()
+            card.show()
+            y += card_h + gap
+
+        # Set min height de scroll lam viec
+        sc.setMinimumHeight(y + 20)
 
     def _fill_profile(self):
         page = self.page_widgets[6]
@@ -2185,15 +2345,15 @@ class AdminWindow(QtWidgets.QWidget):
                 elif loai == 'lớp':
                     CourseService.delete_class(ma)
                 elif loai == 'học viên':
-                    # ma la MSV -> tim user_id
-                    row = db.fetch_one('SELECT user_id FROM students WHERE msv = %s', (ma,))
-                    if row: StudentService.delete(row['user_id'])
+                    # ma la MSV -> tim user_id qua API
+                    row = StudentService.get_by_msv(ma)
+                    if row: StudentService.delete(row.get('user_id') or row.get('id'))
                 elif loai == 'giảng viên':
-                    row = db.fetch_one('SELECT user_id FROM teachers WHERE ma_gv = %s', (ma,))
-                    if row: TeacherService.delete(row['user_id'])
+                    row = TeacherService.get_by_code(ma)
+                    if row: TeacherService.delete(row.get('user_id') or row.get('id'))
                 elif loai == 'nhân viên':
-                    row = db.fetch_one('SELECT user_id FROM employees WHERE ma_nv = %s', (ma,))
-                    if row: EmployeeService.delete(row['user_id'])
+                    row = EmployeeService.get_by_code(ma)
+                    if row: EmployeeService.delete(row.get('user_id') or row.get('id'))
                 elif loai == 'môn trong CT':
                     # ma la ma_mon, xoa row dau tien trung
                     if CurriculumService:
@@ -2562,16 +2722,11 @@ class AdminWindow(QtWidgets.QWidget):
                 ['14', 'IT011', 'Lập trình di động', '3', 'Tự chọn', 'HK6', 'IT003'],
             ]
         # tinh trang thai mo lop cho moi mon (de show "Đang mở X lớp")
-        # query DB neu co, khong thi check trong MOCK_CLASSES
+        # Tinh so lop per ma_mon - lay tu cache MOCK_CLASSES (da load tu API)
+        # tranh dung db.fetch_all shim (returns []) gay [WARN] khi walkthrough
         ma_mon_count = {}
-        if DB_AVAILABLE:
-            try:
-                rows = db.fetch_all('SELECT ma_mon, COUNT(*) AS n FROM classes GROUP BY ma_mon')
-                ma_mon_count = {r['ma_mon']: r['n'] for r in rows}
-            except Exception: pass
-        if not ma_mon_count:
-            for c in MOCK_CLASSES:
-                ma_mon_count[c[1]] = ma_mon_count.get(c[1], 0) + 1
+        for c in MOCK_CLASSES:
+            ma_mon_count[c[1]] = ma_mon_count.get(c[1], 0) + 1
 
         # Stats summary tren cung trang
         n_total = len(data)
@@ -3390,12 +3545,16 @@ class AdminWindow(QtWidgets.QWidget):
         # ghi DB
         if DB_AVAILABLE:
             try:
-                # tim gv_id tu ten
-                gv_row = db.fetch_one(
-                    'SELECT user_id FROM teachers t JOIN users u ON u.id=t.user_id WHERE u.full_name = %s LIMIT 1',
-                    (gv_name,)
-                )
-                gv_id = gv_row['user_id'] if gv_row else None
+                # tim gv_id tu ten qua API (filter trong list teachers)
+                gv_id = None
+                try:
+                    teachers = TeacherService.get_all() or []
+                    for t in teachers:
+                        if (t.get('full_name') or '').strip() == gv_name.strip():
+                            gv_id = t.get('id') or t.get('user_id')
+                            break
+                except Exception as e:
+                    print(f'[ADM_ADD_CLS] tim GV loi: {e}')
                 # semester hien tai
                 sem = SemesterService.get_current() if SemesterService else None
                 sem_id = sem['id'] if sem else 'HK2-2526'
@@ -4327,63 +4486,173 @@ class TeacherWindow(QtWidgets.QWidget):
     def _fill_tea_schedule(self):
         # tái sử dụng schedule.ui giống HV nhưng lịch của GV
         page = self.page_widgets[1]
+
+        hb = page.findChild(QtWidgets.QFrame, 'headerBar')
+        if hb:
+            hb.setGeometry(0, 0, 870, 56)
         sf = page.findChild(QtWidgets.QFrame, 'scheduleFrame')
         if sf:
-            sf.setGeometry(15, 68, 610, 618)
+            sf.setGeometry(15, 68, 615, 618)
         cf = page.findChild(QtWidgets.QFrame, 'calendarFrame')
         if cf:
-            cf.setGeometry(638, 68, 220, 230)
+            cf.setGeometry(635, 68, 225, 230)
         lf = page.findChild(QtWidgets.QFrame, 'legendFrame')
         if lf:
-            lf.setGeometry(638, 310, 220, 180)
+            lf.setGeometry(635, 308, 225, 190)
+        cal_w = page.findChild(QtWidgets.QCalendarWidget, 'calendarWidget')
+        if cal_w:
+            cal_w.hide()
+
+        # Tao nav panel inside calendarFrame: tieu de + nut prev/today/next
+        if cf and not cf.findChild(QtWidgets.QPushButton, 'btnPrevWeek'):
+            nav_title = QtWidgets.QLabel('Điều hướng tuần', cf)
+            nav_title.setObjectName('lblNavTitle')
+            nav_title.setGeometry(15, 12, 195, 20)
+            nav_title.setStyleSheet('color: #1a1a2e; font-size: 13px; font-weight: bold; background: transparent;')
+            nav_title.show()
+
+            self._lblNavWeekTea = QtWidgets.QLabel('—', cf)
+            self._lblNavWeekTea.setObjectName('lblNavWeek')
+            self._lblNavWeekTea.setGeometry(15, 38, 195, 40)
+            self._lblNavWeekTea.setStyleSheet('color: #002060; font-size: 12px; font-weight: bold; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px;')
+            self._lblNavWeekTea.setAlignment(Qt.AlignCenter)
+            self._lblNavWeekTea.setWordWrap(True)
+            self._lblNavWeekTea.show()
+
+            btn_prev = QtWidgets.QPushButton('‹ Tuần trước', cf)
+            btn_prev.setObjectName('btnPrevWeek')
+            btn_prev.setGeometry(15, 92, 95, 32)
+            btn_prev.setStyleSheet('QPushButton { background: white; color: #4a5568; border: 1px solid #d2d6dc; border-radius: 6px; font-size: 11px; } QPushButton:hover { background: #edf2f7; border-color: #002060; color: #002060; }')
+            btn_prev.setCursor(Qt.PointingHandCursor)
+            btn_prev.show()
+
+            btn_next = QtWidgets.QPushButton('Tuần sau ›', cf)
+            btn_next.setObjectName('btnNextWeek')
+            btn_next.setGeometry(115, 92, 95, 32)
+            btn_next.setStyleSheet(btn_prev.styleSheet())
+            btn_next.setCursor(Qt.PointingHandCursor)
+            btn_next.show()
+
+            btn_today = QtWidgets.QPushButton('Tuần hiện tại', cf)
+            btn_today.setObjectName('btnTodayWeek')
+            btn_today.setGeometry(15, 132, 195, 32)
+            btn_today.setStyleSheet('QPushButton { background: #002060; color: white; border: none; border-radius: 6px; font-size: 11px; font-weight: bold; } QPushButton:hover { background: #003080; }')
+            btn_today.setCursor(Qt.PointingHandCursor)
+            btn_today.show()
+
+            hint = QtWidgets.QLabel('Dùng nút trên để chuyển tuần', cf)
+            hint.setObjectName('lblNavHint')
+            hint.setGeometry(15, 175, 195, 40)
+            hint.setStyleSheet('color: #a0aec0; font-size: 10px; background: transparent;')
+            hint.setWordWrap(True)
+            hint.setAlignment(Qt.AlignCenter)
+            hint.show()
 
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblSchedule')
         if not tbl:
             return
+        tbl.setGeometry(0, 0, 615, 618)
         hours = ['7:00','8:00','9:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00']
         tbl.setRowCount(len(hours))
         tbl.verticalHeader().setVisible(False)
-
-        today = QDate.currentDate()
-        monday = today.addDays(-(today.dayOfWeek() - 1))
         days_vn = ['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7']
-        for i in range(6):
-            d = monday.addDays(i)
-            tbl.horizontalHeaderItem(i+1).setText(f'{d.toString("dd/MM/yyyy")}\n{days_vn[i]}')
+
         tbl.setColumnWidth(0, 45)
         for i in range(1, 7):
             tbl.setColumnWidth(i, 92)
-        # font lon hon cho lich day - dec hon nhin tu xa
+
         for r in range(len(hours)):
-            tbl.setRowHeight(r, 55)
+            tbl.setRowHeight(r, 50)
             item = QtWidgets.QTableWidgetItem(hours[r])
             item.setTextAlignment(Qt.AlignRight | Qt.AlignTop)
             item.setForeground(QColor('#718096'))
             item.setFont(QFont('Segoe UI', 9))
             tbl.setItem(r, 0, item)
+
+        # Label hien thi tuan dang xem (header)
+        title = page.findChild(QtWidgets.QLabel, 'lblPageTitle')
+        if title and not page.findChild(QtWidgets.QLabel, 'lblWeekRange'):
+            wr = QtWidgets.QLabel(page)
+            wr.setObjectName('lblWeekRange')
+            wr.setGeometry(180, 0, 450, 56)
+            wr.setStyleSheet('color: #4a5568; font-size: 13px; background: transparent;')
+            wr.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            wr.show()
+
+        today = QDate.currentDate()
+        self._tea_current_monday = today.addDays(-(today.dayOfWeek() - 1))
+        self._load_teacher_schedule_week(page, tbl, self._tea_current_monday, hours, days_vn)
+
+        # Wire prev/next/today buttons
+        btn_prev = cf.findChild(QtWidgets.QPushButton, 'btnPrevWeek') if cf else None
+        btn_next = cf.findChild(QtWidgets.QPushButton, 'btnNextWeek') if cf else None
+        btn_today = cf.findChild(QtWidgets.QPushButton, 'btnTodayWeek') if cf else None
+        if btn_prev:
+            btn_prev.clicked.connect(lambda: (
+                setattr(self, '_tea_current_monday', self._tea_current_monday.addDays(-7)),
+                self._load_teacher_schedule_week(page, tbl, self._tea_current_monday, hours, days_vn)
+            ))
+        if btn_next:
+            btn_next.clicked.connect(lambda: (
+                setattr(self, '_tea_current_monday', self._tea_current_monday.addDays(7)),
+                self._load_teacher_schedule_week(page, tbl, self._tea_current_monday, hours, days_vn)
+            ))
+        if btn_today:
+            btn_today.clicked.connect(lambda: (
+                setattr(self, '_tea_current_monday', QDate.currentDate().addDays(-(QDate.currentDate().dayOfWeek() - 1))),
+                self._load_teacher_schedule_week(page, tbl, self._tea_current_monday, hours, days_vn)
+            ))
+
+    def _load_teacher_schedule_week(self, page, tbl, monday, hours, days_vn):
+        """Reload lich day GV cho tuan bat dau bang `monday` (QDate)."""
+        for i in range(6):
+            d = monday.addDays(i)
+            hi = tbl.horizontalHeaderItem(i+1)
+            if hi:
+                hi.setText(f'{d.toString("dd/MM/yyyy")}\n{days_vn[i]}')
+        wr_lbl = page.findChild(QtWidgets.QLabel, 'lblWeekRange')
+        if wr_lbl:
+            wr_lbl.setText(f'Tuần: {monday.toString("dd/MM/yyyy")} → {monday.addDays(5).toString("dd/MM/yyyy")}')
+        nav_lbl = page.findChild(QtWidgets.QLabel, 'lblNavWeek')
+        if nav_lbl:
+            nav_lbl.setText(f'{monday.toString("dd/MM/yyyy")}\n→ {monday.addDays(5).toString("dd/MM/yyyy")}')
+
+        # Xoa cell cu
         for r in range(len(hours)):
             for c in range(1, 7):
-                if not tbl.item(r, c) and not tbl.cellWidget(r, c):
-                    tbl.setItem(r, c, QtWidgets.QTableWidgetItem(''))
+                cw = tbl.cellWidget(r, c)
+                if cw:
+                    tbl.removeCellWidget(r, c)
+                tbl.setSpan(r, c, 1, 1)
+                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(''))
 
-        def mk(ten, ts, toa, phong, ss, color):
+        def mk(ma_lop, ten_mon, ts, phong, ss, color):
             f = QtWidgets.QFrame()
             f.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #d2d6dc; border-radius: 4px; border-top: 3px solid {color}; margin: 1px; }}')
             vb = QtWidgets.QVBoxLayout(f)
-            vb.setContentsMargins(5, 4, 5, 4)
-            vb.setSpacing(2)
-            for txt, st in [(ten, f'color: {color}; font-size: 11px; font-weight: bold; border: none;'),
-                            (ts, 'color: #4a5568; font-size: 10px; border: none;'),
-                            (f'Tòa {toa} - {phong}', 'color: #718096; font-size: 9px; border: none;'),
-                            (ss, 'color: #4a5568; font-size: 9px; border: none;')]:
-                l = QtWidgets.QLabel(txt)
-                l.setStyleSheet(st)
-                l.setWordWrap(True)
-                vb.addWidget(l)
+            vb.setContentsMargins(4, 3, 4, 3)
+            vb.setSpacing(1)
+            l1 = QtWidgets.QLabel(ma_lop)
+            l1.setStyleSheet(f'color: {color}; font-size: 11px; font-weight: bold; border: none; background: transparent;')
+            l1.setWordWrap(False)
+            vb.addWidget(l1)
+            l2 = QtWidgets.QLabel(ten_mon)
+            l2.setStyleSheet('color: #2d3748; font-size: 10px; border: none; background: transparent;')
+            l2.setWordWrap(True)
+            vb.addWidget(l2)
+            l3 = QtWidgets.QLabel(ts)
+            l3.setStyleSheet('color: #4a5568; font-size: 9px; font-weight: bold; border: none; background: transparent;')
+            vb.addWidget(l3)
+            phong_disp = phong if phong.lower().startswith(('p.', 'p ', 'phòng', 'phong')) else f'P. {phong}'
+            l4 = QtWidgets.QLabel(phong_disp)
+            l4.setStyleSheet('color: #718096; font-size: 9px; border: none; background: transparent;')
+            vb.addWidget(l4)
+            l5 = QtWidgets.QLabel(ss)
+            l5.setStyleSheet('color: #4a5568; font-size: 9px; border: none; background: transparent;')
+            vb.addWidget(l5)
             vb.addStretch()
             return f
 
-        # Lich day GV - lay tu API ScheduleService.get_for_teacher_week()
         gv_id = MOCK_TEACHER.get('user_id')
         sched = []
         if DB_AVAILABLE and gv_id and ScheduleService:
@@ -4416,9 +4685,10 @@ class TeacherWindow(QtWidgets.QWidget):
                         siso = r.get('siso_hien_tai', '?')
                         sched.append((
                             hour_idx, span, col,
-                            f'{ma_lop} {r.get("ten_mon", "")[:15]}'.strip(),
+                            ma_lop,
+                            r.get("ten_mon", "") or '',
                             f'{gio_bd}-{gio_kt}',
-                            'EAUT', r.get('phong', '') or '—',
+                            r.get('phong', '') or '—',
                             f'{siso} HV',
                             color_by_lop[ma_lop],
                         ))
@@ -4427,23 +4697,26 @@ class TeacherWindow(QtWidgets.QWidget):
             except Exception as e:
                 print(f'[TEA_SCHED] API loi: {e}')
 
-        for rs, span, col, ten, ts, toa, phong, ss, color in sched:
-            tbl.setCellWidget(rs, col, mk(ten, ts, toa, phong, ss, color))
-            tbl.setSpan(rs, col, span, 1)
-
-        # wire calendar
-        cal = page.findChild(QtWidgets.QCalendarWidget, 'calendarWidget')
-        if cal:
-            def on_click(qdate):
-                mon = qdate.addDays(-(qdate.dayOfWeek() - 1))
-                for i in range(6):
-                    d = mon.addDays(i)
-                    tbl.horizontalHeaderItem(i+1).setText(f'{d.toString("dd/MM/yyyy")}\n{days_vn[i]}')
-                thu_vn = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][qdate.dayOfWeek() % 7]
-                msg_info(self, 'Xem lịch dạy',
-                         f'{thu_vn}, ngày {qdate.toString("dd/MM/yyyy")}\n'
-                         f'Tuần: {mon.toString("dd/MM")} → {mon.addDays(5).toString("dd/MM")}')
-            cal.clicked.connect(on_click)
+        if not sched:
+            ph = QtWidgets.QFrame()
+            ph.setStyleSheet('QFrame { background: #f7fafc; border: 1px dashed #cbd5e0; border-radius: 6px; }')
+            vb = QtWidgets.QVBoxLayout(ph)
+            vb.setContentsMargins(12, 12, 12, 12)
+            vb.setAlignment(Qt.AlignCenter)
+            l1 = QtWidgets.QLabel('Tuần này không có lịch dạy')
+            l1.setStyleSheet('color: #4a5568; font-size: 13px; font-weight: bold; border: none; background: transparent;')
+            l1.setAlignment(Qt.AlignCenter)
+            l2 = QtWidgets.QLabel('Chọn tuần khác trên lịch bên phải')
+            l2.setStyleSheet('color: #718096; font-size: 11px; border: none; background: transparent;')
+            l2.setAlignment(Qt.AlignCenter)
+            vb.addWidget(l1)
+            vb.addWidget(l2)
+            tbl.setCellWidget(3, 1, ph)
+            tbl.setSpan(3, 1, 4, 6)
+        else:
+            for rs, span, col, ma_lop, ten_mon, ts, phong, ss, color in sched:
+                tbl.setCellWidget(rs, col, mk(ma_lop, ten_mon, ts, phong, ss, color))
+                tbl.setSpan(rs, col, span, 1)
 
     def _fill_tea_classes(self):
         page = self.page_widgets[2]
@@ -4857,26 +5130,16 @@ class TeacherWindow(QtWidgets.QWidget):
                      'Vui lòng kiểm tra mạng và thử lại.')
             return
 
-        # Lay 1 phat tat ca attendance_rate cua HV trong lop nay (tranh N+1 query)
+        # Lay 1 phat tat ca attendance_rate cua HV trong lop nay qua API (tranh N+1)
         rates_by_msv = {}
         try:
-            rows = db.fetch_all(
-                """SELECT s.msv,
-                          COUNT(*) FILTER (WHERE a.trang_thai IN ('present','late')) AS present_cnt,
-                          COUNT(*) AS total
-                     FROM students s
-                     JOIN attendance a ON a.hv_id = s.user_id
-                     JOIN schedules sc ON sc.id = a.schedule_id
-                    WHERE sc.lop_id = %s
-                 GROUP BY s.msv""",
-                (ma_lop,)
-            )
+            rows = AttendanceService.class_summary(ma_lop) or []
             for r in rows:
-                if r['total']:
-                    rates_by_msv[r['msv']] = round(r['present_cnt'] / r['total'] * 100, 1)
+                if r.get('total'):
+                    rates_by_msv[r['msv']] = r.get('rate', 0.0)
             print(f"[SYNC_CC] lop={ma_lop} - tim thay attendance cua {len(rates_by_msv)} HV")
         except Exception as e:
-            print(f'[SYNC_CC] loi truy van batch: {e}')
+            print(f'[SYNC_CC] API class_summary loi: {e}')
 
         self._grades_recalc_lock = True
         n_filled = 0       # so HV duoc fill CC tu diem danh thuc te
@@ -4898,8 +5161,11 @@ class TeacherWindow(QtWidgets.QWidget):
                     n_filled += 1
                     print(f'[SYNC_CC] {msv}: rate={rate}% -> CC={cc}')
                 else:
-                    # check xem msv co trong DB khong
-                    hv = db.fetch_one("SELECT user_id FROM students WHERE msv = %s", (msv,))
+                    # check xem msv co trong DB khong qua API
+                    try:
+                        hv = StudentService.get_by_msv(msv)
+                    except Exception:
+                        hv = None
                     if hv:
                         n_no_data += 1
                         print(f'[SYNC_CC] {msv}: chua co diem danh nao')
@@ -5172,9 +5438,10 @@ class TeacherWindow(QtWidgets.QWidget):
                         msv = tbl.item(r, 1).text()
                         qt = float(tbl.item(r, 4).text().replace(',', '.'))
                         thi = float(tbl.item(r, 5).text().replace(',', '.'))
-                        hv = db.fetch_one("SELECT user_id FROM students WHERE msv = %s", (msv,))
+                        hv = StudentService.get_by_msv(msv)
                         if hv:
-                            GradeService.save_grade(hv['user_id'], lop_id, qt, thi, gv_user_id)
+                            uid = hv.get('user_id') or hv.get('id')
+                            GradeService.save_grade(uid, lop_id, qt, thi, gv_user_id)
                             saved += 1
                     except Exception as e:
                         print(f'[GRADE] loi dong {r}: {e}')
@@ -5232,9 +5499,18 @@ class TeacherWindow(QtWidgets.QWidget):
 
     def _tea_change_pass(self):
         new = msg_input(self, 'Đổi mật khẩu', 'Nhập mật khẩu mới:')
-        if new:
+        if not new:
+            return
+        gv_user_id = MOCK_TEACHER.get('user_id')
+        if not (DB_AVAILABLE and gv_user_id):
+            msg_warn(self, 'Lỗi', 'Không xác định được tài khoản. Hãy đăng nhập lại.')
+            return
+        try:
+            AuthService.change_password(gv_user_id, new)
             MOCK_TEACHER['password'] = new
             msg_info(self, 'Thành công', 'Đổi mật khẩu thành công.')
+        except Exception as e:
+            msg_warn(self, 'Lỗi', f'Đổi mật khẩu thất bại:\n{e}')
 
 
 class EmployeeWindow(QtWidgets.QWidget):
@@ -5573,12 +5849,11 @@ class EmployeeWindow(QtWidgets.QWidget):
         ma_mon_lop = MOCK_COURSES[cbo_c.currentIndex() - 1][0] if cbo_c.currentIndex() > 0 else None
         if DB_AVAILABLE and CurriculumService:
             try:
-                hv_row = db.fetch_one(
-                    "SELECT user_id FROM students WHERE msv = %s", (msv.text().strip(),)
-                )
+                hv_row = StudentService.get_by_msv(msv.text().strip())
                 if hv_row and ma_mon_lop:
+                    hv_uid = hv_row.get('user_id') or hv_row.get('id')
                     check = CurriculumService.check_prerequisites_for_student(
-                        hv_row['user_id'], ma_mon_lop)
+                        hv_uid, ma_mon_lop)
                     if not check['ok']:
                         warn_msg = (
                             f'<b>Học viên chưa đủ điều kiện học môn {ma_mon_lop}!</b><br><br>'
@@ -5607,20 +5882,22 @@ class EmployeeWindow(QtWidgets.QWidget):
         saved_id = None
         if DB_AVAILABLE:
             try:
-                hv_row = db.fetch_one(
-                    "SELECT user_id FROM students WHERE msv = %s", (msv.text().strip(),)
-                )
+                hv_row = StudentService.get_by_msv(msv.text().strip())
                 nv_id = MOCK_EMPLOYEE.get('user_id')
                 if hv_row and nv_id:
+                    hv_uid = hv_row.get('user_id') or hv_row.get('id')
                     saved_id = RegistrationService.register_student(
-                        hv_row['user_id'], lop_code, nv_id
+                        hv_uid, lop_code, nv_id
                     )
             except Exception as e:
                 print(f'[REG] loi: {e}')
+                msg_warn(self, 'Lỗi', f'Đăng ký thất bại:\n{e}')
+                return
         if saved_id:
             msg_info(self, 'Thành công', f'Đã đăng ký cho {hoten.text()} - Mã đăng ký #{saved_id}')
         else:
-            msg_info(self, 'Thành công', f'Đã đăng ký thành công cho {hoten.text()}')
+            msg_warn(self, 'Lỗi', 'Không xác định được học viên hoặc nhân viên. Hãy kiểm tra MSV.')
+            return
         self._emp_reset_form()
 
     def _emp_reset_form(self):
@@ -5815,15 +6092,19 @@ class EmployeeWindow(QtWidgets.QWidget):
         ghi_chu = note.text().strip() if note else ''
         # parse ma_dk: "DK001" → 1, "1" → 1
         ma_digits = ''.join(ch for ch in ma if ch.isdigit())
-        # ghi DB truoc
-        if DB_AVAILABLE and ma_digits:
-            try:
-                nv_id = MOCK_EMPLOYEE.get('user_id')
-                so_tien = int(gia.replace('.', '').replace(',', '').replace('đ', '').strip())
-                RegistrationService.confirm_payment(int(ma_digits), so_tien, method, nv_id, ghi_chu)
-                print(f'[PAY] da ghi DB: {ma}, {so_tien}đ')
-            except Exception as e:
-                print(f'[PAY] loi: {e}')
+        # ghi DB truoc - phai thanh cong moi cap nhat UI
+        if not (DB_AVAILABLE and ma_digits):
+            msg_warn(self, 'Lỗi', 'Không xác định được mã đăng ký hoặc chưa kết nối hệ thống.')
+            return
+        try:
+            nv_id = MOCK_EMPLOYEE.get('user_id')
+            so_tien = int(gia.replace('.', '').replace(',', '').replace('đ', '').strip())
+            RegistrationService.confirm_payment(int(ma_digits), so_tien, method, nv_id, ghi_chu)
+            print(f'[PAY] da ghi DB: {ma}, {so_tien}đ')
+        except Exception as e:
+            print(f'[PAY] loi: {e}')
+            msg_warn(self, 'Lỗi', f'Xác nhận thanh toán thất bại:\n{e}')
+            return
         tbl.removeRow(r)
         if note: note.clear()
         # cap nhat trang thai ben bang ds dang ky
@@ -6146,9 +6427,18 @@ class EmployeeWindow(QtWidgets.QWidget):
 
     def _emp_change_pass(self):
         new = msg_input(self, 'Đổi mật khẩu', 'Nhập mật khẩu mới:')
-        if new:
+        if not new:
+            return
+        emp_user_id = MOCK_EMPLOYEE.get('user_id')
+        if not (DB_AVAILABLE and emp_user_id):
+            msg_warn(self, 'Lỗi', 'Không xác định được tài khoản. Hãy đăng nhập lại.')
+            return
+        try:
+            AuthService.change_password(emp_user_id, new)
             MOCK_EMPLOYEE['password'] = new
             msg_info(self, 'Thành công', 'Đổi mật khẩu thành công.')
+        except Exception as e:
+            msg_warn(self, 'Lỗi', f'Đổi mật khẩu thất bại:\n{e}')
 
 
 class App:

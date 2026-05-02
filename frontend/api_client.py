@@ -328,6 +328,9 @@ class TeacherService:
     def get_for_review(): return _get('/teachers/for-review')
 
     @staticmethod
+    def get_by_code(ma_gv): return _get(f'/teachers/by-code/{ma_gv}')
+
+    @staticmethod
     def create(username, password, full_name, ma_gv, email=None, sdt=None,
                hoc_vi=None, khoa=None, chuyen_nganh=None, tham_nien=0):
         r = _post('/teachers', {
@@ -348,6 +351,9 @@ class TeacherService:
 class EmployeeService:
     @staticmethod
     def get_all(): return _get('/employees')
+
+    @staticmethod
+    def get_by_code(ma_nv): return _get(f'/employees/by-code/{ma_nv}')
 
     @staticmethod
     def create(username, password, full_name, ma_nv, email=None, sdt=None,
@@ -534,6 +540,11 @@ class AttendanceService:
     @staticmethod
     def attendance_rate(hv_id, lop_id):
         return _get(f'/attendance/rate/{hv_id}/{lop_id}').get('rate', 0.0)
+
+    @staticmethod
+    def class_summary(lop_id):
+        """Tra ve list [{msv, present_cnt, total, rate}, ...] cho tat ca HV trong lop."""
+        return _get(f'/attendance/class/{lop_id}/summary')
 
 
 class AuditService:
