@@ -1435,11 +1435,25 @@ class MainWindow(QtWidgets.QWidget):
 
     def _save_profile(self):
         page = self.page_widgets[6]
+        updates = {}
         for attr, key in [('txtEmail', 'email'), ('txtPhone', 'sdt'), ('txtAddress', 'diachi')]:
             w = page.findChild(QtWidgets.QLineEdit, attr)
             if w:
-                MOCK_USER[key] = w.text().strip()
-        msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
+                val = w.text().strip()
+                MOCK_USER[key] = val
+                updates[key] = val
+
+        # Persist len server qua API
+        hv_user_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        if DB_AVAILABLE and hv_user_id and updates:
+            try:
+                StudentService.update(hv_user_id, **updates)
+                msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
+            except Exception as e:
+                msg_warn(self, 'Lỗi', f'Đã hiển thị nhưng chưa lưu được vào hệ thống:\n{e}')
+        else:
+            msg_warn(self, 'Chưa kết nối được hệ thống',
+                     'Thông tin chỉ lưu tạm. Hãy kiểm tra kết nối và thử lại.')
 
     def _show_progress_dialog(self):
         """Dialog hien tien do hoc khung CT cua HV - lien ket curriculum + grades"""
@@ -2142,9 +2156,23 @@ class AdminWindow(QtWidgets.QWidget):
         if not txt_code.text().strip() or not txt_name.text().strip():
             msg_warn(self, 'Thiếu', 'Mã và tên môn không được trống')
             return
+        new_code = txt_code.text().strip()
+        new_name = txt_name.text().strip()
+
+        # Persist len server qua API CourseService.update_course()
+        if DB_AVAILABLE:
+            try:
+                CourseService.update_course(ma, ten_mon=new_name)
+                # Refresh cache - ten/ma_mon co the doi
+                _refresh_cache()
+            except Exception as e:
+                msg_warn(self, 'Lỗi lưu', f'Không lưu được vào hệ thống:\n{e}')
+                return
+
+        # Update UI sau khi save thanh cong
         for c, w in enumerate([txt_code, txt_name, txt_tc, txt_gv, txt_lich]):
             tbl.setItem(target_row, c, QtWidgets.QTableWidgetItem(w.text()))
-        msg_info(self, 'Đã cập nhật', f'Đã lưu thay đổi cho {txt_code.text()}')
+        msg_info(self, 'Đã cập nhật', f'Đã lưu thay đổi cho {new_code}')
 
     def _admin_del_row(self, tbl, ma, nm, loai):
         if not msg_confirm(self, 'Xác nhận xóa', f'Xóa {loai} {ma} - {nm}?'):
@@ -2709,6 +2737,34 @@ class AdminWindow(QtWidgets.QWidget):
         new_vals = [cur[0], txt_code.text().upper(), txt_name.text(), txt_tc.text(),
                     cbo_loai.currentText(), cbo_hk.currentText(),
                     txt_prereq.text().strip() or '—']
+
+        # Persist via API CurriculumService.update()
+        if DB_AVAILABLE:
+            # cur_id la STT (cot 0) - thuc te can lay tu metadata. Tam thoi loc theo ma_mon
+            try:
+                # find cur_id by ma_mon
+                from_curr = CurriculumService.get_all() or []
+                old_ma = cur[1]
+                cur_id = None
+                for cc in from_curr:
+                    if cc.get('ma_mon') == old_ma:
+                        cur_id = cc.get('id')
+                        break
+                if cur_id:
+                    type_to_db = {'Bắt buộc': 'Bat buoc', 'Tự chọn': 'Tu chon', 'Đại cương': 'Dai cuong'}
+                    CurriculumService.update(cur_id,
+                        ma_mon=new_vals[1],
+                        tin_chi=int(new_vals[3]),
+                        loai=type_to_db.get(new_vals[4], new_vals[4]),
+                        hoc_ky_de_nghi=new_vals[5],
+                        mon_tien_quyet=new_vals[6] if new_vals[6] != '—' else None)
+                else:
+                    msg_warn(self, 'Lỗi', 'Không tìm thấy môn trong khung CT để cập nhật')
+                    return
+            except Exception as e:
+                msg_warn(self, 'Lỗi lưu', f'Không lưu được vào hệ thống:\n{e}')
+                return
+
         for c, v in enumerate(new_vals):
             it = QtWidgets.QTableWidgetItem(v)
             it.setTextAlignment(Qt.AlignCenter if c in (0, 3, 4, 5) else Qt.AlignLeft | Qt.AlignVCenter)
@@ -2940,54 +2996,82 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.setRowHidden(r, not show)
 
     def _fill_admin_stats(self):
-        self._render_admin_stats(0)
+        # Populate cbo voi danh sach hoc ky tu API
         page = self.page_widgets[9]
         cbo = page.findChild(QtWidgets.QComboBox, 'cboStatSemester')
+        self._stats_sem_ids = []  # cache list semester_id theo cbo idx
         if cbo:
+            cbo.blockSignals(True)
+            cbo.clear()
+            sems = []
+            if DB_AVAILABLE:
+                try:
+                    sems = SemesterService.get_all() or []
+                except Exception as e:
+                    print(f'[ADM_STATS] sem loi: {e}')
+            for s in sems:
+                cbo.addItem(f"{s.get('ten', s.get('id', ''))} ({s.get('nam_hoc', '')})")
+                self._stats_sem_ids.append(s.get('id', ''))
+            cbo.blockSignals(False)
             cbo.currentIndexChanged.connect(self._render_admin_stats)
+        # Render initial
+        self._render_admin_stats(0)
 
     def _render_admin_stats(self, idx):
         page = self.page_widgets[9]
-        # du lieu khac nhau cho HK2 (idx=0, hien tai) vs HK1 (idx=1) va nam truoc (idx>=2)
-        datasets = [
-            # HK2 2025-2026 (hien tai): cao diem IT, nhieu lop full
-            {
-                'chart': [('Lập trình Python', 40, 40), ('CSDL', 35, 40),
-                          ('Mạng MT', 18, 30), ('Toán rời rạc', 30, 40),
-                          ('Tiếng Anh 3', 15, 35), ('Trí tuệ nhân tạo', 28, 40)],
-                'dept': [['CNTT', '98', '63%'], ['Toán', '30', '19%'],
-                         ['Ngoại ngữ', '18', '12%'], ['Khác', '10', '6%']],
-                'class': [['CNTT-K20A', '35', '4.8', '504'], ['CNTT-K20B', '33', '4.5', '445'],
-                          ['TOAN-K20', '30', '4.2', '378'], ['NN-K20', '28', '3.8', '319']],
-            },
-            # HK1 2025-2026: it hoc vien hon, tap trung toan / tieng anh
-            {
-                'chart': [('Lập trình Python', 32, 40), ('CSDL', 25, 40),
-                          ('Mạng MT', 12, 30), ('Toán rời rạc', 38, 40),
-                          ('Tiếng Anh 3', 30, 35), ('Trí tuệ nhân tạo', 18, 40)],
-                'dept': [['CNTT', '62', '44%'], ['Toán', '45', '32%'],
-                         ['Ngoại ngữ', '25', '18%'], ['Khác', '8', '6%']],
-                'class': [['CNTT-K20A', '32', '4.5', '420'], ['CNTT-K20B', '29', '4.3', '378'],
-                          ['TOAN-K20', '38', '4.6', '525'], ['NN-K20', '30', '4.1', '340']],
-            },
-            # HK2 2024-2025: nam truoc, it hoc vien
-            {
-                'chart': [('Lập trình Python', 28, 40), ('CSDL', 22, 40),
-                          ('Mạng MT', 8, 30), ('Toán rời rạc', 25, 40),
-                          ('Tiếng Anh 3', 20, 35), ('Trí tuệ nhân tạo', 15, 40)],
-                'dept': [['CNTT', '48', '41%'], ['Toán', '32', '27%'],
-                         ['Ngoại ngữ', '28', '24%'], ['Khác', '10', '8%']],
-                'class': [['CNTT-K19A', '28', '4.3', '350'], ['CNTT-K19B', '26', '4.0', '310'],
-                          ['TOAN-K19', '25', '4.2', '320'], ['NN-K19', '22', '3.9', '268']],
-            },
-        ]
-        ds = datasets[min(idx, len(datasets) - 1)]
+        # Lay sem_id tu cbo cache - default HK hien tai
+        sem_id = None
+        if hasattr(self, '_stats_sem_ids') and 0 <= idx < len(self._stats_sem_ids):
+            sem_id = self._stats_sem_ids[idx]
+
+        # Default empty
+        ds = {'chart': [], 'dept': [], 'class': []}
+        if DB_AVAILABLE and sem_id:
+            try:
+                stat = StatsService.stats_by_semester(sem_id) or {}
+                # Map response: chart=[{ten_mon,cur,mx}], dept=[{khoa,so_hv,so_lop}],
+                #               class_stats=[{ma_lop,siso_hien_tai,gpa,doanh_thu}]
+                ds['chart'] = [(c.get('ten_mon', '?'),
+                                int(c.get('cur', 0) or 0),
+                                int(c.get('mx', 40) or 40))
+                               for c in stat.get('chart', [])]
+                total_hv = sum(int(d.get('so_hv', 0) or 0) for d in stat.get('dept', []))
+                ds['dept'] = [[d.get('khoa', '?'),
+                               str(d.get('so_hv', 0)),
+                               f"{int(d.get('so_hv', 0) or 0)*100//max(total_hv, 1)}%"]
+                              for d in stat.get('dept', [])]
+                ds['class'] = [[c.get('ma_lop', '?'),
+                                str(c.get('siso_hien_tai', 0)),
+                                f"{c.get('gpa', 0):.1f}" if c.get('gpa') else '0.0',
+                                str(c.get('doanh_thu', 0))]
+                               for c in stat.get('class_stats', [])]
+            except Exception as e:
+                print(f'[ADM_STATS] semester {sem_id} loi: {e}')
+
+        def _render_table_with_empty(tbl, data, fill_func, col_widths):
+            """Helper render table voi placeholder empty state."""
+            tbl.setRowCount(len(data) if data else 1)
+            if not data:
+                ph = QtWidgets.QTableWidgetItem('Chưa có dữ liệu')
+                ph.setTextAlignment(Qt.AlignCenter)
+                ph.setForeground(QColor(COLORS['text_light']))
+                tbl.setItem(0, 0, ph)
+                tbl.setSpan(0, 0, 1, tbl.columnCount())
+                tbl.setRowHeight(0, 50)
+            else:
+                for r, row in enumerate(data):
+                    fill_func(r, row)
+                for r in range(len(data)):
+                    tbl.setRowHeight(r, 36)
+            tbl.horizontalHeader().setStretchLastSection(True)
+            for c, w in enumerate(col_widths):
+                tbl.setColumnWidth(c, w)
+            tbl.verticalHeader().setVisible(False)
 
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblChartData')
         if tbl:
-            data = ds['chart']
-            tbl.setRowCount(len(data))
-            for r, (name, cur, mx) in enumerate(data):
+            def fill_chart(r, row):
+                name, cur, mx = row
                 tbl.setItem(r, 0, QtWidgets.QTableWidgetItem(name))
                 tbl.setItem(r, 1, QtWidgets.QTableWidgetItem(str(cur)))
                 tbl.setItem(r, 2, QtWidgets.QTableWidgetItem(str(mx)))
@@ -2998,48 +3082,34 @@ class AdminWindow(QtWidgets.QWidget):
                 item_pct.setForeground(QColor(color))
                 item_pct.setFont(QFont('Segoe UI', 11, QFont.Bold))
                 tbl.setItem(r, 3, item_pct)
-            tbl.horizontalHeader().setStretchLastSection(True)
-            tbl.setColumnWidth(0, 160)
-            tbl.setColumnWidth(1, 60)
-            tbl.setColumnWidth(2, 60)
-            tbl.verticalHeader().setVisible(False)
-            for r in range(len(data)):
-                tbl.setRowHeight(r, 36)
+            _render_table_with_empty(tbl, ds['chart'], fill_chart, [160, 60, 60])
 
         tbl2 = page.findChild(QtWidgets.QTableWidget, 'tblDeptStats')
         if tbl2:
-            data = ds['dept']
-            tbl2.setRowCount(len(data))
-            for r, row in enumerate(data):
+            def fill_dept(r, row):
                 for c, val in enumerate(row):
                     tbl2.setItem(r, c, QtWidgets.QTableWidgetItem(val))
-            tbl2.horizontalHeader().setStretchLastSection(True)
-            tbl2.setColumnWidth(0, 100)
-            tbl2.setColumnWidth(1, 60)
-            tbl2.verticalHeader().setVisible(False)
+            _render_table_with_empty(tbl2, ds['dept'], fill_dept, [100, 60])
 
         tbl3 = page.findChild(QtWidgets.QTableWidget, 'tblClassStats')
         if tbl3:
-            data = ds['class']
-            tbl3.setRowCount(len(data))
-            for r, row in enumerate(data):
+            def fill_cls(r, row):
                 for c, val in enumerate(row):
                     item = QtWidgets.QTableWidgetItem(val)
                     item.setTextAlignment(Qt.AlignCenter if c > 0 else Qt.AlignLeft | Qt.AlignVCenter)
                     tbl3.setItem(r, c, item)
-            tbl3.horizontalHeader().setStretchLastSection(True)
-            for c, w in enumerate([200, 80, 120]):
-                tbl3.setColumnWidth(c, w)
-            tbl3.verticalHeader().setVisible(False)
+            _render_table_with_empty(tbl3, ds['class'], fill_cls, [200, 80, 120])
 
         # update stat cards neu co
-        totals = [sum(d[1] for d in ds['chart']), sum(int(d[1]) for d in ds['dept']), len(ds['class'])]
-        for attr, val in [('lblStatTotalRegs', str(totals[0])),
-                          ('lblStatTotalStudents', str(totals[1])),
-                          ('lblStatTotalClasses', str(len(ds['chart'])))]:
-            w = page.findChild(QtWidgets.QLabel, attr)
-            if w:
-                w.setText(val)
+        if ds['chart']:
+            totals_regs = sum(d[1] for d in ds['chart'])
+            totals_students = sum(int(d[1]) for d in ds['dept']) if ds['dept'] else 0
+            for attr, val in [('lblStatTotalRegs', str(totals_regs)),
+                              ('lblStatTotalStudents', str(totals_students)),
+                              ('lblStatTotalClasses', str(len(ds['chart'])))]:
+                wlbl = page.findChild(QtWidgets.QLabel, attr)
+                if wlbl:
+                    wlbl.setText(val)
 
     def _fill_admin_classes(self):
         page = self.page_widgets[2]
@@ -4176,49 +4246,83 @@ class TeacherWindow(QtWidgets.QWidget):
             except Exception as e:
                 print(f'[STATS] teacher_overview loi: {e}')
 
-        # Today schedule
+        # Today schedule - lay tu API ScheduleService.get_today() filter theo gv_id
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblToday')
         if tbl:
-            data = [
-                ['7:00-9:30', 'IT001-A (Python)', 'P.A301'],
-                ['13:00-15:30', 'IT004-A (AI)', 'P.A301'],
-                ['15:40-18:10', 'IT001-C (Python)', 'P.C102'],
-            ]
-            tbl.setRowCount(len(data))
-            for r, row in enumerate(data):
-                for c, val in enumerate(row):
-                    item = QtWidgets.QTableWidgetItem(val)
-                    item.setTextAlignment(Qt.AlignCenter if c != 1 else Qt.AlignLeft | Qt.AlignVCenter)
-                    tbl.setItem(r, c, item)
+            data = []
+            if DB_AVAILABLE and gv_id and ScheduleService:
+                try:
+                    today_rows = ScheduleService.get_today() or []
+                    for r in today_rows:
+                        # filter buoi cua gv hien tai
+                        if r.get('gv_id') and r.get('gv_id') != gv_id:
+                            continue
+                        gio_bd = str(r.get('gio_bat_dau', ''))[:5]
+                        gio_kt = str(r.get('gio_ket_thuc', ''))[:5]
+                        time_str = f'{gio_bd}-{gio_kt}' if gio_bd else '—'
+                        ma_lop = r.get('lop_id', '')
+                        ten_mon = r.get('ten_mon', '')
+                        data.append([
+                            time_str,
+                            f'{ma_lop} ({ten_mon})' if ten_mon else ma_lop,
+                            r.get('phong', '') or '—',
+                        ])
+                except Exception as e:
+                    print(f'[TEA_DASH] today loi: {e}')
+            tbl.setRowCount(len(data) if data else 1)
+            if not data:
+                ph = QtWidgets.QTableWidgetItem('Hôm nay không có buổi dạy')
+                ph.setTextAlignment(Qt.AlignCenter)
+                ph.setForeground(QColor(COLORS['text_light']))
+                tbl.setItem(0, 0, ph)
+                tbl.setSpan(0, 0, 1, tbl.columnCount())
+                tbl.setRowHeight(0, 50)
+            else:
+                for r, row in enumerate(data):
+                    for c, val in enumerate(row):
+                        item = QtWidgets.QTableWidgetItem(val)
+                        item.setTextAlignment(Qt.AlignCenter if c != 1 else Qt.AlignLeft | Qt.AlignVCenter)
+                        tbl.setItem(r, c, item)
+                for r in range(len(data)):
+                    tbl.setRowHeight(r, 38)
             tbl.horizontalHeader().setStretchLastSection(True)
             tbl.setColumnWidth(0, 100)
             tbl.setColumnWidth(1, 180)
             tbl.verticalHeader().setVisible(False)
-            for r in range(len(data)):
-                tbl.setRowHeight(r, 38)
 
-        # Activity
+        # Activity - dung NotificationService.get_sent_by_teacher() de hien activity gan day
         tbl2 = page.findChild(QtWidgets.QTableWidget, 'tblActivity')
         if tbl2:
-            data = [
-                ('30 phút trước', 'Nhận đánh giá mới từ lớp IT001-A'),
-                ('2 giờ trước', 'Lớp IT004-A có 2 học viên mới'),
-                ('Hôm qua', 'Đã gửi thông báo cho lớp IT001-C'),
-                ('2 ngày trước', 'Cập nhật điểm giữa kỳ IT001-A'),
-                ('3 ngày trước', 'Admin thông báo: họp khoa CNTT 25/04'),
-            ]
-            tbl2.setRowCount(len(data))
-            for r, (t, c) in enumerate(data):
-                ti = QtWidgets.QTableWidgetItem(t)
-                ti.setForeground(QColor(COLORS['text_light']))
-                ti.setFont(QFont('Segoe UI', 9))
-                tbl2.setItem(r, 0, ti)
-                tbl2.setItem(r, 1, QtWidgets.QTableWidgetItem(c))
+            data = []
+            if DB_AVAILABLE and gv_id:
+                try:
+                    sent = NotificationService.get_sent_by_teacher(gv_id, limit=5) or []
+                    for n in sent:
+                        t_str = fmt_date(n.get('ngay_tao'), fmt='%d/%m %H:%M')
+                        target = n.get('den_lop') or 'Tat ca'
+                        data.append((t_str, f"Đã gửi '{n.get('tieu_de', '')}' đến {target}"))
+                except Exception as e:
+                    print(f'[TEA_DASH] activity loi: {e}')
+            tbl2.setRowCount(len(data) if data else 1)
+            if not data:
+                ph = QtWidgets.QTableWidgetItem('Chưa có hoạt động')
+                ph.setTextAlignment(Qt.AlignCenter)
+                ph.setForeground(QColor(COLORS['text_light']))
+                tbl2.setItem(0, 0, ph)
+                tbl2.setSpan(0, 0, 1, tbl2.columnCount())
+                tbl2.setRowHeight(0, 50)
+            else:
+                for r, (t, c) in enumerate(data):
+                    ti = QtWidgets.QTableWidgetItem(t)
+                    ti.setForeground(QColor(COLORS['text_light']))
+                    ti.setFont(QFont('Segoe UI', 9))
+                    tbl2.setItem(r, 0, ti)
+                    tbl2.setItem(r, 1, QtWidgets.QTableWidgetItem(c))
+                for r in range(len(data)):
+                    tbl2.setRowHeight(r, 38)
             tbl2.horizontalHeader().setStretchLastSection(True)
             tbl2.setColumnWidth(0, 110)
             tbl2.verticalHeader().setVisible(False)
-            for r in range(len(data)):
-                tbl2.setRowHeight(r, 38)
 
     def _fill_tea_schedule(self):
         # tái sử dụng schedule.ui giống HV nhưng lịch của GV
@@ -4530,23 +4634,47 @@ class TeacherWindow(QtWidgets.QWidget):
                     if cls[3] == gv_name:
                         cbo.addItem(cls[0])
 
-        # populate sent list
+        # Populate sent list - lay tu API NotificationService.get_sent_by_teacher()
         sc = page.findChild(QtWidgets.QWidget, 'sentContent')
         if sc:
             sc.setMinimumHeight(500)
-            vlay = QtWidgets.QVBoxLayout(sc)
-            vlay.setContentsMargins(4, 4, 4, 4)
-            vlay.setSpacing(8)
+            # Clear cu neu da co layout
+            if sc.layout() is None:
+                vlay = QtWidgets.QVBoxLayout(sc)
+                vlay.setContentsMargins(4, 4, 4, 4)
+                vlay.setSpacing(8)
+            else:
+                vlay = sc.layout()
+                while vlay.count():
+                    it = vlay.takeAt(0)
+                    if it.widget():
+                        it.widget().deleteLater()
             self._tea_notice_layout = vlay
-            sent = [
-                ('IT001-A', 'Nghỉ học ngày 20/04', '2 ngày trước'),
-                ('IT004-A', 'Bài tập tuần 8', '3 ngày trước'),
-                ('Tất cả', 'Thông báo kiểm tra giữa kỳ', '1 tuần trước'),
-                ('IT001-C', 'Đổi phòng học', '1 tuần trước'),
-            ]
-            for to, subj, t in sent:
-                card = self._make_notice_card(to, subj, t)
-                vlay.addWidget(card)
+
+            sent_data = []
+            gv_id = MOCK_TEACHER.get('user_id')
+            if DB_AVAILABLE and gv_id:
+                try:
+                    rows = NotificationService.get_sent_by_teacher(gv_id, limit=10) or []
+                    for n in rows:
+                        target = n.get('den_lop') or 'Tất cả'
+                        sent_data.append((
+                            target,
+                            n.get('tieu_de', '') or '(không tiêu đề)',
+                            fmt_date(n.get('ngay_tao'), fmt='%d/%m/%Y %H:%M'),
+                        ))
+                except Exception as e:
+                    print(f'[TEA_NOTICE] sent loi: {e}')
+
+            if not sent_data:
+                empty = QtWidgets.QLabel('Chưa gửi thông báo nào')
+                empty.setStyleSheet(f'color: {COLORS["text_light"]}; font-size: 13px; padding: 20px;')
+                empty.setAlignment(Qt.AlignCenter)
+                vlay.addWidget(empty)
+            else:
+                for to, subj, t in sent_data:
+                    card = self._make_notice_card(to, subj, t)
+                    vlay.addWidget(card)
             vlay.addStretch()
 
         # nut gui / clear
@@ -5072,14 +5200,35 @@ class TeacherWindow(QtWidgets.QWidget):
 
         btn_save = page.findChild(QtWidgets.QPushButton, 'btnSave')
         if btn_save:
-            btn_save.clicked.connect(lambda: (
-                MOCK_TEACHER.__setitem__('email', page.findChild(QtWidgets.QLineEdit, 'txtEmail').text().strip()),
-                MOCK_TEACHER.__setitem__('sdt', page.findChild(QtWidgets.QLineEdit, 'txtPhone').text().strip()),
-                msg_info(self, 'Thành công', 'Đã lưu thông tin.')
-            ))
+            btn_save.clicked.connect(self._save_tea_profile)
         btn_cp = page.findChild(QtWidgets.QPushButton, 'btnChangePass')
         if btn_cp:
             btn_cp.clicked.connect(lambda: self._tea_change_pass())
+
+    def _save_tea_profile(self):
+        page = self.page_widgets[7]
+        email = page.findChild(QtWidgets.QLineEdit, 'txtEmail')
+        phone = page.findChild(QtWidgets.QLineEdit, 'txtPhone')
+        updates = {}
+        if email:
+            v = email.text().strip()
+            MOCK_TEACHER['email'] = v
+            updates['email'] = v
+        if phone:
+            v = phone.text().strip()
+            MOCK_TEACHER['sdt'] = v
+            updates['sdt'] = v
+
+        gv_user_id = MOCK_TEACHER.get('user_id')
+        if DB_AVAILABLE and gv_user_id and updates:
+            try:
+                TeacherService.update(gv_user_id, **updates)
+                msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
+            except Exception as e:
+                msg_warn(self, 'Lỗi', f'Đã hiển thị nhưng chưa lưu được vào hệ thống:\n{e}')
+        else:
+            msg_warn(self, 'Chưa kết nối được hệ thống',
+                     'Thông tin chỉ lưu tạm. Hãy kiểm tra kết nối và thử lại.')
 
     def _tea_change_pass(self):
         new = msg_input(self, 'Đổi mật khẩu', 'Nhập mật khẩu mới:')
@@ -5965,14 +6114,35 @@ class EmployeeWindow(QtWidgets.QWidget):
 
         btn_save = page.findChild(QtWidgets.QPushButton, 'btnSave')
         if btn_save:
-            btn_save.clicked.connect(lambda: (
-                MOCK_EMPLOYEE.__setitem__('email', page.findChild(QtWidgets.QLineEdit, 'txtEmail').text().strip()),
-                MOCK_EMPLOYEE.__setitem__('sdt', page.findChild(QtWidgets.QLineEdit, 'txtPhone').text().strip()),
-                msg_info(self, 'Thành công', 'Đã lưu thông tin.')
-            ))
+            btn_save.clicked.connect(self._save_emp_profile)
         btn_cp = page.findChild(QtWidgets.QPushButton, 'btnChangePass')
         if btn_cp:
             btn_cp.clicked.connect(lambda: self._emp_change_pass())
+
+    def _save_emp_profile(self):
+        page = self.page_widgets[5]
+        email = page.findChild(QtWidgets.QLineEdit, 'txtEmail')
+        phone = page.findChild(QtWidgets.QLineEdit, 'txtPhone')
+        updates = {}
+        if email:
+            v = email.text().strip()
+            MOCK_EMPLOYEE['email'] = v
+            updates['email'] = v
+        if phone:
+            v = phone.text().strip()
+            MOCK_EMPLOYEE['sdt'] = v
+            updates['sdt'] = v
+
+        emp_user_id = MOCK_EMPLOYEE.get('user_id')
+        if DB_AVAILABLE and emp_user_id and updates:
+            try:
+                EmployeeService.update(emp_user_id, **updates)
+                msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
+            except Exception as e:
+                msg_warn(self, 'Lỗi', f'Đã hiển thị nhưng chưa lưu được vào hệ thống:\n{e}')
+        else:
+            msg_warn(self, 'Chưa kết nối được hệ thống',
+                     'Thông tin chỉ lưu tạm. Hãy kiểm tra kết nối và thử lại.')
 
     def _emp_change_pass(self):
         new = msg_input(self, 'Đổi mật khẩu', 'Nhập mật khẩu mới:')
