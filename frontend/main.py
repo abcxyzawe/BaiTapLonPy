@@ -4183,13 +4183,14 @@ class TeacherWindow(QtWidgets.QWidget):
             gia_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             gia_item.setForeground(QColor(COLORS['gold']))
             tbl.setItem(r, 5, gia_item)
-            # action: xem chi tiết
+            # action: xem chi tiết - wrapper voi padding de button khong dinh mep cell
             btn = QtWidgets.QPushButton('Chi tiết')
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setFixedSize(64, 22)
+            btn.setMinimumHeight(24)
+            btn.setMaximumHeight(24)
             btn.setStyleSheet(
                 f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; '
-                f'border-radius: 3px; font-size: 10px; font-weight: bold; padding: 0; }} '
+                f'border-radius: 4px; font-size: 11px; font-weight: bold; padding: 4px 12px; }} '
                 f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
             )
             btn.clicked.connect(lambda ch, m=ma, n=tmon, s=siso, mx=smax, p=phong, l=lich, g=gia:
@@ -4199,17 +4200,17 @@ class TeacherWindow(QtWidgets.QWidget):
                     ('Sĩ số', f'{s}/{mx}'),
                     ('Học phí', f'{g:,}'.replace(',', '.') + ' đ'),
                 ], avatar_text=m, subtitle=n))
-            # Wrapper auto-fit cell + center button (vertical + horizontal)
+            # Wrapper voi padding 6px tat ca canh -> button khong sat mep + center
             w = QtWidgets.QWidget()
             hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setContentsMargins(8, 4, 8, 4)
             hl.setSpacing(0)
-            hl.setAlignment(Qt.AlignCenter)
-            hl.addWidget(btn, 0, Qt.AlignCenter)
+            hl.addWidget(btn)
             tbl.setCellWidget(r, 6, w)
-        tbl.horizontalHeader().setStretchLastSection(True)
-        for c, cw in enumerate([100, 180, 80, 160, 80, 120, 90]):
+        # Set 6 cot dau, cot Thao tac (last) auto-stretch fill phan con lai
+        for c, cw in enumerate([80, 175, 75, 150, 65, 115]):
             tbl.setColumnWidth(c, cw)
+        tbl.horizontalHeader().setStretchLastSection(True)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(my_classes)):
             tbl.setRowHeight(r, 36)
