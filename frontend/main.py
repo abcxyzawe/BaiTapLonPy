@@ -364,6 +364,28 @@ def widen_search(page, txt_name, new_width, shift_after=None):
                     w.setGeometry(gw.x() + diff, gw.y(), gw.width(), gw.height())
 
 
+def api_error_msg(e):
+    """Parse exception tu API call -> message tieng Viet ro rang.
+
+    Backend giờ tra ve 409 + JSON {detail: 'msg'} cho FK violation,
+    400 cho check violation, etc. Helper nay extract detail an toan.
+    """
+    try:
+        import requests
+        if isinstance(e, requests.HTTPError) and e.response is not None:
+            try:
+                body = e.response.json()
+                detail = body.get('detail') if isinstance(body, dict) else None
+                if detail:
+                    return str(detail)
+            except Exception:
+                pass
+            return f'HTTP {e.response.status_code}: {e.response.text[:200]}'
+    except Exception:
+        pass
+    return str(e) or 'Lỗi không xác định'
+
+
 def make_action_cell(buttons):
     """Tao 1 cell widget chua 2 nut thao tac (Sua/Xoa/Chi tiet/Duyet/...).
 
@@ -1818,13 +1840,20 @@ class MainWindow(QtWidgets.QWidget):
         if not new1.text() or new1.text() != new2.text():
             msg_warn(self, 'Lỗi', 'Mật khẩu mới không khớp')
             return
+        if len(new1.text()) < 4:
+            msg_warn(self, 'Lỗi', 'Mật khẩu mới phải tối thiểu 4 ký tự')
+            return
+        if not (DB_AVAILABLE and MOCK_USER.get('id')):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # Goi API truoc, chi update local khi success
+        try:
+            AuthService.change_password(MOCK_USER['id'], new1.text())
+        except Exception as e:
+            print(f'[AUTH] loi doi mk: {e}')
+            msg_warn(self, 'Không đổi được', api_error_msg(e))
+            return
         MOCK_USER['password'] = new1.text()
-        if DB_AVAILABLE and MOCK_USER.get('id'):
-            try:
-                AuthService.change_password(MOCK_USER['id'], new1.text())
-                print('[AUTH] da doi mk trong DB')
-            except Exception as e:
-                print(f'[AUTH] loi doi mk: {e}')
         msg_info(self, 'Thành công', 'Đổi mật khẩu thành công')
 
 
@@ -2265,12 +2294,28 @@ class AdminWindow(QtWidgets.QWidget):
         if not txt_code.text().strip() or not txt_name.text().strip():
             msg_warn(self, 'Thiếu', 'Mã môn và tên môn không được trống')
             return
+        if not DB_AVAILABLE:
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        new_code = txt_code.text().upper().strip()
+        new_name = txt_name.text().strip()
+        # Goi API TRUOC khi update UI
+        try:
+            CourseService.create_course(
+                ma_mon=new_code,
+                ten_mon=new_name,
+                mo_ta=f'TC: {txt_tc.text() or 3}, GV: {txt_gv.text() or ""}'
+            )
+        except Exception as e:
+            print(f'[ADM_ADD_COURSE] DB loi: {e}')
+            msg_warn(self, 'Không thêm được', api_error_msg(e))
+            return
+        # DB OK -> update UI
+        MOCK_COURSES.append((new_code, new_name))
         tbl = self.page_widgets[1].findChild(QtWidgets.QTableWidget, 'tblAdminCourses')
         if tbl:
             r = tbl.rowCount()
             tbl.insertRow(r)
-            new_code = txt_code.text().upper()
-            new_name = txt_name.text()
             vals = [new_code, new_name, txt_tc.text() or '3', txt_gv.text() or '—', '—']
             for c, v in enumerate(vals):
                 tbl.setItem(r, c, QtWidgets.QTableWidgetItem(v))
@@ -2279,24 +2324,11 @@ class AdminWindow(QtWidgets.QWidget):
             item_ss.setForeground(QColor(COLORS['green']))
             tbl.setItem(r, 5, item_ss)
             tbl.setRowHeight(r, 44)
-            # them nut sua/xoa cho row moi - pattern chuan
             cell, (btn_edit, btn_del) = make_action_cell([('Sửa', 'navy'), ('Xóa', 'red')])
             tbl.setCellWidget(r, 6, cell)
             btn_edit.clicked.connect(lambda ch, ma=new_code, nm=new_name: self._admin_edit_course(ma, nm))
             btn_del.clicked.connect(lambda ch, ma=new_code, nm=new_name: self._admin_del_row(tbl, ma, nm, 'môn học'))
-        # them vao MOCK_COURSES
-        MOCK_COURSES.append((txt_code.text().upper(), txt_name.text()))
-        # ghi DB neu co
-        if DB_AVAILABLE:
-            try:
-                CourseService.create_course(
-                    ma_mon=txt_code.text().upper(),
-                    ten_mon=txt_name.text(),
-                    mo_ta=f'TC: {txt_tc.text() or 3}, GV: {txt_gv.text() or ""}'
-                )
-            except Exception as e:
-                print(f'[ADM_ADD_COURSE] DB loi: {e}')
-        msg_info(self, 'Thành công', f'Đã thêm môn {txt_code.text()} - {txt_name.text()}')
+        msg_info(self, 'Thành công', f'Đã thêm môn {new_code} - {new_name}')
 
     def _admin_edit_course(self, ma, nm):
         tbl = self.page_widgets[1].findChild(QtWidgets.QTableWidget, 'tblAdminCourses')
@@ -2338,15 +2370,19 @@ class AdminWindow(QtWidgets.QWidget):
         new_code = txt_code.text().strip()
         new_name = txt_name.text().strip()
 
-        # Persist len server qua API CourseService.update_course()
-        if DB_AVAILABLE:
-            try:
-                CourseService.update_course(ma, ten_mon=new_name)
-                # Refresh cache - ten/ma_mon co the doi
-                _refresh_cache()
-            except Exception as e:
-                msg_warn(self, 'Lỗi lưu', f'Không lưu được vào hệ thống:\n{e}')
-                return
+        # Persist len server qua API. mo_ta luu them tin_chi/gv/lich vi schema courses
+        # khong co cot rieng - dung mo_ta nhu metadata
+        if not DB_AVAILABLE:
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        mo_ta = f'TC: {txt_tc.text() or 3}, GV: {txt_gv.text() or "—"}, Lịch: {txt_lich.text() or "—"}'
+        try:
+            CourseService.update_course(ma, ten_mon=new_name, mo_ta=mo_ta)
+            _refresh_cache()
+        except Exception as e:
+            print(f'[ADM_EDIT_COURSE] loi: {e}')
+            msg_warn(self, 'Không lưu được', api_error_msg(e))
+            return
 
         # Update UI sau khi save thanh cong
         for c, w in enumerate([txt_code, txt_name, txt_tc, txt_gv, txt_lich]):
@@ -2356,29 +2392,60 @@ class AdminWindow(QtWidgets.QWidget):
     def _admin_del_row(self, tbl, ma, nm, loai):
         if not msg_confirm(self, 'Xác nhận xóa', f'Xóa {loai} {ma} - {nm}?'):
             return
-        # ghi DB truoc khi xoa UI
-        if DB_AVAILABLE:
-            try:
-                if loai == 'môn học':
-                    CourseService.delete_course(ma)
-                elif loai == 'lớp':
-                    CourseService.delete_class(ma)
-                elif loai == 'học viên':
-                    # ma la MSV -> tim user_id qua API
-                    row = StudentService.get_by_msv(ma)
-                    if row: StudentService.delete(row.get('user_id') or row.get('id'))
-                elif loai == 'giảng viên':
-                    row = TeacherService.get_by_code(ma)
-                    if row: TeacherService.delete(row.get('user_id') or row.get('id'))
-                elif loai == 'nhân viên':
-                    row = EmployeeService.get_by_code(ma)
-                    if row: EmployeeService.delete(row.get('user_id') or row.get('id'))
-                elif loai == 'môn trong CT':
-                    # ma la ma_mon, xoa row dau tien trung
-                    if CurriculumService:
-                        CurriculumService.delete(int(ma) if ma.isdigit() else 0)
-            except Exception as e:
-                print(f'[ADM_DEL] DB loi: {e}')
+        if not DB_AVAILABLE:
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # Ghi DB - PHAI thanh cong moi xoa UI. Khong silent catch nua.
+        try:
+            if loai == 'môn học':
+                CourseService.delete_course(ma)
+            elif loai == 'lớp':
+                CourseService.delete_class(ma)
+            elif loai == 'học viên':
+                row = StudentService.get_by_msv(ma)
+                if not row:
+                    msg_warn(self, 'Không tìm thấy', f'Học viên {ma} không tồn tại trong hệ thống.')
+                    return
+                StudentService.delete(row.get('user_id') or row.get('id'))
+            elif loai == 'giảng viên':
+                row = TeacherService.get_by_code(ma)
+                if not row:
+                    msg_warn(self, 'Không tìm thấy', f'Giảng viên {ma} không tồn tại.')
+                    return
+                TeacherService.delete(row.get('user_id') or row.get('id'))
+            elif loai == 'nhân viên':
+                row = EmployeeService.get_by_code(ma)
+                if not row:
+                    msg_warn(self, 'Không tìm thấy', f'Nhân viên {ma} không tồn tại.')
+                    return
+                EmployeeService.delete(row.get('user_id') or row.get('id'))
+            elif loai == 'môn trong CT':
+                # ma o cot 0 trong tblCurriculum la STT (so), can lookup theo ma_mon (cot 1)
+                # tim row trong tbl, lay ma_mon roi resolve curriculum id
+                cur_row = None
+                for r in range(tbl.rowCount()):
+                    it0 = tbl.item(r, 0)
+                    if it0 and it0.text() == ma:
+                        it1 = tbl.item(r, 1)
+                        if it1: cur_row = (it1.text(), r)
+                        break
+                if cur_row and CurriculumService:
+                    ma_mon, _ = cur_row
+                    items = CurriculumService.get_all() or []
+                    target = next((c for c in items if c.get('ma_mon') == ma_mon), None)
+                    if not target:
+                        msg_warn(self, 'Không tìm thấy', f'Mục {ma_mon} không có trong khung CT.')
+                        return
+                    CurriculumService.delete(target['id'])
+                else:
+                    msg_warn(self, 'Lỗi', 'Không xác định được mục cần xóa.')
+                    return
+        except Exception as e:
+            print(f'[ADM_DEL] {loai} {ma} loi: {e}')
+            msg_warn(self, 'Không xóa được', api_error_msg(e))
+            return  # khong xoa UI neu DB fail
+
+        # DB delete OK - moi xoa UI
         for r in range(tbl.rowCount()):
             it = tbl.item(r, 0)
             if it and it.text() == ma:
@@ -2524,29 +2591,28 @@ class AdminWindow(QtWidgets.QWidget):
         if not widgets['msv'].text().strip() or not widgets['ten'].text().strip():
             msg_warn(self, 'Thiếu', 'MSV và họ tên không được trống')
             return
-        tbl = self.page_widgets[3].findChild(QtWidgets.QTableWidget, 'tblAdminStudents')
-        if tbl:
-            r = tbl.rowCount()
-            tbl.insertRow(r)
-            vals = [widgets['msv'].text(), widgets['ten'].text(), widgets['lop'].text() or '—',
-                    widgets['khoa'].text() or '—', widgets['sdt'].text() or '—', '0']
-            for c, v in enumerate(vals):
-                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(v))
-            tbl.setRowHeight(r, 44)
-        # ghi DB - tao user + student
-        if DB_AVAILABLE:
-            try:
-                StudentService.create(
-                    username=widgets['msv'].text().lower(),
-                    password='passuser',   # default password
-                    full_name=widgets['ten'].text(),
-                    msv=widgets['msv'].text(),
-                    sdt=widgets['sdt'].text() or None,
-                )
-            except Exception as e:
-                print(f'[ADM_ADD_HV] DB loi: {e}')
-                msg_warn(self, 'Lỗi', f'Đã hiển thị nhưng chưa lưu được vào hệ thống:\n{e}')
-        msg_info(self, 'Thành công', f'Đã thêm học viên {widgets["msv"].text()}')
+        if not DB_AVAILABLE:
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # Goi API truoc
+        msv_val = widgets['msv'].text().strip()
+        try:
+            StudentService.create(
+                username=msv_val.lower(),
+                password='passuser',   # default password
+                full_name=widgets['ten'].text().strip(),
+                msv=msv_val,
+                sdt=widgets['sdt'].text().strip() or None,
+            )
+        except Exception as e:
+            print(f'[ADM_ADD_HV] DB loi: {e}')
+            msg_warn(self, 'Không thêm được', api_error_msg(e))
+            return
+        # DB OK -> update UI (re-fill cho an toan vi co the BE return data day du hon)
+        self.pages_filled[3] = False
+        self._fill_admin_students()
+        self.pages_filled[3] = True
+        msg_info(self, 'Thành công', f'Đã thêm học viên {msv_val} (mật khẩu mặc định: passuser)')
 
     def _fill_admin_semester(self):
         page = self.page_widgets[6]
@@ -2649,33 +2715,41 @@ class AdminWindow(QtWidgets.QWidget):
         form.addRow(btns)
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
-        tbl = self.page_widgets[6].findChild(QtWidgets.QTableWidget, 'tblSemesters')
-        if tbl:
-            r = tbl.rowCount()
-            tbl.insertRow(r)
-            for c, v in enumerate([ma.text(), ten.text(), nam.text(), bd.text(), kt.text()]):
-                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(v))
-            st = QtWidgets.QTableWidgetItem('Đang mở')
-            st.setTextAlignment(Qt.AlignCenter)
-            st.setForeground(QColor(COLORS['green']))
-            tbl.setItem(r, 5, st)
-            tbl.setRowHeight(r, 44)
-        # ghi DB
-        if DB_AVAILABLE:
-            try:
-                from datetime import datetime
-                def parse_dd_mm_yyyy(s):
-                    return datetime.strptime(s.strip(), '%d/%m/%Y').date()
-                if not SemesterService: raise RuntimeError("SemesterService chua co")
-                SemesterService.create(
-                    sem_id=ma.text(), ten=ten.text(), nam_hoc=nam.text(),
-                    bat_dau=parse_dd_mm_yyyy(bd.text()),
-                    ket_thuc=parse_dd_mm_yyyy(kt.text()),
-                    trang_thai='open'
-                )
-            except Exception as e:
-                print(f'[ADM_ADD_SEM] DB loi: {e}')
-        msg_info(self, 'Thành công', f'Đã thêm học kỳ {ma.text()}')
+        # Validate input
+        if not ma.text().strip() or not ten.text().strip():
+            msg_warn(self, 'Thiếu', 'Mã HK và tên không được trống')
+            return
+        if not (DB_AVAILABLE and SemesterService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # Parse + validate date
+        from datetime import datetime
+        def parse_dd_mm_yyyy(s):
+            return datetime.strptime(s.strip(), '%d/%m/%Y').date()
+        try:
+            bd_date = parse_dd_mm_yyyy(bd.text())
+            kt_date = parse_dd_mm_yyyy(kt.text())
+        except ValueError:
+            msg_warn(self, 'Sai dữ liệu', 'Ngày phải đúng định dạng dd/mm/yyyy')
+            return
+        if kt_date <= bd_date:
+            msg_warn(self, 'Sai dữ liệu', 'Ngày kết thúc phải sau ngày bắt đầu')
+            return
+        # Goi API truoc
+        try:
+            SemesterService.create(
+                sem_id=ma.text().strip(), ten=ten.text().strip(), nam_hoc=nam.text().strip(),
+                bat_dau=bd_date, ket_thuc=kt_date, trang_thai='open'
+            )
+        except Exception as e:
+            print(f'[ADM_ADD_SEM] DB loi: {e}')
+            msg_warn(self, 'Không thêm được', api_error_msg(e))
+            return
+        # DB OK -> re-fill bang
+        self.pages_filled[6] = False
+        self._fill_admin_semester()
+        self.pages_filled[6] = True
+        msg_info(self, 'Thành công', f'Đã thêm học kỳ {ma.text().strip()}')
 
     def _fill_admin_curriculum(self):
         page = self.page_widgets[7]
@@ -2871,32 +2945,34 @@ class AdminWindow(QtWidgets.QWidget):
                     txt_prereq.text().strip() or '—']
 
         # Persist via API CurriculumService.update()
-        if DB_AVAILABLE:
-            # cur_id la STT (cot 0) - thuc te can lay tu metadata. Tam thoi loc theo ma_mon
-            try:
-                # find cur_id by ma_mon
-                from_curr = CurriculumService.get_all() or []
-                old_ma = cur[1]
-                cur_id = None
-                for cc in from_curr:
-                    if cc.get('ma_mon') == old_ma:
-                        cur_id = cc.get('id')
-                        break
-                if cur_id:
-                    type_to_db = {'Bắt buộc': 'Bat buoc', 'Tự chọn': 'Tu chon', 'Đại cương': 'Dai cuong'}
-                    CurriculumService.update(cur_id,
-                        ma_mon=new_vals[1],
-                        tin_chi=int(new_vals[3]),
-                        loai=type_to_db.get(new_vals[4], new_vals[4]),
-                        hoc_ky_de_nghi=new_vals[5],
-                        mon_tien_quyet=new_vals[6] if new_vals[6] != '—' else None)
-                else:
-                    msg_warn(self, 'Lỗi', 'Không tìm thấy môn trong khung CT để cập nhật')
-                    return
-            except Exception as e:
-                msg_warn(self, 'Lỗi lưu', f'Không lưu được vào hệ thống:\n{e}')
+        if not (DB_AVAILABLE and CurriculumService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        try:
+            # find cur_id by ma_mon (CHUNG voi ma_mon goc cur[1] truoc khi user sua)
+            from_curr = CurriculumService.get_all() or []
+            old_ma = cur[1]
+            cur_id = None
+            for cc in from_curr:
+                if cc.get('ma_mon') == old_ma:
+                    cur_id = cc.get('id')
+                    break
+            if not cur_id:
+                msg_warn(self, 'Không tìm thấy', f'Không tìm thấy môn {old_ma} trong khung CT.')
                 return
+            type_to_db = {'Bắt buộc': 'Bat buoc', 'Tự chọn': 'Tu chon', 'Đại cương': 'Dai cuong'}
+            CurriculumService.update(cur_id,
+                ma_mon=new_vals[1],
+                tin_chi=int(new_vals[3]),
+                loai=type_to_db.get(new_vals[4], new_vals[4]),
+                hoc_ky_de_nghi=new_vals[5],
+                mon_tien_quyet=new_vals[6] if new_vals[6] != '—' else None)
+        except Exception as e:
+            print(f'[ADM_EDIT_CURR] loi: {e}')
+            msg_warn(self, 'Không lưu được', api_error_msg(e))
+            return
 
+        # DB OK -> update UI
         for c, v in enumerate(new_vals):
             it = QtWidgets.QTableWidgetItem(v)
             it.setTextAlignment(Qt.AlignCenter if c in (0, 3, 4, 5) else Qt.AlignLeft | Qt.AlignVCenter)
@@ -2936,34 +3012,37 @@ class AdminWindow(QtWidgets.QWidget):
         if not txt_code.text().strip() or not txt_name.text().strip():
             msg_warn(self, 'Thiếu', 'Mã và tên môn không được trống')
             return
-        type_colors = {'Bắt buộc': COLORS['navy'], 'Tự chọn': COLORS['green'], 'Đại cương': COLORS['gold']}
-        r = tbl.rowCount()
-        tbl.insertRow(r)
-        vals = [str(r + 1), txt_code.text().upper(), txt_name.text(), txt_tc.text(),
-                cbo_loai.currentText(), cbo_hk.currentText(), txt_prereq.text().strip() or '—']
-        for c, v in enumerate(vals):
-            it = QtWidgets.QTableWidgetItem(v)
-            it.setTextAlignment(Qt.AlignCenter if c in (0, 3, 4, 5) else Qt.AlignLeft | Qt.AlignVCenter)
-            if c == 4:
-                it.setForeground(QColor(type_colors.get(v, COLORS['text_mid'])))
-            tbl.setItem(r, c, it)
-        tbl.setRowHeight(r, 44)
-        # ghi DB
-        if DB_AVAILABLE:
-            try:
-                loai_map = {'Bắt buộc': 'Bat buoc', 'Tự chọn': 'Tu chon', 'Đại cương': 'Dai cuong'}
-                if not CurriculumService: raise RuntimeError("CurriculumService chua co")
-                CurriculumService.create(
-                    ma_mon=txt_code.text().upper(),
-                    tin_chi=int(txt_tc.text()),
-                    loai=loai_map.get(cbo_loai.currentText(), 'Bat buoc'),
-                    hoc_ky_de_nghi=cbo_hk.currentText(),
-                    mon_tien_quyet=txt_prereq.text().strip() or None,
-                    nganh='CNTT',
-                )
-            except Exception as e:
-                print(f'[ADM_ADD_CURR] DB loi: {e}')
-        msg_info(self, 'Thành công', f'Đã thêm môn {txt_code.text()}')
+        # Validate tin_chi
+        try:
+            tin_chi_n = int(txt_tc.text().strip())
+            if tin_chi_n < 1 or tin_chi_n > 10:
+                raise ValueError()
+        except ValueError:
+            msg_warn(self, 'Sai dữ liệu', 'Tín chỉ phải là số từ 1-10')
+            return
+        if not (DB_AVAILABLE and CurriculumService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # Goi API truoc
+        loai_map = {'Bắt buộc': 'Bat buoc', 'Tự chọn': 'Tu chon', 'Đại cương': 'Dai cuong'}
+        try:
+            CurriculumService.create(
+                ma_mon=txt_code.text().upper().strip(),
+                tin_chi=tin_chi_n,
+                loai=loai_map.get(cbo_loai.currentText(), 'Bat buoc'),
+                hoc_ky_de_nghi=cbo_hk.currentText(),
+                mon_tien_quyet=txt_prereq.text().strip() or None,
+                nganh='CNTT',
+            )
+        except Exception as e:
+            print(f'[ADM_ADD_CURR] DB loi: {e}')
+            msg_warn(self, 'Không thêm được', api_error_msg(e))
+            return
+        # DB OK -> re-fill
+        self.pages_filled[7] = False
+        self._fill_admin_curriculum()
+        self.pages_filled[7] = True
+        msg_info(self, 'Thành công', f'Đã thêm môn {txt_code.text().upper()}')
 
     def _admin_filter_curriculum(self):
         page = self.page_widgets[7]
@@ -3426,17 +3505,39 @@ class AdminWindow(QtWidgets.QWidget):
         if siso_n > smax_n:
             msg_warn(self, 'Sai dữ liệu', 'Sĩ số hiện tại không được lớn hơn sĩ số max')
             return
-        MOCK_CLASSES[idx] = (ma_lop, mmon, txt_mon.text(), txt_gv.text(),
+        if not DB_AVAILABLE:
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+
+        # Tim gv_id moi neu user doi GV
+        gv_id_new = None
+        gv_name_new = txt_gv.text().strip()
+        try:
+            teachers = TeacherService.get_all() or []
+            for t in teachers:
+                if (t.get('full_name') or '').strip() == gv_name_new:
+                    gv_id_new = t.get('id') or t.get('user_id')
+                    break
+        except Exception as e:
+            print(f'[ADM_EDIT_CLS] tim GV loi: {e}')
+
+        # Goi API truoc, chi update UI khi success
+        try:
+            update_kwargs = dict(
+                lich=txt_lich.text(), phong=txt_phong.text(),
+                siso_max=smax_n, siso_hien_tai=siso_n, gia=gia_n,
+            )
+            if gv_id_new is not None:
+                update_kwargs['gv_id'] = gv_id_new
+            CourseService.update_class(ma_lop, **update_kwargs)
+        except Exception as e:
+            print(f'[ADM_EDIT_CLS] DB loi: {e}')
+            msg_warn(self, 'Không lưu được', api_error_msg(e))
+            return
+
+        # DB OK -> update local cache + re-fill bang
+        MOCK_CLASSES[idx] = (ma_lop, mmon, txt_mon.text(), gv_name_new,
                              txt_lich.text(), txt_phong.text(), smax_n, siso_n, gia_n)
-        # ghi DB
-        if DB_AVAILABLE:
-            try:
-                CourseService.update_class(ma_lop,
-                    lich=txt_lich.text(), phong=txt_phong.text(),
-                    siso_max=smax_n, siso_hien_tai=siso_n, gia=gia_n)
-            except Exception as e:
-                print(f'[ADM_EDIT_CLS] DB loi: {e}')
-        # re-fill bang admin_classes
         self.pages_filled[2] = False
         self._fill_admin_classes()
         self.pages_filled[2] = True
@@ -3500,35 +3601,53 @@ class AdminWindow(QtWidgets.QWidget):
 
         mon_code, mon_name = cbo_mon.currentData()
         gv_name = cbo_gv.currentText()
-        ma_lop = ma.text().upper()
+        ma_lop = ma.text().upper().strip()
+
+        if not DB_AVAILABLE:
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+
+        # Tim gv_id qua API
+        gv_id = None
+        try:
+            teachers = TeacherService.get_all() or []
+            for t in teachers:
+                if (t.get('full_name') or '').strip() == gv_name.strip():
+                    gv_id = t.get('id') or t.get('user_id')
+                    break
+        except Exception as e:
+            print(f'[ADM_ADD_CLS] tim GV loi: {e}')
+            msg_warn(self, 'Lỗi', f'Không lấy được danh sách GV:\n{api_error_msg(e)}')
+            return
+        if not gv_id:
+            msg_warn(self, 'Lỗi', f'Không tìm thấy giảng viên "{gv_name}" trong hệ thống.')
+            return
+
+        # Semester hien tai
+        sem_id = 'HK2-2526'
+        try:
+            sem = SemesterService.get_current() if SemesterService else None
+            if sem: sem_id = sem.get('id', sem_id)
+        except Exception as e:
+            print(f'[ADM_ADD_CLS] get_current sem loi: {e}')
+
+        # Goi API tao lop
+        try:
+            CourseService.create_class(
+                ma_lop=ma_lop, ma_mon=mon_code, gv_id=gv_id,
+                lich=lich.text(), phong=phong.text(),
+                siso_max=smax.value(), gia=gia.value(),
+                semester_id=sem_id, siso_hien_tai=siso_start.value()
+            )
+        except Exception as e:
+            print(f'[ADM_ADD_CLS] DB loi: {e}')
+            msg_warn(self, 'Không thêm được', api_error_msg(e))
+            return
+
+        # DB OK -> append cache + refresh UI
         MOCK_CLASSES.append((ma_lop, mon_code, mon_name, gv_name,
                              lich.text(), phong.text(),
                              smax.value(), siso_start.value(), gia.value()))
-        # ghi DB
-        if DB_AVAILABLE:
-            try:
-                # tim gv_id tu ten qua API (filter trong list teachers)
-                gv_id = None
-                try:
-                    teachers = TeacherService.get_all() or []
-                    for t in teachers:
-                        if (t.get('full_name') or '').strip() == gv_name.strip():
-                            gv_id = t.get('id') or t.get('user_id')
-                            break
-                except Exception as e:
-                    print(f'[ADM_ADD_CLS] tim GV loi: {e}')
-                # semester hien tai
-                sem = SemesterService.get_current() if SemesterService else None
-                sem_id = sem['id'] if sem else 'HK2-2526'
-                CourseService.create_class(
-                    ma_lop=ma_lop, ma_mon=mon_code, gv_id=gv_id,
-                    lich=lich.text(), phong=phong.text(),
-                    siso_max=smax.value(), gia=gia.value(),
-                    semester_id=sem_id, siso_hien_tai=siso_start.value()
-                )
-            except Exception as e:
-                print(f'[ADM_ADD_CLS] DB loi: {e}')
-        # re-fill
         self.pages_filled[2] = False
         self._fill_admin_classes()
         self.pages_filled[2] = True
@@ -3676,35 +3795,42 @@ class AdminWindow(QtWidgets.QWidget):
         if not widgets[0].text().strip() or not widgets[1].text().strip():
             msg_warn(self, 'Thiếu', f'{fields[0]} và {fields[1]} không được trống')
             return
-        tbl = self.page_widgets[page_idx].findChild(QtWidgets.QTableWidget, tbl_name)
-        if tbl:
-            r = tbl.rowCount()
-            tbl.insertRow(r)
-            for c, w in enumerate(widgets):
-                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(w.text()))
-            tbl.setRowHeight(r, 44)
-        # ghi DB - tao user + teacher/employee
-        if DB_AVAILABLE:
-            try:
-                vals = [w.text() for w in widgets]
-                if role_name == 'giảng viên':
-                    # fields = ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']
-                    TeacherService.create(
-                        username=vals[0].lower(), password='passtea',
-                        full_name=vals[1], ma_gv=vals[0],
-                        khoa=vals[2], hoc_vi=vals[3], sdt=vals[4] or None,
-                    )
-                elif role_name == 'nhân viên':
-                    # fields = ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']
-                    EmployeeService.create(
-                        username=vals[0].lower(), password='passemp',
-                        full_name=vals[1], ma_nv=vals[0],
-                        chuc_vu=vals[2], sdt=vals[3] or None, email=vals[4] or None,
-                    )
-            except Exception as e:
-                print(f'[ADM_ADD_USER] DB loi: {e}')
-                msg_warn(self, 'Lỗi', f'Đã hiển thị nhưng chưa lưu được vào hệ thống:\n{e}')
-        msg_info(self, 'Thành công', f'Đã thêm {role_name}: {widgets[1].text()}')
+        if not DB_AVAILABLE:
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # Goi API truoc khi update UI
+        vals = [w.text().strip() for w in widgets]
+        try:
+            if role_name == 'giảng viên':
+                # fields = ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']
+                TeacherService.create(
+                    username=vals[0].lower(), password='passtea',
+                    full_name=vals[1], ma_gv=vals[0],
+                    khoa=vals[2] or None, hoc_vi=vals[3] or None, sdt=vals[4] or None,
+                )
+            elif role_name == 'nhân viên':
+                # fields = ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']
+                EmployeeService.create(
+                    username=vals[0].lower(), password='passemp',
+                    full_name=vals[1], ma_nv=vals[0],
+                    chuc_vu=vals[2] or None, sdt=vals[3] or None, email=vals[4] or None,
+                )
+            else:
+                msg_warn(self, 'Lỗi', f'Role không hợp lệ: {role_name}')
+                return
+        except Exception as e:
+            print(f'[ADM_ADD_USER] DB loi: {e}')
+            msg_warn(self, 'Không thêm được', api_error_msg(e))
+            return
+        # DB OK -> re-fill bang
+        self.pages_filled[page_idx] = False
+        if role_name == 'giảng viên':
+            self._fill_admin_teachers()
+        elif role_name == 'nhân viên':
+            self._fill_admin_employees()
+        self.pages_filled[page_idx] = True
+        default_pwd = 'passtea' if role_name == 'giảng viên' else 'passemp'
+        msg_info(self, 'Thành công', f'Đã thêm {role_name}: {vals[1]} (mật khẩu mặc định: {default_pwd})')
 
     def _fill_admin_employees(self):
         page = self.page_widgets[5]
@@ -4928,16 +5054,19 @@ class TeacherWindow(QtWidgets.QWidget):
         target = cbo.currentText()
         title = subj.text().strip()
         body = content.toPlainText().strip()
-        # ghi DB neu co
-        if DB_AVAILABLE:
-            gv_user_id = MOCK_TEACHER.get('user_id')
-            if gv_user_id:
-                try:
-                    den_lop = target if cbo.currentIndex() > 0 else None
-                    NotificationService.send(gv_user_id, title, body, den_lop=den_lop, loai='info')
-                except Exception as e:
-                    print(f'[NOTICE] loi: {e}')
-        # them card vao dau danh sach
+        gv_user_id = MOCK_TEACHER.get('user_id')
+        if not (DB_AVAILABLE and gv_user_id):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # Goi API truoc
+        den_lop = target if cbo.currentIndex() > 0 else None
+        try:
+            NotificationService.send(gv_user_id, title, body, den_lop=den_lop, loai='info')
+        except Exception as e:
+            print(f'[NOTICE] loi: {e}')
+            msg_warn(self, 'Không gửi được', api_error_msg(e))
+            return
+        # API OK -> them card vao dau danh sach
         if hasattr(self, '_tea_notice_layout') and self._tea_notice_layout:
             card = self._make_notice_card(target, title, 'Vừa xong')
             self._tea_notice_layout.insertWidget(0, card)
@@ -5358,33 +5487,57 @@ class TeacherWindow(QtWidgets.QWidget):
     def _save_tea_grades(self):
         if not msg_confirm(self, 'Lưu điểm', 'Xác nhận lưu điểm cho tất cả học viên trong bảng?'):
             return
-        # Neu co DB va biet lop, ghi that
+        if not DB_AVAILABLE:
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        page = self.page_widgets[6]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherGrades')
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboGradeClass')
+        gv_user_id = MOCK_TEACHER.get('user_id')
+        lop_id = cbo.currentText() if cbo and cbo.currentIndex() > 0 else None
+        if not (tbl and lop_id and gv_user_id):
+            msg_warn(self, 'Thiếu', 'Hãy chọn lớp cụ thể trước khi lưu điểm.')
+            return
+
         saved = 0
-        if DB_AVAILABLE:
-            page = self.page_widgets[6]
-            tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeacherGrades')
-            cbo = page.findChild(QtWidgets.QComboBox, 'cboGradeClass')
-            gv_user_id = MOCK_TEACHER.get('user_id')
-            lop_id = cbo.currentText() if cbo and cbo.currentIndex() > 0 else None
-            if tbl and lop_id and gv_user_id:
-                # cot moi: STT|MaHV|HoTen|CC(3)|QT(4)|Thi(5)|TK|XL|Action
-                for r in range(tbl.rowCount()):
-                    try:
-                        msv = tbl.item(r, 1).text()
-                        qt = float(tbl.item(r, 4).text().replace(',', '.'))
-                        thi = float(tbl.item(r, 5).text().replace(',', '.'))
-                        hv = StudentService.get_by_msv(msv)
-                        if hv:
-                            uid = hv.get('user_id') or hv.get('id')
-                            GradeService.save_grade(uid, lop_id, qt, thi, gv_user_id)
-                            saved += 1
-                    except Exception as e:
-                        print(f'[GRADE] loi dong {r}: {e}')
-        if saved:
-            msg_info(self, 'Thành công', f'Đã lưu điểm cho {saved} học viên.')
+        skipped = []  # list (msv, ly_do)
+        for r in range(tbl.rowCount()):
+            msv = ''
+            try:
+                msv = (tbl.item(r, 1).text() or '').strip() if tbl.item(r, 1) else ''
+                if not msv:
+                    continue
+                qt_text = (tbl.item(r, 4).text() if tbl.item(r, 4) else '0').replace(',', '.')
+                thi_text = (tbl.item(r, 5).text() if tbl.item(r, 5) else '0').replace(',', '.')
+                qt = float(qt_text)
+                thi = float(thi_text)
+                if not (0 <= qt <= 10 and 0 <= thi <= 10):
+                    skipped.append((msv, 'điểm ngoài [0-10]'))
+                    continue
+                hv = StudentService.get_by_msv(msv)
+                if not hv:
+                    skipped.append((msv, 'không có trong DB'))
+                    continue
+                uid = hv.get('user_id') or hv.get('id')
+                GradeService.save_grade(uid, lop_id, qt, thi, gv_user_id)
+                saved += 1
+            except Exception as e:
+                print(f'[GRADE] {msv} loi: {e}')
+                skipped.append((msv, api_error_msg(e)[:60]))
+
+        # Bao cao chi tiet
+        n_total = tbl.rowCount()
+        if saved == n_total:
+            msg_info(self, 'Thành công', f'Đã lưu điểm cho tất cả {saved} học viên.')
+        elif saved > 0:
+            tail = '\n• '.join([f'{m}: {ly}' for m, ly in skipped[:5]])
+            extra = f'\n\nKhông lưu được {len(skipped)} HV:\n• {tail}'
+            if len(skipped) > 5:
+                extra += f'\n  (+ {len(skipped) - 5} dòng khác)'
+            msg_warn(self, 'Lưu một phần', f'Đã lưu {saved}/{n_total} HV.{extra}')
         else:
-            msg_warn(self, 'Không lưu được',
-                     'Không kết nối được hệ thống. Vui lòng kiểm tra mạng và thử lại.')
+            tail = '\n• '.join([f'{m}: {ly}' for m, ly in skipped[:5]])
+            msg_warn(self, 'Không lưu được', f'Tất cả {n_total} HV đều fail:\n• {tail}')
 
     def _fill_tea_profile(self):
         page = self.page_widgets[7]
