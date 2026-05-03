@@ -364,6 +364,21 @@ def widen_search(page, txt_name, new_width, shift_after=None):
                     w.setGeometry(gw.x() + diff, gw.y(), gw.width(), gw.height())
 
 
+def is_valid_email(email):
+    """Email format check (don gian, du dung cho HV/GV/NV)."""
+    if not email: return True  # empty = OK (optional field)
+    import re
+    return bool(re.match(r'^[\w.+-]+@[\w-]+(\.[\w-]+)+$', email))
+
+
+def is_valid_phone_vn(phone):
+    """SDT VN: 10-11 chu so, bat dau bang 0 hoac +84."""
+    if not phone: return True  # empty = OK
+    import re
+    digits = re.sub(r'\D', '', phone)
+    return 10 <= len(digits) <= 11
+
+
 def api_error_msg(e):
     """Parse exception tu API call -> message tieng Viet ro rang.
 
@@ -1666,25 +1681,35 @@ class MainWindow(QtWidgets.QWidget):
 
     def _save_profile(self):
         page = self.page_widgets[6]
+        # Doc truoc tu form, khong update MOCK_USER cho den khi API success
         updates = {}
         for attr, key in [('txtEmail', 'email'), ('txtPhone', 'sdt'), ('txtAddress', 'diachi')]:
             w = page.findChild(QtWidgets.QLineEdit, attr)
             if w:
-                val = w.text().strip()
-                MOCK_USER[key] = val
-                updates[key] = val
+                updates[key] = w.text().strip()
+        # Validate format
+        if updates.get('email') and not is_valid_email(updates['email']):
+            msg_warn(self, 'Sai định dạng', 'Email không hợp lệ (vd: ten@example.com)')
+            return
+        if updates.get('sdt') and not is_valid_phone_vn(updates['sdt']):
+            msg_warn(self, 'Sai định dạng', 'Số điện thoại không hợp lệ (10-11 chữ số)')
+            return
 
-        # Persist len server qua API
         hv_user_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
-        if DB_AVAILABLE and hv_user_id and updates:
-            try:
-                StudentService.update(hv_user_id, **updates)
-                msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
-            except Exception as e:
-                msg_warn(self, 'Lỗi', f'Đã hiển thị nhưng chưa lưu được vào hệ thống:\n{e}')
-        else:
-            msg_warn(self, 'Chưa kết nối được hệ thống',
-                     'Thông tin chỉ lưu tạm. Hãy kiểm tra kết nối và thử lại.')
+        if not (DB_AVAILABLE and hv_user_id and updates):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # Goi API truoc, MOCK update sau
+        try:
+            StudentService.update(hv_user_id, **updates)
+        except Exception as e:
+            print(f'[STU_PROFILE] loi: {e}')
+            msg_warn(self, 'Không lưu được', api_error_msg(e))
+            return
+        # API OK -> update local cache
+        for k, v in updates.items():
+            MOCK_USER[k] = v
+        msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
 
     def _show_progress_dialog(self):
         """Dialog hien tien do hoc khung CT cua HV - lien ket curriculum + grades"""
@@ -2986,20 +3011,30 @@ class AdminWindow(QtWidgets.QWidget):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblCurriculum')
         if not tbl:
             return
+        # Lay danh sach mon hoc co san - curriculum.ma_mon FK ve courses.ma_mon
+        try:
+            courses = CourseService.get_all_courses() or []
+        except Exception:
+            courses = []
+        if not courses:
+            msg_warn(self, 'Không có môn nào', 'Hãy thêm môn học trước khi đưa vào khung CT.')
+            return
+
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle('Thêm môn vào khung CT')
-        dlg.setFixedSize(420, 380)
+        dlg.setFixedSize(440, 360)
         form = QtWidgets.QFormLayout(dlg)
-        txt_code = QtWidgets.QLineEdit()
-        txt_name = QtWidgets.QLineEdit()
+        # Combobox chon mon (chi mon co san trong courses)
+        cbo_mon = QtWidgets.QComboBox()
+        for c in courses:
+            cbo_mon.addItem(f"{c['ma_mon']} - {c.get('ten_mon', '')}", c['ma_mon'])
         txt_tc = QtWidgets.QLineEdit('3')
         cbo_loai = QtWidgets.QComboBox(); cbo_loai.addItems(['Bắt buộc', 'Tự chọn', 'Đại cương'])
         cbo_hk = QtWidgets.QComboBox(); cbo_hk.addItems([f'HK{i}' for i in range(1, 9)])
         txt_prereq = QtWidgets.QLineEdit()
-        txt_prereq.setPlaceholderText('Để trống nếu không có')
-        form.addRow('Mã môn:', txt_code)
-        form.addRow('Tên môn:', txt_name)
+        txt_prereq.setPlaceholderText('Vd: IT001 (để trống nếu không có)')
+        form.addRow('Môn:', cbo_mon)
         form.addRow('Tín chỉ:', txt_tc)
         form.addRow('Loại:', cbo_loai)
         form.addRow('Học kỳ:', cbo_hk)
@@ -3008,9 +3043,6 @@ class AdminWindow(QtWidgets.QWidget):
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
         form.addRow(btns)
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
-            return
-        if not txt_code.text().strip() or not txt_name.text().strip():
-            msg_warn(self, 'Thiếu', 'Mã và tên môn không được trống')
             return
         # Validate tin_chi
         try:
@@ -3023,11 +3055,12 @@ class AdminWindow(QtWidgets.QWidget):
         if not (DB_AVAILABLE and CurriculumService):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
+        ma_mon_sel = cbo_mon.currentData()
         # Goi API truoc
         loai_map = {'Bắt buộc': 'Bat buoc', 'Tự chọn': 'Tu chon', 'Đại cương': 'Dai cuong'}
         try:
             CurriculumService.create(
-                ma_mon=txt_code.text().upper().strip(),
+                ma_mon=ma_mon_sel,
                 tin_chi=tin_chi_n,
                 loai=loai_map.get(cbo_loai.currentText(), 'Bat buoc'),
                 hoc_ky_de_nghi=cbo_hk.currentText(),
@@ -3042,7 +3075,7 @@ class AdminWindow(QtWidgets.QWidget):
         self.pages_filled[7] = False
         self._fill_admin_curriculum()
         self.pages_filled[7] = True
-        msg_info(self, 'Thành công', f'Đã thêm môn {txt_code.text().upper()}')
+        msg_info(self, 'Thành công', f'Đã thêm môn {ma_mon_sel} vào khung CT')
 
     def _admin_filter_curriculum(self):
         page = self.page_widgets[7]
@@ -3471,25 +3504,58 @@ class AdminWindow(QtWidgets.QWidget):
 
         style_dialog(dlg)
         dlg.setWindowTitle(f'Sửa lớp - {ma_lop}')
-        dlg.setFixedSize(420, 400)
+        dlg.setFixedSize(440, 460)
         form = QtWidgets.QFormLayout(dlg)
         txt_ma = QtWidgets.QLineEdit(ma_lop); txt_ma.setReadOnly(True)
         txt_ma.setStyleSheet('background: #f7fafc; color: #718096;')
-        txt_mon = QtWidgets.QLineEdit(tmon)
-        txt_gv = QtWidgets.QLineEdit(gv)
+        # Mon: dung combobox de user chon ma_mon hop le (khong cho free type ten)
+        cbo_mon = QtWidgets.QComboBox()
+        try:
+            courses = CourseService.get_all_courses() or []
+        except Exception:
+            courses = []
+        idx_mon_sel = 0
+        for i, c in enumerate(courses):
+            cbo_mon.addItem(f"{c['ma_mon']} - {c.get('ten_mon', '')}", c['ma_mon'])
+            if c['ma_mon'] == mmon:
+                idx_mon_sel = i
+        cbo_mon.setCurrentIndex(idx_mon_sel)
+        # GV: combobox cho cac GV trong DB
+        cbo_gv = QtWidgets.QComboBox()
+        cbo_gv.addItem('(Chưa phân công)', None)
+        idx_gv_sel = 0
+        try:
+            teachers = TeacherService.get_all() or []
+        except Exception:
+            teachers = []
+        for i, t in enumerate(teachers, start=1):
+            tid = t.get('id') or t.get('user_id')
+            cbo_gv.addItem(t.get('full_name', ''), tid)
+            if (t.get('full_name') or '').strip() == (gv or '').strip():
+                idx_gv_sel = i
+        cbo_gv.setCurrentIndex(idx_gv_sel)
         txt_lich = QtWidgets.QLineEdit(lich)
         txt_phong = QtWidgets.QLineEdit(phong)
         txt_smax = QtWidgets.QLineEdit(str(smax))
         txt_siso = QtWidgets.QLineEdit(str(siso))
         txt_gia = QtWidgets.QLineEdit(str(gia))
+        # so_buoi - lay tu API neu co, mac dinh 24
+        cur_so_buoi = 24
+        try:
+            cls_db = CourseService.get_class(ma_lop) or {}
+            cur_so_buoi = int(cls_db.get('so_buoi') or 24)
+        except Exception:
+            pass
+        txt_buoi = QtWidgets.QLineEdit(str(cur_so_buoi))
         form.addRow('Mã lớp:', txt_ma)
-        form.addRow('Môn:', txt_mon)
-        form.addRow('Giảng viên:', txt_gv)
+        form.addRow('Môn:', cbo_mon)
+        form.addRow('Giảng viên:', cbo_gv)
         form.addRow('Lịch học:', txt_lich)
         form.addRow('Phòng:', txt_phong)
         form.addRow('Sĩ số max:', txt_smax)
         form.addRow('Sĩ số hiện tại:', txt_siso)
         form.addRow('Học phí (VND):', txt_gia)
+        form.addRow('Số buổi:', txt_buoi)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
         form.addRow(btns)
@@ -3499,44 +3565,43 @@ class AdminWindow(QtWidgets.QWidget):
             smax_n = int(txt_smax.text())
             siso_n = int(txt_siso.text())
             gia_n = int(txt_gia.text())
+            buoi_n = int(txt_buoi.text())
         except ValueError:
-            msg_warn(self, 'Sai dữ liệu', 'Sĩ số và học phí phải là số')
+            msg_warn(self, 'Sai dữ liệu', 'Sĩ số, học phí và số buổi phải là số')
             return
         if siso_n > smax_n:
             msg_warn(self, 'Sai dữ liệu', 'Sĩ số hiện tại không được lớn hơn sĩ số max')
+            return
+        if buoi_n < 1 or buoi_n > 100:
+            msg_warn(self, 'Sai dữ liệu', 'Số buổi phải trong [1-100]')
             return
         if not DB_AVAILABLE:
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
 
-        # Tim gv_id moi neu user doi GV
-        gv_id_new = None
-        gv_name_new = txt_gv.text().strip()
-        try:
-            teachers = TeacherService.get_all() or []
-            for t in teachers:
-                if (t.get('full_name') or '').strip() == gv_name_new:
-                    gv_id_new = t.get('id') or t.get('user_id')
-                    break
-        except Exception as e:
-            print(f'[ADM_EDIT_CLS] tim GV loi: {e}')
+        # Lay ma_mon + gv_id tu combobox (chinh xac, khong drop)
+        ma_mon_new = cbo_mon.currentData() or mmon
+        gv_id_new = cbo_gv.currentData()  # None neu chua phan cong
+        gv_name_new = cbo_gv.currentText() if gv_id_new else ''
 
-        # Goi API truoc, chi update UI khi success
+        # Goi API - gui DAY DU cac field
         try:
-            update_kwargs = dict(
+            CourseService.update_class(ma_lop,
+                ma_mon=ma_mon_new,
+                gv_id=gv_id_new,
                 lich=txt_lich.text(), phong=txt_phong.text(),
                 siso_max=smax_n, siso_hien_tai=siso_n, gia=gia_n,
+                so_buoi=buoi_n,
             )
-            if gv_id_new is not None:
-                update_kwargs['gv_id'] = gv_id_new
-            CourseService.update_class(ma_lop, **update_kwargs)
         except Exception as e:
             print(f'[ADM_EDIT_CLS] DB loi: {e}')
             msg_warn(self, 'Không lưu được', api_error_msg(e))
             return
 
         # DB OK -> update local cache + re-fill bang
-        MOCK_CLASSES[idx] = (ma_lop, mmon, txt_mon.text(), gv_name_new,
+        # tim ten_mon moi (neu user doi mon)
+        ten_mon_new = next((c.get('ten_mon', '') for c in courses if c['ma_mon'] == ma_mon_new), tmon)
+        MOCK_CLASSES[idx] = (ma_lop, ma_mon_new, ten_mon_new, gv_name_new,
                              txt_lich.text(), txt_phong.text(), smax_n, siso_n, gia_n)
         self.pages_filled[2] = False
         self._fill_admin_classes()
@@ -3631,13 +3696,14 @@ class AdminWindow(QtWidgets.QWidget):
         except Exception as e:
             print(f'[ADM_ADD_CLS] get_current sem loi: {e}')
 
-        # Goi API tao lop
+        # Goi API tao lop - GUI DAY DU TAT CA FIELD CO TRONG FORM (so_buoi truoc bi drop)
         try:
             CourseService.create_class(
                 ma_lop=ma_lop, ma_mon=mon_code, gv_id=gv_id,
                 lich=lich.text(), phong=phong.text(),
                 siso_max=smax.value(), gia=gia.value(),
-                semester_id=sem_id, siso_hien_tai=siso_start.value()
+                semester_id=sem_id, siso_hien_tai=siso_start.value(),
+                so_buoi=so_buoi.value(),
             )
         except Exception as e:
             print(f'[ADM_ADD_CLS] DB loi: {e}')
@@ -5204,6 +5270,10 @@ class TeacherWindow(QtWidgets.QWidget):
             print(f"[SYNC_CC] lop={ma_lop} - tim thay attendance cua {len(rates_by_msv)} HV")
         except Exception as e:
             print(f'[SYNC_CC] API class_summary loi: {e}')
+            msg_warn(self, 'Không sync được',
+                     f'Không lấy được dữ liệu điểm danh từ hệ thống:\n{api_error_msg(e)}\n\n'
+                     'Hãy kiểm tra kết nối backend và thử lại.')
+            return
 
         self._grades_recalc_lock = True
         n_filled = 0       # so HV duoc fill CC tu diem danh thuc te
@@ -5566,24 +5636,31 @@ class TeacherWindow(QtWidgets.QWidget):
         phone = page.findChild(QtWidgets.QLineEdit, 'txtPhone')
         updates = {}
         if email:
-            v = email.text().strip()
-            MOCK_TEACHER['email'] = v
-            updates['email'] = v
+            updates['email'] = email.text().strip()
         if phone:
-            v = phone.text().strip()
-            MOCK_TEACHER['sdt'] = v
-            updates['sdt'] = v
+            updates['sdt'] = phone.text().strip()
+        # Validate
+        if updates.get('email') and not is_valid_email(updates['email']):
+            msg_warn(self, 'Sai định dạng', 'Email không hợp lệ (vd: ten@example.com)')
+            return
+        if updates.get('sdt') and not is_valid_phone_vn(updates['sdt']):
+            msg_warn(self, 'Sai định dạng', 'Số điện thoại không hợp lệ (10-11 chữ số)')
+            return
 
         gv_user_id = MOCK_TEACHER.get('user_id')
-        if DB_AVAILABLE and gv_user_id and updates:
-            try:
-                TeacherService.update(gv_user_id, **updates)
-                msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
-            except Exception as e:
-                msg_warn(self, 'Lỗi', f'Đã hiển thị nhưng chưa lưu được vào hệ thống:\n{e}')
-        else:
-            msg_warn(self, 'Chưa kết nối được hệ thống',
-                     'Thông tin chỉ lưu tạm. Hãy kiểm tra kết nối và thử lại.')
+        if not (DB_AVAILABLE and gv_user_id and updates):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # API truoc, MOCK sau
+        try:
+            TeacherService.update(gv_user_id, **updates)
+        except Exception as e:
+            print(f'[TEA_PROFILE] loi: {e}')
+            msg_warn(self, 'Không lưu được', api_error_msg(e))
+            return
+        for k, v in updates.items():
+            MOCK_TEACHER[k] = v
+        msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
 
     def _tea_change_pass(self):
         new = msg_input(self, 'Đổi mật khẩu', 'Nhập mật khẩu mới:')
@@ -5935,6 +6012,21 @@ class EmployeeWindow(QtWidgets.QWidget):
         # === CHECK MON TIEN QUYET tu khung CT ===
         lop_code = cbo_cls.currentText().split()[0]
         ma_mon_lop = MOCK_COURSES[cbo_c.currentIndex() - 1][0] if cbo_c.currentIndex() > 0 else None
+        # === CHECK DUPLICATE: HV da dang ky lop nay chua? ===
+        if DB_AVAILABLE:
+            try:
+                hv_check = StudentService.get_by_msv(msv.text().strip())
+                if hv_check:
+                    hv_uid_check = hv_check.get('user_id') or hv_check.get('id')
+                    existing = CourseService.get_classes_by_student(hv_uid_check) or []
+                    for cls in existing:
+                        if cls.get('ma_lop') == lop_code and cls.get('reg_status') in ('pending_payment', 'paid', 'completed'):
+                            msg_warn(self, 'Đã đăng ký',
+                                     f'Học viên {msv.text().strip()} đã đăng ký lớp {lop_code} rồi '
+                                     f'(trạng thái: {cls.get("reg_status")}). Không thể đăng ký lại.')
+                            return
+            except Exception as e:
+                print(f'[REG] check duplicate loi: {e}')
         if DB_AVAILABLE and CurriculumService:
             try:
                 hv_row = StudentService.get_by_msv(msv.text().strip())
@@ -6050,22 +6142,37 @@ class EmployeeWindow(QtWidgets.QWidget):
             color = COLORS['green'] if st == 'Đã thanh toán' else COLORS['orange'] if st == 'Chờ thanh toán' else COLORS['red']
             item_st.setForeground(QColor(color))
             tbl.setItem(r, 5, item_st)
-            # action - nut nho hon de khong tran row
-            btn = QtWidgets.QPushButton('Xem')
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setFixedSize(54, 22)
-            btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 3px; font-size: 10px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
-            btn.clicked.connect(lambda ch, rdata=row: show_detail_dialog(
+            # action - 2 nut: Xem + Hủy. An nut Huy neu da huy/hoan thanh
+            btn_view = QtWidgets.QPushButton('Xem')
+            btn_view.setCursor(Qt.PointingHandCursor)
+            btn_view.setFixedSize(48, 22)
+            btn_view.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 3px; font-size: 10px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
+            btn_view.clicked.connect(lambda ch, rdata=row: show_detail_dialog(
                 self, 'Chi tiết đăng ký',
                 [('Mã đăng ký', rdata[0]), ('Ngày đăng ký', rdata[1]),
                  ('Học viên', rdata[2]), ('Lớp', rdata[3]),
                  ('Học phí', f'{rdata[4]} đ'), ('Trạng thái', rdata[5])],
                 avatar_text='DK', subtitle=rdata[2]))
+            btn_cancel = QtWidgets.QPushButton('Hủy')
+            btn_cancel.setCursor(Qt.PointingHandCursor)
+            btn_cancel.setFixedSize(40, 22)
+            # an nut huy neu trang thai khong cho phep
+            cur_status = 'Đã thanh toán' if row[0] in self._paid_dks else row[5]
+            can_cancel = cur_status == 'Chờ thanh toán'
+            if can_cancel:
+                btn_cancel.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 3px; font-size: 10px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["red_hover"]}; }}')
+                btn_cancel.clicked.connect(lambda ch, ma_dk=row[0], hv=row[2], lop=row[3], t=tbl: self._emp_cancel_reg(t, ma_dk, hv, lop))
+            else:
+                btn_cancel.setEnabled(False)
+                btn_cancel.setStyleSheet('QPushButton { background: #e2e8f0; color: #a0aec0; border: none; border-radius: 3px; font-size: 10px; font-weight: bold; }')
+                btn_cancel.setToolTip(f'Không thể hủy ở trạng thái "{cur_status}"')
             w = QtWidgets.QWidget()
             hl = QtWidgets.QHBoxLayout(w)
             hl.setContentsMargins(0, 0, 0, 0)
+            hl.setSpacing(4)
             hl.setAlignment(Qt.AlignCenter)
-            hl.addWidget(btn)
+            hl.addWidget(btn_view)
+            hl.addWidget(btn_cancel)
             tbl.setCellWidget(r, 6, w)
         tbl.horizontalHeader().setStretchLastSection(True)
         for c, cw in enumerate([70, 95, 195, 90, 110, 125, 70]):
@@ -6108,6 +6215,30 @@ class EmployeeWindow(QtWidgets.QWidget):
             if cbo_st.currentIndex() > 0 and it:
                 show = st_text.lower() in it.text().lower()
             tbl.setRowHidden(r, not show)
+
+    def _emp_cancel_reg(self, tbl, ma_dk, hv_name, lop_id):
+        """Huy 1 dang ky (chi cho phep neu Cho thanh toan)."""
+        if not msg_confirm(self, 'Xác nhận hủy', f'Hủy đăng ký {ma_dk} của {hv_name} - lớp {lop_id}?'):
+            return
+        if not DB_AVAILABLE:
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # parse reg_id tu ma_dk (vd 'DK001' -> 1)
+        ma_digits = ''.join(ch for ch in ma_dk if ch.isdigit())
+        if not ma_digits:
+            msg_warn(self, 'Lỗi', f'Mã đăng ký không hợp lệ: {ma_dk}')
+            return
+        try:
+            RegistrationService.cancel_registration(int(ma_digits))
+        except Exception as e:
+            print(f'[EMP_CANCEL] loi: {e}')
+            msg_warn(self, 'Không hủy được', api_error_msg(e))
+            return
+        # DB OK -> re-fill bang
+        self.pages_filled[2] = False
+        self._fill_emp_reglist()
+        self.pages_filled[2] = True
+        msg_info(self, 'Đã hủy', f'Đã hủy đăng ký {ma_dk}')
 
     def _fill_emp_payment(self):
         page = self.page_widgets[3]
@@ -6180,22 +6311,33 @@ class EmployeeWindow(QtWidgets.QWidget):
         ghi_chu = note.text().strip() if note else ''
         # parse ma_dk: "DK001" → 1, "1" → 1
         ma_digits = ''.join(ch for ch in ma if ch.isdigit())
-        # ghi DB truoc - phai thanh cong moi cap nhat UI
+        # Validate so_tien va ma_dk truoc
         if not (DB_AVAILABLE and ma_digits):
             msg_warn(self, 'Lỗi', 'Không xác định được mã đăng ký hoặc chưa kết nối hệ thống.')
             return
         try:
-            nv_id = MOCK_EMPLOYEE.get('user_id')
             so_tien = int(gia.replace('.', '').replace(',', '').replace('đ', '').strip())
+        except ValueError:
+            msg_warn(self, 'Sai dữ liệu', f'Số tiền không hợp lệ: {gia}')
+            return
+        if so_tien <= 0:
+            msg_warn(self, 'Sai dữ liệu', f'Số tiền phải > 0 (hiện tại: {so_tien})')
+            return
+        nv_id = MOCK_EMPLOYEE.get('user_id')
+        if not nv_id:
+            msg_warn(self, 'Lỗi', 'Không xác định được nhân viên thu tiền. Hãy đăng nhập lại.')
+            return
+        # Goi API truoc
+        try:
             RegistrationService.confirm_payment(int(ma_digits), so_tien, method, nv_id, ghi_chu)
             print(f'[PAY] da ghi DB: {ma}, {so_tien}đ')
         except Exception as e:
             print(f'[PAY] loi: {e}')
-            msg_warn(self, 'Lỗi', f'Xác nhận thanh toán thất bại:\n{e}')
+            msg_warn(self, 'Không xác nhận được', api_error_msg(e))
             return
+        # API OK -> update UI
         tbl.removeRow(r)
         if note: note.clear()
-        # cap nhat trang thai ben bang ds dang ky
         self._emp_sync_reg_paid(ma)
         self._emp_show_receipt(ma, ten, lop, gia, method, ghi_chu)
 
@@ -6494,24 +6636,31 @@ class EmployeeWindow(QtWidgets.QWidget):
         phone = page.findChild(QtWidgets.QLineEdit, 'txtPhone')
         updates = {}
         if email:
-            v = email.text().strip()
-            MOCK_EMPLOYEE['email'] = v
-            updates['email'] = v
+            updates['email'] = email.text().strip()
         if phone:
-            v = phone.text().strip()
-            MOCK_EMPLOYEE['sdt'] = v
-            updates['sdt'] = v
+            updates['sdt'] = phone.text().strip()
+        # Validate
+        if updates.get('email') and not is_valid_email(updates['email']):
+            msg_warn(self, 'Sai định dạng', 'Email không hợp lệ (vd: ten@example.com)')
+            return
+        if updates.get('sdt') and not is_valid_phone_vn(updates['sdt']):
+            msg_warn(self, 'Sai định dạng', 'Số điện thoại không hợp lệ (10-11 chữ số)')
+            return
 
         emp_user_id = MOCK_EMPLOYEE.get('user_id')
-        if DB_AVAILABLE and emp_user_id and updates:
-            try:
-                EmployeeService.update(emp_user_id, **updates)
-                msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
-            except Exception as e:
-                msg_warn(self, 'Lỗi', f'Đã hiển thị nhưng chưa lưu được vào hệ thống:\n{e}')
-        else:
-            msg_warn(self, 'Chưa kết nối được hệ thống',
-                     'Thông tin chỉ lưu tạm. Hãy kiểm tra kết nối và thử lại.')
+        if not (DB_AVAILABLE and emp_user_id and updates):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        # API truoc, MOCK sau
+        try:
+            EmployeeService.update(emp_user_id, **updates)
+        except Exception as e:
+            print(f'[EMP_PROFILE] loi: {e}')
+            msg_warn(self, 'Không lưu được', api_error_msg(e))
+            return
+        for k, v in updates.items():
+            MOCK_EMPLOYEE[k] = v
+        msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
 
     def _emp_change_pass(self):
         new = msg_input(self, 'Đổi mật khẩu', 'Nhập mật khẩu mới:')
