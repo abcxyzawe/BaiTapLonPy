@@ -66,26 +66,82 @@ app.include_router(audit.router, prefix='/audit', tags=['Audit'])
 # (thay vi 500 Internal Server Error) - giup frontend hien error popup chinh xac
 
 # Map ten constraint -> message tieng Viet de bao loi
+# Ho tro ca DELETE (parent bi tham chieu) va INSERT/UPDATE (child tham chieu parent khong ton tai)
+# Format: 'constraint_name': {'on_delete': '...', 'on_insert': '...'}
 _FK_MESSAGES = {
-    'classes_ma_mon_fkey': 'Môn học này đang có lớp tham chiếu, không xóa được. Hãy xóa các lớp trước.',
-    'registrations_lop_id_fkey': 'Lớp này đang có học viên đăng ký, không xóa được. Hãy hủy đăng ký trước.',
-    'grades_lop_id_fkey': 'Lớp này đã có điểm. Xóa sẽ mất dữ liệu điểm.',
-    'curriculum_ma_mon_fkey': 'Môn này đang trong khung chương trình.',
-    'students_user_id_fkey': 'Học viên đang có dữ liệu liên quan.',
-    'teachers_user_id_fkey': 'Giảng viên đang dạy lớp.',
-    'employees_user_id_fkey': 'Nhân viên có ràng buộc dữ liệu.',
+    'classes_ma_mon_fkey': {
+        'on_delete': 'Môn học này đang có lớp tham chiếu, không xóa được. Hãy xóa các lớp trước.',
+        'on_insert': 'Mã môn không tồn tại trong hệ thống. Hãy thêm môn học trước.',
+    },
+    'registrations_lop_id_fkey': {
+        'on_delete': 'Lớp này đang có học viên đăng ký, không xóa được. Hãy hủy đăng ký trước.',
+        'on_insert': 'Lớp không tồn tại trong hệ thống.',
+    },
+    'grades_lop_id_fkey': {
+        'on_delete': 'Lớp này đã có điểm. Xóa sẽ mất dữ liệu điểm.',
+        'on_insert': 'Lớp không tồn tại trong hệ thống.',
+    },
+    'curriculum_ma_mon_fkey': {
+        'on_delete': 'Môn này đang trong khung chương trình.',
+        'on_insert': 'Mã môn không tồn tại trong hệ thống. Hãy thêm môn học trước khi đưa vào khung CT.',
+    },
+    'students_user_id_fkey': {
+        'on_delete': 'Học viên đang có dữ liệu liên quan.',
+        'on_insert': 'User_id không tồn tại.',
+    },
+    'teachers_user_id_fkey': {
+        'on_delete': 'Giảng viên đang dạy lớp.',
+        'on_insert': 'User_id không tồn tại.',
+    },
+    'employees_user_id_fkey': {
+        'on_delete': 'Nhân viên có ràng buộc dữ liệu.',
+        'on_insert': 'User_id không tồn tại.',
+    },
+    'classes_gv_id_fkey': {
+        'on_delete': 'Giảng viên này đang dạy lớp.',
+        'on_insert': 'Giảng viên không tồn tại trong hệ thống.',
+    },
+    'classes_semester_id_fkey': {
+        'on_delete': 'Học kỳ này có lớp tham chiếu.',
+        'on_insert': 'Học kỳ không tồn tại.',
+    },
+    'registrations_hv_id_fkey': {
+        'on_insert': 'Học viên không tồn tại trong hệ thống.',
+    },
+    'registrations_nv_dk_fkey': {
+        'on_insert': 'Nhân viên đăng ký không tồn tại.',
+    },
+    'reviews_hv_id_fkey': {
+        'on_insert': 'Học viên không tồn tại.',
+    },
+    'reviews_gv_id_fkey': {
+        'on_insert': 'Giảng viên không tồn tại.',
+    },
+    'reviews_lop_id_fkey': {
+        'on_insert': 'Lớp không tồn tại.',
+    },
 }
 
 
 @app.exception_handler(psycopg2.errors.ForeignKeyViolation)
 async def fk_violation_handler(request: Request, exc):
     """Tra ve 409 Conflict voi message ro rang khi co FK violation."""
-    detail = str(exc.diag.message_detail or exc.diag.constraint_name or '') if exc.diag else str(exc)
-    msg = 'Không thể xóa: dữ liệu này đang được tham chiếu ở bảng khác.'
-    # Map ten constraint cu the
     cn = exc.diag.constraint_name if exc.diag else None
+    # Detect huong: DELETE (parent has children) vs INSERT/UPDATE (child references missing parent)
+    # psycopg2 diag.message_primary chua thong tin: "update or delete on table X violates..." hoac "insert or update on table Y violates..."
+    msg_primary = ''
+    try:
+        if exc.diag:
+            msg_primary = (exc.diag.message_primary or '').lower()
+    except Exception:
+        pass
+    is_delete_direction = 'update or delete' in msg_primary
+
+    msg = 'Không thể thực hiện: ràng buộc khóa ngoại bị vi phạm.'
     if cn and cn in _FK_MESSAGES:
-        msg = _FK_MESSAGES[cn]
+        entry = _FK_MESSAGES[cn]
+        key = 'on_delete' if is_delete_direction else 'on_insert'
+        msg = entry.get(key) or entry.get('on_delete') or entry.get('on_insert') or msg
     return JSONResponse(status_code=409, content={'detail': msg, 'constraint': cn})
 
 
