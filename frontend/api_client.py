@@ -22,7 +22,9 @@ import requests
 from requests.adapters import HTTPAdapter
 
 API_URL = os.environ.get('EAUT_API_URL', 'http://localhost:8000').rstrip('/')
-TIMEOUT = 4  # seconds - giam tu 10s xuong 4s de UI khong freeze qua lau khi API down
+# Tuple (connect_timeout, read_timeout) - connect short de fail som khi API down,
+# read longer cho query nang
+TIMEOUT = (3, 10)
 
 # Session voi keep-alive + connection pool - giam latency moi request
 # Truoc day moi call mo socket moi (3-way handshake) -> lag UI khi switch page
@@ -481,8 +483,19 @@ class ScheduleService:
         return _get(f'/schedules/student/{hv_id}/week', start=week_start)
 
     @staticmethod
+    def nearest_week_for_student(hv_id, ref_date):
+        """Tra QDate Monday cua tuan gan nhat co lich. None neu khong co."""
+        r = _get(f'/schedules/student/{hv_id}/nearest-week', ref=ref_date)
+        return r.get('monday') if r else None
+
+    @staticmethod
     def get_for_teacher_week(gv_id, week_start):
         return _get(f'/schedules/teacher/{gv_id}/week', start=week_start)
+
+    @staticmethod
+    def nearest_week_for_teacher(gv_id, ref_date):
+        r = _get(f'/schedules/teacher/{gv_id}/nearest-week', ref=ref_date)
+        return r.get('monday') if r else None
 
     @staticmethod
     def get_today(): return _get('/schedules/today')

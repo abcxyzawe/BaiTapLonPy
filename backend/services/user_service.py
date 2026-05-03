@@ -75,7 +75,7 @@ class StudentService:
     @staticmethod
     def delete(user_id: int):
         """Chi deactivate, khong xoa that (bao toan registrations)"""
-        db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
+        return db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
 
 
 class TeacherService:
@@ -136,7 +136,7 @@ class TeacherService:
 
     @staticmethod
     def delete(user_id: int):
-        db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
+        return db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
 
     @staticmethod
     def get_by_code(ma_gv: str):
@@ -189,7 +189,7 @@ class EmployeeService:
 
     @staticmethod
     def delete(user_id: int):
-        db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
+        return db.execute("UPDATE users SET is_active = FALSE WHERE id = %s", (user_id,))
 
     @staticmethod
     def get_by_code(ma_nv: str):

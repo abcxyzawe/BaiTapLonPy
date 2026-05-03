@@ -56,6 +56,46 @@ class ScheduleService:
         return db.fetch_all(sql, (gv_id, week_start, week_end))
 
     @staticmethod
+    def nearest_week_for_student(hv_id: int, ref_date: date):
+        """Tim Monday cua tuan gan voi ref_date NHAT ma HV co lich. Tra None neu HV chua co lich nao.
+
+        Logic: lay 1 buoi gan ref_date nhat (theo distance), tinh Monday cua tuan do.
+        Dung khi UI mac dinh load tuan hien tai trong rong -> auto chuyen sang tuan co lich.
+        """
+        sql = """
+            SELECT sc.ngay
+              FROM schedules sc
+              JOIN classes c ON c.ma_lop = sc.lop_id
+              JOIN registrations r ON r.lop_id = c.ma_lop
+             WHERE r.hv_id = %s
+               AND r.trang_thai IN ('paid','pending_payment','completed')
+          ORDER BY ABS(sc.ngay - %s)
+             LIMIT 1
+        """
+        row = db.fetch_one(sql, (hv_id, ref_date))
+        if not row or not row.get('ngay'):
+            return None
+        d = row['ngay']
+        return d - timedelta(days=d.weekday())
+
+    @staticmethod
+    def nearest_week_for_teacher(gv_id: int, ref_date: date):
+        """Tim Monday tuan gan ref_date nhat ma GV co lich day."""
+        sql = """
+            SELECT sc.ngay
+              FROM schedules sc
+              JOIN classes c ON c.ma_lop = sc.lop_id
+             WHERE c.gv_id = %s
+          ORDER BY ABS(sc.ngay - %s)
+             LIMIT 1
+        """
+        row = db.fetch_one(sql, (gv_id, ref_date))
+        if not row or not row.get('ngay'):
+            return None
+        d = row['ngay']
+        return d - timedelta(days=d.weekday())
+
+    @staticmethod
     def get_today():
         return db.fetch_all("SELECT * FROM v_today_schedule")
 

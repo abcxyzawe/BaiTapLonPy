@@ -98,7 +98,8 @@ class CourseService:
 
     @staticmethod
     def delete_course(ma_mon: str):
-        db.execute("DELETE FROM courses WHERE ma_mon = %s", (ma_mon,))
+        """Xoa course. Return rowcount de router check 404 neu khong ton tai."""
+        return db.execute("DELETE FROM courses WHERE ma_mon = %s", (ma_mon,))
 
     # ===== Classes CRUD (admin) =====
     @staticmethod
@@ -130,7 +131,7 @@ class CourseService:
 
     @staticmethod
     def delete_class(ma_lop: str):
-        db.execute("DELETE FROM classes WHERE ma_lop = %s", (ma_lop,))
+        return db.execute("DELETE FROM classes WHERE ma_lop = %s", (ma_lop,))
 
     @staticmethod
     def update_class_price(ma_lop: str, gia: int):

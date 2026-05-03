@@ -1,7 +1,7 @@
 """Courses + Classes router. Chuyen 17 method CourseService thanh REST."""
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from backend.api.schemas import ClassCreate, ClassPriceUpdate, ClassUpdate, CourseCreate, CourseUpdate
 from backend.services.course_service import CourseService
@@ -17,7 +17,10 @@ def list_courses():
 
 @router.get('/courses/{ma_mon}')
 def get_course(ma_mon: str):
-    return CourseService.get_course(ma_mon)
+    row = CourseService.get_course(ma_mon)
+    if not row:
+        raise HTTPException(status_code=404, detail=f'Môn học {ma_mon} không tồn tại')
+    return row
 
 
 @router.post('/courses')
@@ -34,7 +37,9 @@ def update_course(ma_mon: str, req: CourseUpdate):
 
 @router.delete('/courses/{ma_mon}')
 def delete_course(ma_mon: str):
-    CourseService.delete_course(ma_mon)
+    affected = CourseService.delete_course(ma_mon)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Môn học {ma_mon} không tồn tại')
     return {'status': 'deleted'}
 
 
@@ -46,7 +51,10 @@ def list_classes():
 
 @router.get('/classes/{ma_lop}')
 def get_class(ma_lop: str):
-    return CourseService.get_class(ma_lop)
+    row = CourseService.get_class(ma_lop)
+    if not row:
+        raise HTTPException(status_code=404, detail=f'Lớp {ma_lop} không tồn tại')
+    return row
 
 
 @router.get('/classes/teacher/{gv_id}')
@@ -83,7 +91,9 @@ def update_class(ma_lop: str, req: ClassUpdate):
 
 @router.delete('/classes/{ma_lop}')
 def delete_class(ma_lop: str):
-    CourseService.delete_class(ma_lop)
+    affected = CourseService.delete_class(ma_lop)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Lớp {ma_lop} không tồn tại')
     return {'status': 'deleted'}
 
 

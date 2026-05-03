@@ -21,7 +21,8 @@ class ExamService:
 
     @staticmethod
     def get_for_student(hv_id: int, semester_id: str = None):
-        """Lich thi cua HV (qua cac lop da dang ky)"""
+        """Lich thi cua HV (qua cac lop da dang ky).
+        Bao gom ca pending_payment vi HV van phai biet lich thi du chua dong tien."""
         sql = """
             SELECT DISTINCT es.*, c.ma_mon, co.ten_mon
               FROM exam_schedules es
@@ -29,7 +30,7 @@ class ExamService:
               JOIN registrations r ON r.lop_id = c.ma_lop
          LEFT JOIN courses co ON co.ma_mon = c.ma_mon
              WHERE r.hv_id = %s
-               AND r.trang_thai IN ('paid', 'completed')
+               AND r.trang_thai IN ('paid', 'completed', 'pending_payment')
         """
         params = [hv_id]
         if semester_id:
