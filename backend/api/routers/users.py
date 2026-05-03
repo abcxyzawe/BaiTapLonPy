@@ -39,7 +39,9 @@ def update_student(user_id: int, req: StudentUpdate):
 
 @router.delete('/students/{user_id}')
 def delete_student(user_id: int):
-    StudentService.delete(user_id)
+    affected = StudentService.delete(user_id)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Học viên user_id={user_id} không tồn tại')
     return {'status': 'deactivated'}
 
 
@@ -82,7 +84,9 @@ def update_teacher(user_id: int, req: TeacherUpdate):
 
 @router.delete('/teachers/{user_id}')
 def delete_teacher(user_id: int):
-    TeacherService.delete(user_id)
+    affected = TeacherService.delete(user_id)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Giảng viên user_id={user_id} không tồn tại')
     return {'status': 'deactivated'}
 
 
@@ -120,7 +124,9 @@ def update_employee(user_id: int, req: EmployeeUpdate):
 
 @router.delete('/employees/{user_id}')
 def delete_employee(user_id: int):
-    EmployeeService.delete(user_id)
+    affected = EmployeeService.delete(user_id)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Nhân viên user_id={user_id} không tồn tại')
     return {'status': 'deactivated'}
 
 

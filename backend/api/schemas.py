@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 AttendanceStatus = Literal['present', 'absent', 'late', 'excused']
 NotificationType = Literal['info', 'warning', 'urgent']
 SemesterStatus = Literal['open', 'closed', 'upcoming']
+ClassStatus = Literal['open', 'full', 'closed']
 
 
 # ===== Auth =====
@@ -27,73 +28,73 @@ class LoginResponse(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
-    user_id: int
-    new_password: str
+    user_id: int = Field(..., gt=0)
+    new_password: str = Field(..., min_length=4, max_length=100)
 
 
 # ===== Courses =====
 class CourseCreate(BaseModel):
-    ma_mon: str
-    ten_mon: str
-    mo_ta: str = ''
+    ma_mon: str = Field(..., min_length=1, max_length=20)
+    ten_mon: str = Field(..., min_length=1, max_length=100)
+    mo_ta: str = Field('', max_length=2000)
 
 
 class CourseUpdate(BaseModel):
-    ten_mon: Optional[str] = None
-    mo_ta: Optional[str] = None
+    ten_mon: Optional[str] = Field(None, min_length=1, max_length=100)
+    mo_ta: Optional[str] = Field(None, max_length=2000)
 
 
 class ClassCreate(BaseModel):
-    ma_lop: str
-    ma_mon: str
+    ma_lop: str = Field(..., min_length=1, max_length=30)
+    ma_mon: str = Field(..., min_length=1, max_length=20)
     gv_id: Optional[int] = None
-    lich: str = ''
-    phong: str = ''
-    siso_max: int = 40
-    gia: int = 0
-    semester_id: Optional[str] = None
-    siso_hien_tai: int = 0
-    so_buoi: int = 24
+    lich: str = Field('', max_length=100)
+    phong: str = Field('', max_length=20)
+    siso_max: int = Field(40, ge=1, le=500)
+    gia: int = Field(0, ge=0, le=100_000_000)
+    semester_id: Optional[str] = Field(None, max_length=20)
+    siso_hien_tai: int = Field(0, ge=0, le=500)
+    so_buoi: int = Field(24, ge=1, le=200)
 
 
 class ClassUpdate(BaseModel):
-    ma_mon: Optional[str] = None
+    ma_mon: Optional[str] = Field(None, min_length=1, max_length=20)
     gv_id: Optional[int] = None
-    lich: Optional[str] = None
-    phong: Optional[str] = None
-    siso_max: Optional[int] = None
-    siso_hien_tai: Optional[int] = None
-    gia: Optional[int] = None
-    semester_id: Optional[str] = None
-    so_buoi: Optional[int] = None
-    trang_thai: Optional[str] = None
+    lich: Optional[str] = Field(None, max_length=100)
+    phong: Optional[str] = Field(None, max_length=20)
+    siso_max: Optional[int] = Field(None, ge=1, le=500)
+    siso_hien_tai: Optional[int] = Field(None, ge=0, le=500)
+    gia: Optional[int] = Field(None, ge=0, le=100_000_000)
+    semester_id: Optional[str] = Field(None, max_length=20)
+    so_buoi: Optional[int] = Field(None, ge=1, le=200)
+    trang_thai: Optional[ClassStatus] = None
 
 
 class ClassPriceUpdate(BaseModel):
-    gia: int
+    gia: int = Field(..., ge=0, le=100_000_000)
 
 
 # ===== Registrations =====
 class RegisterRequest(BaseModel):
-    hv_id: int
-    lop_id: str
-    nv_id: int
+    hv_id: int = Field(..., gt=0)
+    lop_id: str = Field(..., min_length=1, max_length=30)
+    nv_id: int = Field(..., gt=0)
 
 
 class PaymentRequest(BaseModel):
-    so_tien: int
-    hinh_thuc: str
-    nv_id: int
-    ghi_chu: Optional[str] = None
+    so_tien: int = Field(..., gt=0, le=100_000_000)
+    hinh_thuc: str = Field(..., min_length=1, max_length=50)
+    nv_id: int = Field(..., gt=0)
+    ghi_chu: Optional[str] = Field(None, max_length=500)
 
 
 # ===== Grades =====
 class GradeSave(BaseModel):
-    hv_id: int
-    lop_id: str
-    diem_qt: float
-    diem_thi: float
-    gv_id: int
+    hv_id: int = Field(..., gt=0)
+    lop_id: str = Field(..., min_length=1, max_length=30)
+    diem_qt: float = Field(..., ge=0, le=10)
+    diem_thi: float = Field(..., ge=0, le=10)
+    gv_id: int = Field(..., gt=0)
 
 
 # ===== Notifications =====

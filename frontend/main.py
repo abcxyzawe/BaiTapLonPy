@@ -364,6 +364,30 @@ def widen_search(page, txt_name, new_width, shift_after=None):
                     w.setGeometry(gw.x() + diff, gw.y(), gw.width(), gw.height())
 
 
+def clear_session_state():
+    """Clean global state khi logout. Tranh leak data sang user moi login."""
+    global MOCK_USER, MOCK_TEACHER, MOCK_EMPLOYEE
+    # Clear sensitive dicts
+    for d in (MOCK_USER, MOCK_TEACHER, MOCK_EMPLOYEE):
+        if isinstance(d, dict):
+            d.clear()
+
+
+def safe_connect(signal, slot):
+    """Disconnect tat ca handler cu cua signal roi connect handler moi.
+    Tranh signal accumulation khi fill_* duoc goi nhieu lan (mỗi lần
+    cbo.connect() them 1 handler -> click 1 lan trigger N lan).
+
+    Goi thay vi `signal.connect(slot)` truc tiep cho cac widget tai su dung
+    (combo filter, search box). Khong can dung cho button tao moi moi lan.
+    """
+    try:
+        signal.disconnect()
+    except (TypeError, RuntimeError):
+        pass
+    signal.connect(slot)
+
+
 def is_valid_email(email):
     """Email format check (don gian, du dung cho HV/GV/NV)."""
     if not email: return True  # empty = OK (optional field)
@@ -836,6 +860,7 @@ class MainWindow(QtWidgets.QWidget):
                 btn.setStyleSheet(SIDEBAR_NORMAL)
 
     def _on_logout(self):
+        clear_session_state()
         self.close()
         self.app_ref.show_login()
 
@@ -1033,9 +1058,21 @@ class MainWindow(QtWidgets.QWidget):
             wr.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             wr.show()
 
-        # State: tuan dang xem
+        # State: tuan dang xem - dung nearest_week (backend uu tien tuan hien tai neu co lich)
+        # Chi 1 API call -> giam lag khi mo trang
         today = QDate.currentDate()
         self._stu_current_monday = today.addDays(-(today.dayOfWeek() - 1))
+        hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        if DB_AVAILABLE and hv_id:
+            try:
+                near = ScheduleService.nearest_week_for_student(hv_id, today.toPyDate())
+                if near:
+                    from datetime import date as _date
+                    if isinstance(near, str):
+                        near = _date.fromisoformat(near)
+                    self._stu_current_monday = QDate(near.year, near.month, near.day)
+            except Exception as e:
+                print(f'[STU_SCHED] nearest_week loi: {e}')
         self._load_student_schedule_week(page, tbl, self._stu_current_monday, hours, days_vn)
 
         # Wire prev/next/today buttons
@@ -2031,6 +2068,7 @@ class AdminWindow(QtWidgets.QWidget):
                 btn.setStyleSheet(SIDEBAR_NORMAL)
 
     def _on_logout(self):
+        clear_session_state()
         self.close()
         self.app_ref.show_login()
 
@@ -2263,21 +2301,21 @@ class AdminWindow(QtWidgets.QWidget):
 
         # Khong day btnSearchCourse vi no o sat mep phai roi - chi day combo + separator
         widen_search(page, 'txtSearchCourse', 300, ['sepFilter1', 'cboFilterDept'])
-        # wire search / filter / add
+        # wire search / filter / add - dung safe_connect tranh signal accumulation
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCourse')
         if txt:
-            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1, 3]))
+            safe_connect(txt.textChanged, lambda s: table_filter(tbl, s, cols=[0, 1, 3]))
         btn_s = page.findChild(QtWidgets.QPushButton, 'btnSearchCourse')
         if btn_s and txt:
-            btn_s.clicked.connect(lambda: table_filter(tbl, txt.text(), cols=[0, 1, 3]))
+            safe_connect(btn_s.clicked, lambda: table_filter(tbl, txt.text(), cols=[0, 1, 3]))
         cbo = page.findChild(QtWidgets.QComboBox, 'cboFilterDept')
         if cbo:
             cbo.clear()
             cbo.addItems(['Tất cả khoa', 'Công nghệ thông tin (CNTT)', 'Toán', 'Ngoại ngữ'])
-            cbo.currentIndexChanged.connect(lambda: self._admin_filter_courses())
+            safe_connect(cbo.currentIndexChanged, lambda: self._admin_filter_courses())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddCourse')
         if btn_add:
-            btn_add.clicked.connect(self._admin_add_course)
+            safe_connect(btn_add.clicked, self._admin_add_course)
 
     def _admin_filter_courses(self):
         page = self.page_widgets[1]
@@ -2524,10 +2562,10 @@ class AdminWindow(QtWidgets.QWidget):
         # search / filter / add
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchStudent')
         if txt:
-            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1]))
+            safe_connect(txt.textChanged, lambda s: table_filter(tbl, s, cols=[0, 1]))
         btn_s = page.findChild(QtWidgets.QPushButton, 'btnSearchStudent')
         if btn_s and txt:
-            btn_s.clicked.connect(lambda: table_filter(tbl, txt.text(), cols=[0, 1]))
+            safe_connect(btn_s.clicked, lambda: table_filter(tbl, txt.text(), cols=[0, 1]))
         # mapping khoa -> lop (dung khi cascade)
         self._adm_lop_by_khoa = {
             'CNTT': ['CNTT-K20A', 'CNTT-K20B'],
@@ -2539,7 +2577,7 @@ class AdminWindow(QtWidgets.QWidget):
         if cbo_d:
             cbo_d.clear()
             cbo_d.addItems(['Tất cả khoa', 'CNTT', 'Toán', 'Ngoại ngữ'])
-            cbo_d.currentIndexChanged.connect(self._adm_st_khoa_changed)
+            safe_connect(cbo_d.currentIndexChanged, self._adm_st_khoa_changed)
         # Lop sau (con) - mac dinh tat ca, doi khi khoa thay doi
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
         if cbo_c:
@@ -2548,10 +2586,10 @@ class AdminWindow(QtWidgets.QWidget):
             for lops in self._adm_lop_by_khoa.values():
                 for lop in lops:
                     cbo_c.addItem(lop)
-            cbo_c.currentIndexChanged.connect(lambda: self._admin_filter_students())
+            safe_connect(cbo_c.currentIndexChanged, lambda: self._admin_filter_students())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddStudent')
         if btn_add:
-            btn_add.clicked.connect(self._admin_add_student)
+            safe_connect(btn_add.clicked, self._admin_add_student)
 
     def _adm_st_khoa_changed(self, idx):
         """Khi chon khoa -> populate lai cbo lop voi cac lop cua khoa do"""
@@ -2690,7 +2728,7 @@ class AdminWindow(QtWidgets.QWidget):
 
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddSemester')
         if btn_add:
-            btn_add.clicked.connect(self._admin_add_semester)
+            safe_connect(btn_add.clicked, self._admin_add_semester)
 
     def _admin_toggle_sem(self, ma, btn):
         current = btn.text()
@@ -2698,25 +2736,19 @@ class AdminWindow(QtWidgets.QWidget):
         new_state = 'mở' if not is_open else 'đóng'
         if not msg_confirm(self, 'Xác nhận', f'{"Đóng" if is_open else "Mở"} đăng ký cho {ma}?'):
             return
-        # ghi DB
-        if DB_AVAILABLE:
-            try:
-                if not SemesterService: raise RuntimeError("SemesterService chua co")
-                SemesterService.set_status(ma, 'closed' if is_open else 'open')
-            except Exception as e:
-                print(f'[ADM_TOGGLE_SEM] DB loi: {e}')
-                msg_warn(self, 'Lỗi', f'Không cập nhật được trạng thái:\n{e}')
-                return
-        # Doi text + mau button (orange neu se Dong, green neu se Mo)
-        new_text = 'Mở ĐK' if is_open else 'Đóng ĐK'
-        new_color = COLORS['green'] if is_open else COLORS['orange']
-        new_hover = COLORS.get('green_hover', new_color) if is_open else COLORS.get('orange_hover', new_color)
-        btn.setText(new_text)
-        btn.setStyleSheet(
-            f'QPushButton {{ background: {new_color}; color: white; border: none; '
-            f'border-radius: 4px; font-size: 11px; font-weight: bold; }} '
-            f'QPushButton:hover {{ background: {new_hover}; }}'
-        )
+        if not (DB_AVAILABLE and SemesterService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        try:
+            SemesterService.set_status(ma, 'closed' if is_open else 'open')
+        except Exception as e:
+            print(f'[ADM_TOGGLE_SEM] DB loi: {e}')
+            msg_warn(self, 'Lỗi', f'Không cập nhật được trạng thái:\n{api_error_msg(e)}')
+            return
+        # Re-fill bang de cap nhat ca cot trang thai (cot 5) lan button (cot 6)
+        self.pages_filled[6] = False
+        self._fill_admin_semester()
+        self.pages_filled[6] = True
         msg_info(self, 'Thành công', f'Đã {new_state} đăng ký cho {ma}')
 
     def _admin_add_semester(self):
@@ -2892,7 +2924,7 @@ class AdminWindow(QtWidgets.QWidget):
         widen_search(page, 'txtSearchCurr', 280, ['cboNganh', 'cboLoai', 'cboHocKy'])
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCurr')
         if txt:
-            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[1, 2]))
+            safe_connect(txt.textChanged, lambda s: table_filter(tbl, s, cols=[1, 2]))
         cbo_n = page.findChild(QtWidgets.QComboBox, 'cboNganh')
         if cbo_n:
             cbo_n.clear()
@@ -2908,13 +2940,13 @@ class AdminWindow(QtWidgets.QWidget):
         for nm in ('cboNganh', 'cboLoai', 'cboHocKy'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda idx: self._admin_filter_curriculum())
+                safe_connect(cbo.currentIndexChanged, lambda idx: self._admin_filter_curriculum())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddCurr')
         if btn_add:
-            btn_add.clicked.connect(self._admin_add_curriculum)
+            safe_connect(btn_add.clicked, self._admin_add_curriculum)
         btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportCurr')
         if btn_exp:
-            btn_exp.clicked.connect(lambda: export_table_csv(self, tbl, 'khung_chuong_trinh.csv', 'Xuất khung chương trình'))
+            safe_connect(btn_exp.clicked, lambda: export_table_csv(self, tbl, 'khung_chuong_trinh.csv', 'Xuất khung chương trình'))
 
     def _admin_edit_curriculum(self, row_idx):
         page = self.page_widgets[7]
@@ -3243,23 +3275,35 @@ class AdminWindow(QtWidgets.QWidget):
         # Populate cbo voi danh sach hoc ky tu API
         page = self.page_widgets[9]
         cbo = page.findChild(QtWidgets.QComboBox, 'cboStatSemester')
-        self._stats_sem_ids = []  # cache list semester_id theo cbo idx
+        self._stats_sem_ids = []
+        default_idx = 0
         if cbo:
             cbo.blockSignals(True)
             cbo.clear()
             sems = []
+            current_sem_id = None
             if DB_AVAILABLE:
                 try:
                     sems = SemesterService.get_all() or []
                 except Exception as e:
                     print(f'[ADM_STATS] sem loi: {e}')
-            for s in sems:
+                # Tim sem dang open (current) de default chon
+                try:
+                    cur = SemesterService.get_current() if SemesterService else None
+                    current_sem_id = cur.get('id') if cur else None
+                except Exception:
+                    pass
+            for i, s in enumerate(sems):
                 cbo.addItem(f"{s.get('ten', s.get('id', ''))} ({s.get('nam_hoc', '')})")
-                self._stats_sem_ids.append(s.get('id', ''))
+                sid = s.get('id', '')
+                self._stats_sem_ids.append(sid)
+                if sid == current_sem_id:
+                    default_idx = i
+            cbo.setCurrentIndex(default_idx)
             cbo.blockSignals(False)
-            cbo.currentIndexChanged.connect(self._render_admin_stats)
-        # Render initial
-        self._render_admin_stats(0)
+            safe_connect(cbo.currentIndexChanged, self._render_admin_stats)
+        # Render initial voi sem hien tai (khong phai sem cu nhat = idx 0)
+        self._render_admin_stats(default_idx)
 
     def _render_admin_stats(self, idx):
         page = self.page_widgets[9]
@@ -3414,7 +3458,7 @@ class AdminWindow(QtWidgets.QWidget):
         # search / filter / add
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchCls')
         if txt:
-            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1, 2]))
+            safe_connect(txt.textChanged, lambda s: table_filter(tbl, s, cols=[0, 1, 2]))
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboAdmClsCourse')
         if cbo_c:
             cbo_c.clear()
@@ -3446,10 +3490,10 @@ class AdminWindow(QtWidgets.QWidget):
         for nm in ('cboAdmClsCourse', 'cboAdmClsTeacher', 'cboAdmClsStatus'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda: self._admin_filter_classes())
+                safe_connect(cbo.currentIndexChanged, lambda: self._admin_filter_classes())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddClass')
         if btn_add:
-            btn_add.clicked.connect(self._admin_add_class)
+            safe_connect(btn_add.clicked, self._admin_add_class)
 
     def _admin_filter_classes(self):
         page = self.page_widgets[2]
@@ -3779,10 +3823,10 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.setRowHeight(r, 44)
 
         widen_search(page, 'txtSearchTea', 300, ['cboTeaKhoa', 'cboTeaHocVi'])
-        # search / filter / add
+        # search / filter / add - safe_connect tranh accumulation
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchTea')
         if txt:
-            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1]))
+            safe_connect(txt.textChanged, lambda s: table_filter(tbl, s, cols=[0, 1]))
         cbo_k = page.findChild(QtWidgets.QComboBox, 'cboTeaKhoa')
         if cbo_k:
             cbo_k.clear()
@@ -3794,11 +3838,11 @@ class AdminWindow(QtWidgets.QWidget):
         for nm in ('cboTeaKhoa', 'cboTeaHocVi'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda: self._admin_filter_teachers())
+                safe_connect(cbo.currentIndexChanged, lambda: self._admin_filter_teachers())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddTeacher')
         if btn_add:
-            btn_add.clicked.connect(lambda: self._admin_add_user('giảng viên', 4, 'tblAdmTeachers',
-                                                                  ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']))
+            safe_connect(btn_add.clicked, lambda: self._admin_add_user('giảng viên', 4, 'tblAdmTeachers',
+                                                                       ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']))
 
     def _admin_filter_teachers(self):
         page = self.page_widgets[4]
@@ -3948,10 +3992,10 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.setRowHeight(r, 44)
 
         widen_search(page, 'txtSearchEmp', 300, ['cboEmpRole', 'cboEmpStatus'])
-        # search / filter / add
+        # search / filter / add - safe_connect
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchEmp')
         if txt:
-            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[0, 1]))
+            safe_connect(txt.textChanged, lambda s: table_filter(tbl, s, cols=[0, 1]))
         cbo_r = page.findChild(QtWidgets.QComboBox, 'cboEmpRole')
         if cbo_r:
             cbo_r.clear()
@@ -3963,11 +4007,11 @@ class AdminWindow(QtWidgets.QWidget):
         for nm in ('cboEmpRole', 'cboEmpStatus'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda: self._admin_filter_employees())
+                safe_connect(cbo.currentIndexChanged, lambda: self._admin_filter_employees())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddEmp')
         if btn_add:
-            btn_add.clicked.connect(lambda: self._admin_add_user('nhân viên', 5, 'tblAdmEmployees',
-                                                                  ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']))
+            safe_connect(btn_add.clicked, lambda: self._admin_add_user('nhân viên', 5, 'tblAdmEmployees',
+                                                                       ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']))
 
 
 class TeacherWindow(QtWidgets.QWidget):
@@ -4504,6 +4548,7 @@ class TeacherWindow(QtWidgets.QWidget):
                 btn.setStyleSheet(SIDEBAR_NORMAL)
 
     def _on_logout(self):
+        clear_session_state()
         self.close()
         self.app_ref.show_login()
 
@@ -4707,6 +4752,17 @@ class TeacherWindow(QtWidgets.QWidget):
 
         today = QDate.currentDate()
         self._tea_current_monday = today.addDays(-(today.dayOfWeek() - 1))
+        gv_id = MOCK_TEACHER.get('user_id')
+        if DB_AVAILABLE and gv_id:
+            try:
+                near = ScheduleService.nearest_week_for_teacher(gv_id, today.toPyDate())
+                if near:
+                    from datetime import date as _date
+                    if isinstance(near, str):
+                        near = _date.fromisoformat(near)
+                    self._tea_current_monday = QDate(near.year, near.month, near.day)
+            except Exception as e:
+                print(f'[TEA_SCHED] nearest_week loi: {e}')
         self._load_teacher_schedule_week(page, tbl, self._tea_current_monday, hours, days_vn)
 
         # Wire prev/next/today buttons
@@ -5823,6 +5879,7 @@ class EmployeeWindow(QtWidgets.QWidget):
                 btn.setStyleSheet(SIDEBAR_NORMAL)
 
     def _on_logout(self):
+        clear_session_state()
         self.close()
         self.app_ref.show_login()
 
