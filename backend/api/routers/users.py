@@ -33,7 +33,9 @@ def create_student(req: StudentCreate):
 @router.put('/students/{user_id}')
 def update_student(user_id: int, req: StudentUpdate):
     fields = req.model_dump(exclude_none=True)
-    StudentService.update(user_id, **fields)
+    affected = StudentService.update(user_id, **fields)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Học viên user_id={user_id} không tồn tại')
     return {'status': 'ok'}
 
 
@@ -78,7 +80,9 @@ def create_teacher(req: TeacherCreate):
 @router.put('/teachers/{user_id}')
 def update_teacher(user_id: int, req: TeacherUpdate):
     fields = req.model_dump(exclude_none=True)
-    TeacherService.update(user_id, **fields)
+    affected = TeacherService.update(user_id, **fields)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Giảng viên user_id={user_id} không tồn tại')
     return {'status': 'ok'}
 
 
@@ -118,7 +122,9 @@ def create_employee(req: EmployeeCreate):
 @router.put('/employees/{user_id}')
 def update_employee(user_id: int, req: EmployeeUpdate):
     fields = req.model_dump(exclude_none=True)
-    EmployeeService.update(user_id, **fields)
+    affected = EmployeeService.update(user_id, **fields)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Nhân viên user_id={user_id} không tồn tại')
     return {'status': 'ok'}
 
 
