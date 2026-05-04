@@ -34,7 +34,7 @@
     <widget class="QPushButton" name="btnAddCurr">
      <property name="geometry"><rect><x>835</x><y>12</y><width>160</width><height>32</height></rect></property>
      <property name="styleSheet"><string notr="true">QPushButton { background: #002060; color: white; border: none; border-radius: 6px; padding: 0 14px; font-size: 12px; font-weight: bold; } QPushButton:hover { background: #001545; }</string></property>
-     <property name="text"><string>+ Thêm môn học</string></property>
+     <property name="text"><string>+ Thêm khóa học</string></property>
      <property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property>
     </widget>
    </widget>
@@ -52,7 +52,7 @@
     </widget>
     <widget class="QLineEdit" name="txtSearchCurr">
      <property name="geometry"><rect><x>40</x><y>10</y><width>220</width><height>30</height></rect></property>
-     <property name="placeholderText"><string>Tìm môn học...</string></property>
+     <property name="placeholderText"><string>Tìm khóa học...</string></property>
     </widget>
     <widget name="cboNganh" class="QComboBox">
      <property name="geometry"><rect><x>280</x><y>10</y><width>200</width><height>30</height></rect></property>
@@ -91,7 +91,7 @@
     <widget class="QLabel" name="lblCurrTitle">
      <property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property>
-     <property name="text"><string>Danh sách môn học trong chương trình</string></property>
+     <property name="text"><string>Danh sách khóa học trong chương trình</string></property>
     </widget>
 
     <widget class="QPushButton" name="btnExportCurr">

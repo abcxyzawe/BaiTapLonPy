@@ -55,7 +55,7 @@
     </widget>
     <widget name="cboSubject" class="QComboBox">
      <property name="geometry"><rect><x>310</x><y>10</y><width>200</width><height>30</height></rect></property>
-     <item><property name="text"><string>Tất cả môn học</string></property></item>
+     <item><property name="text"><string>Tất cả khóa học</string></property></item>
      <item><property name="text"><string>Lập trình Python</string></property></item>
      <item><property name="text"><string>Cơ sở dữ liệu</string></property></item>
      <item><property name="text"><string>Mạng máy tính</string></property></item>
