@@ -4189,19 +4189,19 @@ class TeacherWindow(QtWidgets.QWidget):
         self._attend_buoi_by_class = {}
         self._attend_hv_by_class = {}
 
-        # 3. Wire signal
+        # 3. Wire signal - safe_connect tranh accumulation moi lan re-fill
         if cbo_cls:
-            cbo_cls.currentIndexChanged.connect(self._on_attend_class_changed)
+            safe_connect(cbo_cls.currentIndexChanged, self._on_attend_class_changed)
         cbo_buoi = page.findChild(QtWidgets.QComboBox, 'cboAttendBuoi')
         if cbo_buoi:
-            cbo_buoi.currentIndexChanged.connect(self._on_attend_buoi_changed)
+            safe_connect(cbo_buoi.currentIndexChanged, self._on_attend_buoi_changed)
 
         btn_save = page.findChild(QtWidgets.QPushButton, 'btnSaveAttend')
         if btn_save:
-            btn_save.clicked.connect(self._save_attendance)
+            safe_connect(btn_save.clicked, self._save_attendance)
         btn_all = page.findChild(QtWidgets.QPushButton, 'btnMarkAllPresent')
         if btn_all:
-            btn_all.clicked.connect(self._mark_all_present)
+            safe_connect(btn_all.clicked, self._mark_all_present)
 
         # 4. Render trang trong (cho user chon lop)
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAttendance')
@@ -5043,15 +5043,15 @@ class TeacherWindow(QtWidgets.QWidget):
 
         # btnExportStudents nam o headerBar va da o sat phai - khong day
         widen_search(page, 'txtSearchStudent', 280)
-        # filter + search
+        # filter + search - safe_connect tranh accumulation
         txt_s = page.findChild(QtWidgets.QLineEdit, 'txtSearchStudent')
         if txt_s:
-            txt_s.textChanged.connect(lambda t: table_filter(tbl, t, cols=[1, 2]))
+            safe_connect(txt_s.textChanged, lambda t: table_filter(tbl, t, cols=[1, 2]))
         if cbo:
-            cbo.currentIndexChanged.connect(lambda: self._filter_tea_students())
+            safe_connect(cbo.currentIndexChanged, lambda: self._filter_tea_students())
         btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportStudents')
         if btn_exp:
-            btn_exp.clicked.connect(lambda: export_table_csv(self, tbl, 'ds_hocvien.csv', 'Xuất danh sách học viên'))
+            safe_connect(btn_exp.clicked, lambda: export_table_csv(self, tbl, 'ds_hocvien.csv', 'Xuất danh sách học viên'))
 
     def _filter_tea_students(self):
         page = self.page_widgets[3]
@@ -5292,7 +5292,7 @@ class TeacherWindow(QtWidgets.QWidget):
             btn_sync.show()
         # cbo chon lop -> load students cua lop do
         if cbo:
-            cbo.currentIndexChanged.connect(lambda idx: self._tea_grades_render(tbl, cbo.currentText() if idx > 0 else None))
+            safe_connect(cbo.currentIndexChanged, lambda idx: self._tea_grades_render(tbl, cbo.currentText() if idx > 0 else None))
 
     def _sync_cc_from_attendance(self, tbl, cbo):
         """Fill cot Chuyen can (col 3) tu attendance_rate cua tung HV
@@ -5985,7 +5985,7 @@ class EmployeeWindow(QtWidgets.QWidget):
             cbo_c.addItem('-- Chọn môn học --')
             for code, name in MOCK_COURSES:
                 cbo_c.addItem(f'{code} - {name}')
-            cbo_c.currentIndexChanged.connect(self._emp_filter_classes)
+            safe_connect(cbo_c.currentIndexChanged, self._emp_filter_classes)
         cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboClassEmp')
         if cbo_cls:
             cbo_cls.clear()
@@ -6239,10 +6239,10 @@ class EmployeeWindow(QtWidgets.QWidget):
             tbl.setRowHeight(r, 36)
 
         widen_search(page, 'txtSearchReg', 300, ['cboRegStatus', 'cboRegDate'])
-        # search + filter + export
+        # search + filter + export - safe_connect tranh accumulation
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchReg')
         if txt:
-            txt.textChanged.connect(lambda t: table_filter(tbl, t, cols=[0, 2, 3]))
+            safe_connect(txt.textChanged, lambda t: table_filter(tbl, t, cols=[0, 2, 3]))
         cbo_st = page.findChild(QtWidgets.QComboBox, 'cboRegStatus')
         if cbo_st:
             cbo_st.clear()
@@ -6254,10 +6254,10 @@ class EmployeeWindow(QtWidgets.QWidget):
         for nm in ('cboRegStatus', 'cboRegDate'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda idx, n=nm: self._emp_filter_reg(n))
+                safe_connect(cbo.currentIndexChanged, lambda idx, n=nm: self._emp_filter_reg(n))
         btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportReg')
         if btn_exp:
-            btn_exp.clicked.connect(lambda: export_table_csv(self, tbl, 'danh_sach_dang_ky.csv', 'Xuất danh sách đăng ký'))
+            safe_connect(btn_exp.clicked, lambda: export_table_csv(self, tbl, 'danh_sach_dang_ky.csv', 'Xuất danh sách đăng ký'))
 
     def _emp_filter_reg(self, which):
         page = self.page_widgets[2]
@@ -6338,16 +6338,16 @@ class EmployeeWindow(QtWidgets.QWidget):
             tbl.setRowHeight(r, 40)
         tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
 
-        # buttons
+        # buttons - safe_connect tranh accumulation
         btn_p = page.findChild(QtWidgets.QPushButton, 'btnConfirmPay')
         if btn_p:
-            btn_p.clicked.connect(lambda: self._emp_confirm_pay(tbl))
+            safe_connect(btn_p.clicked, lambda: self._emp_confirm_pay(tbl))
         btn_r = page.findChild(QtWidgets.QPushButton, 'btnPrintReceipt')
         if btn_r:
-            btn_r.clicked.connect(lambda: self._emp_print_receipt(tbl))
+            safe_connect(btn_r.clicked, lambda: self._emp_print_receipt(tbl))
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchPay')
         if txt:
-            txt.textChanged.connect(lambda t: table_filter(tbl, t, cols=[0, 1]))
+            safe_connect(txt.textChanged, lambda t: table_filter(tbl, t, cols=[0, 1]))
 
     def _emp_confirm_pay(self, tbl):
         rows = tbl.selectionModel().selectedRows() if tbl else []
@@ -6620,10 +6620,10 @@ class EmployeeWindow(QtWidgets.QWidget):
         tbl.verticalHeader().setVisible(False)
 
         widen_search(page, 'txtSearchEmpCls', 290, ['cboEmpClsCourse', 'cboEmpClsStatus'])
-        # search + filter
+        # search + filter - safe_connect tranh accumulation
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchEmpCls')
         if txt:
-            txt.textChanged.connect(lambda t: table_filter(tbl, t, cols=[0, 1, 2]))
+            safe_connect(txt.textChanged, lambda t: table_filter(tbl, t, cols=[0, 1, 2]))
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboEmpClsCourse')
         if cbo_c:
             cbo_c.clear()
@@ -6640,12 +6640,12 @@ class EmployeeWindow(QtWidgets.QWidget):
                 courses_for_cbo = list(MOCK_COURSES)
             for code, name in courses_for_cbo:
                 cbo_c.addItem(name)
-            cbo_c.currentIndexChanged.connect(lambda: self._emp_filter_cls())
+            safe_connect(cbo_c.currentIndexChanged, lambda: self._emp_filter_cls())
         cbo_s = page.findChild(QtWidgets.QComboBox, 'cboEmpClsStatus')
         if cbo_s:
             cbo_s.clear()
             cbo_s.addItems(['Tất cả trạng thái', 'Còn chỗ', 'Đầy'])
-            cbo_s.currentIndexChanged.connect(lambda: self._emp_filter_cls())
+            safe_connect(cbo_s.currentIndexChanged, lambda: self._emp_filter_cls())
 
     def _emp_filter_cls(self):
         page = self.page_widgets[4]
