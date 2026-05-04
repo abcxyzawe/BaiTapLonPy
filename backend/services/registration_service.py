@@ -64,7 +64,7 @@ class RegistrationService:
 
     @staticmethod
     def cancel_registration(reg_id: int):
-        db.execute(
+        return db.execute(
             "UPDATE registrations SET trang_thai = 'cancelled' WHERE id = %s",
             (reg_id,)
         )

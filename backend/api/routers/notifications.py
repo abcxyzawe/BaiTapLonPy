@@ -1,5 +1,5 @@
 """Notifications router."""
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from backend.api.schemas import NotificationSend
 from backend.services.notification_service import NotificationService
@@ -36,5 +36,7 @@ def send(req: NotificationSend):
 
 @router.delete('/{notif_id}')
 def delete(notif_id: int):
-    NotificationService.delete(notif_id)
+    affected = NotificationService.delete(notif_id)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Thông báo id={notif_id} không tồn tại')
     return {'status': 'deleted'}
