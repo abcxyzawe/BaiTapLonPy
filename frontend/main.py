@@ -2815,6 +2815,7 @@ class AdminWindow(QtWidgets.QWidget):
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
         data = None
+        cur_ids = []  # song song voi data, luu DB id de update chinh xac
         if DB_AVAILABLE:
             try:
                 if not CurriculumService: raise RuntimeError("CurriculumService chua co")
@@ -2830,8 +2831,11 @@ class AdminWindow(QtWidgets.QWidget):
                         c.get('hoc_ky_de_nghi', '') or '—',
                         c.get('mon_tien_quyet') or '—',
                     ])
+                    cur_ids.append(c.get('id'))
             except Exception as e:
                 print(f'[ADM_CURR] DB loi: {e}')
+        # Cache cur_ids vao instance attr de _admin_edit_curriculum dung
+        self._curr_ids = cur_ids
         if not data:
             data = [
                 ['1', 'IT001', 'Nhập môn lập trình', '3', 'Bắt buộc', 'HK1', '—'],
@@ -2911,7 +2915,7 @@ class AdminWindow(QtWidgets.QWidget):
                 cell, (btn_edit, btn_del) = make_action_cell([('Sửa', 'navy'), ('Xóa', 'red')])
                 tbl.setCellWidget(r, 8, cell)
                 btn_edit.clicked.connect(lambda ch, rr=r: self._admin_edit_curriculum(rr))
-                btn_del.clicked.connect(lambda ch, ma=row[1], nm=row[2], t=tbl: self._admin_del_row(t, ma, nm, 'môn trong CT'))
+                btn_del.clicked.connect(lambda ch, rr=r, nm=row[2], t=tbl: self._admin_del_curriculum(rr, nm, t))
             # tang cot Hoc ky tu 48 -> 70 cho "Hoc ky X" hien thi du
             for c, cw in enumerate([32, 65, 150, 28, 90, 70, 95, 90, 130]):
                 tbl.setColumnWidth(c, cw)
@@ -3005,18 +3009,15 @@ class AdminWindow(QtWidgets.QWidget):
         if not (DB_AVAILABLE and CurriculumService):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
+        # Lay cur_id tu cache theo row_idx (chinh xac, khong lookup by ma_mon
+        # vi co the dup row trong khung CT)
+        cur_ids = getattr(self, '_curr_ids', [])
+        if row_idx >= len(cur_ids) or not cur_ids[row_idx]:
+            msg_warn(self, 'Lỗi', 'Không xác định được id môn để cập nhật. '
+                                  'Vui lòng đóng dialog, F5 lại trang rồi thử lại.')
+            return
+        cur_id = cur_ids[row_idx]
         try:
-            # find cur_id by ma_mon (CHUNG voi ma_mon goc cur[1] truoc khi user sua)
-            from_curr = CurriculumService.get_all() or []
-            old_ma = cur[1]
-            cur_id = None
-            for cc in from_curr:
-                if cc.get('ma_mon') == old_ma:
-                    cur_id = cc.get('id')
-                    break
-            if not cur_id:
-                msg_warn(self, 'Không tìm thấy', f'Không tìm thấy môn {old_ma} trong khung CT.')
-                return
             type_to_db = {'Bắt buộc': 'Bat buoc', 'Tự chọn': 'Tu chon', 'Đại cương': 'Dai cuong'}
             CurriculumService.update(cur_id,
                 ma_mon=new_vals[1],
@@ -3037,6 +3038,33 @@ class AdminWindow(QtWidgets.QWidget):
                 it.setForeground(QColor(type_colors.get(v, COLORS['text_mid'])))
             tbl.setItem(row_idx, c, it)
         msg_info(self, 'Thành công', f'Đã cập nhật môn {txt_code.text()} - {txt_name.text()}')
+
+    def _admin_del_curriculum(self, row_idx, ten_mon, tbl):
+        """Xoa muc khung CT theo cur_id (tu cache _curr_ids[row_idx]).
+        Khong dung _admin_del_row vi cot 0 la STT (so), khong phai ma_mon.
+        Dac biet quan trong khi co duplicate ma_mon trong khung CT."""
+        cur_ids = getattr(self, '_curr_ids', [])
+        if row_idx >= len(cur_ids) or not cur_ids[row_idx]:
+            msg_warn(self, 'Lỗi', 'Không xác định được id môn để xóa.')
+            return
+        cur_id = cur_ids[row_idx]
+        ma_mon_display = tbl.item(row_idx, 1).text() if tbl.item(row_idx, 1) else f'#{cur_id}'
+        if not msg_confirm(self, 'Xác nhận xóa', f'Xóa môn {ma_mon_display} - {ten_mon} khỏi khung CT?'):
+            return
+        if not (DB_AVAILABLE and CurriculumService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        try:
+            CurriculumService.delete(cur_id)
+        except Exception as e:
+            print(f'[ADM_DEL_CURR] id={cur_id} loi: {e}')
+            msg_warn(self, 'Không xóa được', api_error_msg(e))
+            return
+        # DB OK -> re-fill bang
+        self.pages_filled[7] = False
+        self._fill_admin_curriculum()
+        self.pages_filled[7] = True
+        msg_info(self, 'Đã xóa', f'Đã xóa môn {ma_mon_display} - {ten_mon}')
 
     def _admin_add_curriculum(self):
         page = self.page_widgets[7]
