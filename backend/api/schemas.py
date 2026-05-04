@@ -99,10 +99,10 @@ class GradeSave(BaseModel):
 
 # ===== Notifications =====
 class NotificationSend(BaseModel):
-    tu_id: int
-    tieu_de: str
-    noi_dung: str
-    den_lop: Optional[str] = None
+    tu_id: int = Field(..., gt=0)
+    tieu_de: str = Field(..., min_length=1, max_length=200)
+    noi_dung: str = Field(..., min_length=1, max_length=5000)
+    den_lop: Optional[str] = Field(None, max_length=30)
     loai: NotificationType = 'info'
 
 
@@ -179,12 +179,12 @@ class ReviewSubmit(BaseModel):
 
 # ===== Semesters =====
 class SemesterCreate(BaseModel):
-    sem_id: str
-    ten: str
-    nam_hoc: str
+    sem_id: str = Field(..., min_length=3, max_length=20)
+    ten: str = Field(..., min_length=2, max_length=50)
+    nam_hoc: str = Field(..., min_length=4, max_length=20)
     bat_dau: date
     ket_thuc: date
-    trang_thai: str = 'closed'
+    trang_thai: str = Field('closed', max_length=20)
 
 
 class SemesterStatusUpdate(BaseModel):
@@ -193,50 +193,50 @@ class SemesterStatusUpdate(BaseModel):
 
 # ===== Curriculum =====
 class CurriculumCreate(BaseModel):
-    ma_mon: str
-    tin_chi: int
-    loai: str
-    hoc_ky_de_nghi: Optional[str] = None
-    mon_tien_quyet: Optional[str] = None
-    nganh: str = 'CNTT'
-    ghi_chu: Optional[str] = None
+    ma_mon: str = Field(..., min_length=1, max_length=20)
+    tin_chi: int = Field(..., ge=1, le=10)
+    loai: str = Field(..., min_length=1, max_length=20)
+    hoc_ky_de_nghi: Optional[str] = Field(None, max_length=10)
+    mon_tien_quyet: Optional[str] = Field(None, max_length=200)
+    nganh: str = Field('CNTT', max_length=50)
+    ghi_chu: Optional[str] = Field(None, max_length=500)
 
 
 class CurriculumUpdate(BaseModel):
-    ma_mon: Optional[str] = None
-    tin_chi: Optional[int] = None
-    loai: Optional[str] = None
-    hoc_ky_de_nghi: Optional[str] = None
-    mon_tien_quyet: Optional[str] = None
-    nganh: Optional[str] = None
-    ghi_chu: Optional[str] = None
+    ma_mon: Optional[str] = Field(None, min_length=1, max_length=20)
+    tin_chi: Optional[int] = Field(None, ge=1, le=10)
+    loai: Optional[str] = Field(None, min_length=1, max_length=20)
+    hoc_ky_de_nghi: Optional[str] = Field(None, max_length=10)
+    mon_tien_quyet: Optional[str] = Field(None, max_length=200)
+    nganh: Optional[str] = Field(None, max_length=50)
+    ghi_chu: Optional[str] = Field(None, max_length=500)
 
 
 # ===== Schedules =====
 class ScheduleCreate(BaseModel):
-    lop_id: str
+    lop_id: str = Field(..., min_length=1, max_length=30)
     ngay: date
     gio_bat_dau: time
     gio_ket_thuc: time
-    phong: Optional[str] = None
-    buoi_so: Optional[int] = None
-    noi_dung: Optional[str] = None
-    thu: Optional[int] = None
-    trang_thai: str = 'scheduled'
+    phong: Optional[str] = Field(None, max_length=20)
+    buoi_so: Optional[int] = Field(None, ge=1, le=200)
+    noi_dung: Optional[str] = Field(None, max_length=500)
+    thu: Optional[int] = Field(None, ge=2, le=8)
+    trang_thai: str = Field('scheduled', max_length=20)
 
 
 # ===== Exams =====
 class ExamCreate(BaseModel):
-    lop_id: str
+    lop_id: str = Field(..., min_length=1, max_length=30)
     ngay_thi: date
-    ca_thi: str
-    phong: Optional[str] = None
-    hinh_thuc: str = 'Tu luan'
-    semester_id: Optional[str] = None
+    ca_thi: str = Field(..., min_length=1, max_length=50)
+    phong: Optional[str] = Field(None, max_length=20)
+    hinh_thuc: str = Field('Tu luan', max_length=20)
+    semester_id: Optional[str] = Field(None, max_length=20)
     gio_bat_dau: Optional[time] = None
     gio_ket_thuc: Optional[time] = None
-    so_cau: Optional[int] = None
-    thoi_gian_phut: int = 90
+    so_cau: Optional[int] = Field(None, ge=1, le=500)
+    thoi_gian_phut: int = Field(90, ge=15, le=300)
 
 
 # ===== Attendance =====
