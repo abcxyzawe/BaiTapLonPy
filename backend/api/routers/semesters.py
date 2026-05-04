@@ -1,5 +1,5 @@
 """Semesters router."""
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from backend.api.schemas import SemesterCreate, SemesterStatusUpdate
 from backend.services.semester_service import SemesterService
@@ -19,7 +19,10 @@ def current():
 
 @router.get('/{sem_id}')
 def get(sem_id: str):
-    return SemesterService.get(sem_id)
+    row = SemesterService.get(sem_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f'Học kỳ {sem_id} không tồn tại')
+    return row
 
 
 @router.post('')
@@ -31,11 +34,15 @@ def create(req: SemesterCreate):
 
 @router.patch('/{sem_id}/status')
 def set_status(sem_id: str, req: SemesterStatusUpdate):
-    SemesterService.set_status(sem_id, req.trang_thai)
+    affected = SemesterService.set_status(sem_id, req.trang_thai)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Học kỳ {sem_id} không tồn tại')
     return {'status': 'ok'}
 
 
 @router.delete('/{sem_id}')
 def delete(sem_id: str):
-    SemesterService.delete(sem_id)
+    affected = SemesterService.delete(sem_id)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Học kỳ {sem_id} không tồn tại')
     return {'status': 'deleted'}

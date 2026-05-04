@@ -31,7 +31,9 @@ def create_course(req: CourseCreate):
 
 @router.put('/courses/{ma_mon}')
 def update_course(ma_mon: str, req: CourseUpdate):
-    CourseService.update_course(ma_mon, ten_mon=req.ten_mon, mo_ta=req.mo_ta)
+    affected = CourseService.update_course(ma_mon, ten_mon=req.ten_mon, mo_ta=req.mo_ta)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Khóa học {ma_mon} không tồn tại')
     return {'status': 'ok'}
 
 
@@ -85,7 +87,9 @@ def create_class(req: ClassCreate):
 @router.put('/classes/{ma_lop}')
 def update_class(ma_lop: str, req: ClassUpdate):
     fields = req.model_dump(exclude_none=True)
-    CourseService.update_class(ma_lop, **fields)
+    affected = CourseService.update_class(ma_lop, **fields)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Lớp {ma_lop} không tồn tại')
     return {'status': 'ok'}
 
 

@@ -86,15 +86,17 @@ class CourseService:
 
     @staticmethod
     def update_course(ma_mon: str, ten_mon: str = None, mo_ta: str = None):
+        """Return rowcount - 0 = course khong ton tai."""
         pairs, values = [], []
         if ten_mon is not None:
             pairs.append('ten_mon = %s'); values.append(ten_mon)
         if mo_ta is not None:
             pairs.append('mo_ta = %s'); values.append(mo_ta)
         if not pairs:
-            return
+            row = db.fetch_one("SELECT 1 FROM courses WHERE ma_mon = %s", (ma_mon,))
+            return 1 if row else 0
         values.append(ma_mon)
-        db.execute(f"UPDATE courses SET {', '.join(pairs)} WHERE ma_mon = %s", tuple(values))
+        return db.execute(f"UPDATE courses SET {', '.join(pairs)} WHERE ma_mon = %s", tuple(values))
 
     @staticmethod
     def delete_course(ma_mon: str):
@@ -117,6 +119,7 @@ class CourseService:
 
     @staticmethod
     def update_class(ma_lop: str, **fields):
+        """Return rowcount - 0 = lop khong ton tai."""
         allowed = {'ma_mon', 'gv_id', 'semester_id', 'lich', 'phong',
                    'siso_max', 'siso_hien_tai', 'gia', 'trang_thai',
                    'ngay_bat_dau', 'ngay_ket_thuc', 'so_buoi'}
@@ -125,9 +128,10 @@ class CourseService:
             if k in allowed:
                 pairs.append(f'{k} = %s'); values.append(v)
         if not pairs:
-            return
+            row = db.fetch_one("SELECT 1 FROM classes WHERE ma_lop = %s", (ma_lop,))
+            return 1 if row else 0
         values.append(ma_lop)
-        db.execute(f"UPDATE classes SET {', '.join(pairs)} WHERE ma_lop = %s", tuple(values))
+        return db.execute(f"UPDATE classes SET {', '.join(pairs)} WHERE ma_lop = %s", tuple(values))
 
     @staticmethod
     def delete_class(ma_lop: str):
