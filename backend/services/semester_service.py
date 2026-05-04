@@ -32,12 +32,12 @@ class SemesterService:
 
     @staticmethod
     def set_status(sem_id: str, trang_thai: str):
-        """Mo / dong dang ky mot HK"""
-        db.execute(
+        """Mo / dong dang ky mot HK. Return rowcount - 0 = sem khong ton tai."""
+        return db.execute(
             "UPDATE semesters SET trang_thai = %s WHERE id = %s",
             (trang_thai, sem_id)
         )
 
     @staticmethod
     def delete(sem_id: str):
-        db.execute("DELETE FROM semesters WHERE id = %s", (sem_id,))
+        return db.execute("DELETE FROM semesters WHERE id = %s", (sem_id,))

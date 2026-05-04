@@ -1,7 +1,7 @@
 """Curriculum router."""
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from backend.api.schemas import CurriculumCreate, CurriculumUpdate
 from backend.services.curriculum_service import CurriculumService
@@ -16,7 +16,10 @@ def list_all(nganh: Optional[str] = None):
 
 @router.get('/{cur_id}')
 def get(cur_id: int):
-    return CurriculumService.get(cur_id)
+    row = CurriculumService.get(cur_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f'Mục lộ trình id={cur_id} không tồn tại')
+    return row
 
 
 @router.post('')
@@ -32,13 +35,17 @@ def create(req: CurriculumCreate):
 @router.put('/{cur_id}')
 def update(cur_id: int, req: CurriculumUpdate):
     fields = req.model_dump(exclude_none=True)
-    CurriculumService.update(cur_id, **fields)
+    affected = CurriculumService.update(cur_id, **fields)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Mục lộ trình id={cur_id} không tồn tại')
     return {'status': 'ok'}
 
 
 @router.delete('/{cur_id}')
 def delete(cur_id: int):
-    CurriculumService.delete(cur_id)
+    affected = CurriculumService.delete(cur_id)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Mục lộ trình id={cur_id} không tồn tại')
     return {'status': 'deleted'}
 
 

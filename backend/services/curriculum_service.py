@@ -43,7 +43,7 @@ class CurriculumService:
 
     @staticmethod
     def update(cur_id: int, **fields):
-        """Cap nhat partial - chi cac field truyen vao"""
+        """Cap nhat partial - return rowcount, 0 = khong ton tai."""
         allowed = {'ma_mon', 'tin_chi', 'loai', 'hoc_ky_de_nghi',
                    'mon_tien_quyet', 'nganh', 'ghi_chu'}
         pairs = []
@@ -53,13 +53,14 @@ class CurriculumService:
                 pairs.append(f'{k} = %s')
                 values.append(v)
         if not pairs:
-            return
+            row = db.fetch_one("SELECT 1 FROM curriculum WHERE id = %s", (cur_id,))
+            return 1 if row else 0
         values.append(cur_id)
-        db.execute(f"UPDATE curriculum SET {', '.join(pairs)} WHERE id = %s", tuple(values))
+        return db.execute(f"UPDATE curriculum SET {', '.join(pairs)} WHERE id = %s", tuple(values))
 
     @staticmethod
     def delete(cur_id: int):
-        db.execute("DELETE FROM curriculum WHERE id = %s", (cur_id,))
+        return db.execute("DELETE FROM curriculum WHERE id = %s", (cur_id,))
 
     # ===== Cac method nghiep vu - lien ket khung CT voi grades + classes =====
     @staticmethod
