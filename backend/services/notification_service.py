@@ -61,4 +61,4 @@ class NotificationService:
 
     @staticmethod
     def delete(notif_id: int):
-        db.execute("DELETE FROM notifications WHERE id = %s", (notif_id,))
+        return db.execute("DELETE FROM notifications WHERE id = %s", (notif_id,))

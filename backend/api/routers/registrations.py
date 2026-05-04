@@ -1,5 +1,5 @@
 """Registrations + payments router."""
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from backend.api.schemas import PaymentRequest, RegisterRequest
 from backend.services.registration_service import RegistrationService
@@ -43,5 +43,7 @@ def confirm_payment(reg_id: int, req: PaymentRequest):
 
 @router.delete('/{reg_id}')
 def cancel(reg_id: int):
-    RegistrationService.cancel_registration(reg_id)
+    affected = RegistrationService.cancel_registration(reg_id)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Đăng ký id={reg_id} không tồn tại')
     return {'status': 'cancelled'}
