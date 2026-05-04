@@ -103,7 +103,9 @@ def delete_class(ma_lop: str):
 
 @router.patch('/classes/{ma_lop}/price')
 def update_class_price(ma_lop: str, req: ClassPriceUpdate):
-    CourseService.update_class_price(ma_lop, req.gia)
+    affected = CourseService.update_class_price(ma_lop, req.gia)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Lớp {ma_lop} không tồn tại')
     return {'status': 'ok'}
 
 

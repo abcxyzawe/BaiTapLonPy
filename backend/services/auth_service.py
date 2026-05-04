@@ -83,9 +83,9 @@ class AuthService:
 
     @staticmethod
     def change_password(user_id: int, new_password: str):
-        """doi mk (hash bang sha256)"""
+        """doi mk (hash bang sha256). Return rowcount - 0 = user khong ton tai."""
         from backend.utils.hash_util import hash_password
-        db.execute(
+        return db.execute(
             "UPDATE users SET password = %s WHERE id = %s",
             (hash_password(new_password), user_id)
         )
