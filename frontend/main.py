@@ -1759,7 +1759,7 @@ class MainWindow(QtWidgets.QWidget):
 
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
-        dlg.setWindowTitle('Tiến độ học lộ trình học - Ngành CNTT')
+        dlg.setWindowTitle('Tiến độ lộ trình học - Ngành CNTT')
         dlg.setFixedSize(720, 580)
         lay = QtWidgets.QVBoxLayout(dlg)
         lay.setContentsMargins(20, 18, 20, 18)
