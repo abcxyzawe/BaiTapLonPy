@@ -31,7 +31,7 @@
     <widget class="QLabel" name="lblSemester">
      <property name="geometry"><rect><x>600</x><y>0</y><width>245</width><height>56</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #4a5568; font-size: 12px; background: transparent;</string></property>
-     <property name="text"><string>Học kỳ 2 - Năm học 2025-2026</string></property>
+     <property name="text"><string>Khóa học ngoại khoá EAUT</string></property>
      <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
     </widget>
    </widget>

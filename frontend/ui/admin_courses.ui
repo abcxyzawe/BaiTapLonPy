@@ -259,7 +259,7 @@ QTableWidget QTableCornerButton::section {
      <attribute name="verticalHeaderVisible"><bool>false</bool></attribute>
      <column><property name="text"><string>Mã KH</string></property></column>
      <column><property name="text"><string>Tên khóa học</string></property></column>
-     <column><property name="text"><string>TC</string></property></column>
+     <column><property name="text"><string>Số buổi</string></property></column>
      <column><property name="text"><string>Giảng viên</string></property></column>
      <column><property name="text"><string>Lịch học</string></property></column>
      <column><property name="text"><string>Sĩ số</string></property></column>

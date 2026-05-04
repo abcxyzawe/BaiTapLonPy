@@ -53,18 +53,45 @@ class Database:
 
     @contextmanager
     def cursor(self, dict_cursor=True):
-        """context manager voi auto-commit / rollback"""
-        conn = self.connect()
+        """context manager voi auto-commit / rollback + auto-retry 1 lan
+        khi conn bi closed/broken (vd PG restart, network blip).
+
+        Phan biet 2 loai loi:
+        - OperationalError/InterfaceError ngay khi mo cursor -> conn dead -> reset + retry
+        - Loi trong block 'with' -> rollback + raise (khong retry, vi user code co the gay loi)
+        """
         cur_factory = psycopg2.extras.RealDictCursor if dict_cursor else None
-        cur = conn.cursor(cursor_factory=cur_factory)
+
+        # Step 1: get a usable cursor (retry 1 lan neu conn dead)
+        try:
+            conn = self.connect()
+            cur = conn.cursor(cursor_factory=cur_factory)
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+            # Conn da chet -> reset va connect lai 1 lan
+            print(f'[DB] conn dead, retry 1x: {str(e)[:100]}')
+            self._conn = None
+            self._connected = False
+            conn = self.connect()
+            cur = conn.cursor(cursor_factory=cur_factory)
+
+        # Step 2: chay user code, commit/rollback nhu cu
         try:
             yield cur
             conn.commit()
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+            # Conn chet giua chung -> rollback se fail, chap nhan + reset conn
+            try: conn.rollback()
+            except Exception: pass
+            self._conn = None
+            self._connected = False
+            print(f'[DB] conn lost mid-query, will reconnect next call: {str(e)[:100]}')
+            raise
         except Exception:
             conn.rollback()
             raise
         finally:
-            cur.close()
+            try: cur.close()
+            except Exception: pass
 
     def fetch_all(self, sql: str, params=None):
         with self.cursor() as cur:

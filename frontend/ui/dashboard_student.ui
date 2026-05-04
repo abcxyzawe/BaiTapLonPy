@@ -165,7 +165,7 @@
     <widget class="QLabel" name="lblSemester">
      <property name="geometry"><rect><x>500</x><y>0</y><width>350</width><height>56</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
-     <property name="text"><string>Học kỳ 2 - Năm học 2025-2026</string></property>
+     <property name="text"><string>Khóa học ngoại khoá EAUT</string></property>
      <property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property>
     </widget>
    </widget>
@@ -187,7 +187,7 @@
     <widget class="QLabel" name="lblProgressLabel">
      <property name="geometry"><rect><x>20</x><y>36</y><width>200</width><height>14</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #718096; font-size: 11px; background: transparent;</string></property>
-     <property name="text"><string>Đã đăng ký 15 / 25 tín chỉ</string></property>
+     <property name="text"><string>Đã học 0 / 0 buổi</string></property>
     </widget>
 
     <widget class="QProgressBar" name="progressCredits">
@@ -198,7 +198,7 @@
        QProgressBar::chunk { background: #002060; border-radius: 2px; }
       </string>
      </property>
-     <property name="value"><number>60</number></property>
+     <property name="value"><number>0</number></property>
      <property name="textVisible"><bool>false</bool></property>
     </widget>
    </widget>
@@ -215,7 +215,7 @@
      <property name="text"><string/></property>
     </widget>
     <widget class="QLabel" name="iconStat1Img">
-     <property name="geometry"><rect><x>29</x><y>31</y><width>20</width><height>20</height></rect></property>
+     <property name="geometry"><rect><x>27</x><y>29</y><width>24</width><height>24</height></rect></property>
      <property name="styleSheet"><string notr="true">background: transparent;</string></property>
      <property name="text"><string/></property>
      <property name="scaledContents"><bool>true</bool></property>
@@ -223,7 +223,7 @@
     <widget class="QLabel" name="lblStatCourses">
      <property name="geometry"><rect><x>72</x><y>14</y><width>170</width><height>30</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 24px; font-weight: bold; background: transparent;</string></property>
-     <property name="text"><string>5</string></property>
+     <property name="text"><string>—</string></property>
     </widget>
     <widget class="QLabel" name="lblStatCoursesLabel">
      <property name="geometry"><rect><x>72</x><y>48</y><width>170</width><height>18</height></rect></property>
@@ -243,7 +243,7 @@
      <property name="text"><string/></property>
     </widget>
     <widget class="QLabel" name="iconStat2Img">
-     <property name="geometry"><rect><x>29</x><y>31</y><width>20</width><height>20</height></rect></property>
+     <property name="geometry"><rect><x>27</x><y>29</y><width>24</width><height>24</height></rect></property>
      <property name="styleSheet"><string notr="true">background: transparent;</string></property>
      <property name="text"><string/></property>
      <property name="scaledContents"><bool>true</bool></property>
@@ -271,7 +271,7 @@
      <property name="text"><string/></property>
     </widget>
     <widget class="QLabel" name="iconStat3Img">
-     <property name="geometry"><rect><x>29</x><y>31</y><width>20</width><height>20</height></rect></property>
+     <property name="geometry"><rect><x>27</x><y>29</y><width>24</width><height>24</height></rect></property>
      <property name="styleSheet"><string notr="true">background: transparent;</string></property>
      <property name="text"><string/></property>
      <property name="scaledContents"><bool>true</bool></property>

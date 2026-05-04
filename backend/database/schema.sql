@@ -238,7 +238,7 @@ CREATE TABLE curriculum (
     tin_chi         INTEGER NOT NULL DEFAULT 3 CHECK (tin_chi > 0),
     loai            VARCHAR(20) NOT NULL
                     CHECK (loai IN ('Bat buoc', 'Tu chon', 'Dai cuong')),
-    hoc_ky_de_nghi  VARCHAR(10),                        -- 'HK1'..'HK8'
+    hoc_ky_de_nghi  VARCHAR(30),                        -- ten dot khoa hoc, vd 'HK1'/'Dot 1'/'Mua he 2026'
     mon_tien_quyet  VARCHAR(200),                        -- 'IT001, MA001' hoac ''
     nganh           VARCHAR(50) NOT NULL DEFAULT 'CNTT', -- 'CNTT', 'Toan', 'Ngoai ngu'
     ghi_chu         TEXT,

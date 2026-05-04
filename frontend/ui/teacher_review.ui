@@ -33,8 +33,7 @@
     </widget>
     <widget name="cboSemesterReview" class="QComboBox">
      <property name="geometry"><rect><x>600</x><y>12</y><width>240</width><height>32</height></rect></property>
-     <item><property name="text"><string>HK2 - Năm học 2025-2026</string></property></item>
-     <item><property name="text"><string>HK1 - Năm học 2025-2026</string></property></item>
+     <item><property name="text"><string>Tất cả khóa học</string></property></item>
     </widget>
    </widget>
 

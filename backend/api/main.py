@@ -81,6 +81,42 @@ _FK_MESSAGES = {
         'on_delete': 'Lớp này đã có điểm. Xóa sẽ mất dữ liệu điểm.',
         'on_insert': 'Lớp không tồn tại trong hệ thống.',
     },
+    'grades_hv_id_fkey': {
+        'on_insert': 'Học viên không tồn tại trong hệ thống.',
+    },
+    'grades_gv_nhap_fkey': {
+        'on_insert': 'Giảng viên nhập điểm không tồn tại.',
+    },
+    'attendance_schedule_id_fkey': {
+        'on_insert': 'Buổi học (schedule) không tồn tại.',
+    },
+    'attendance_hv_id_fkey': {
+        'on_insert': 'Học viên không tồn tại.',
+    },
+    'attendance_recorded_by_fkey': {
+        'on_insert': 'Người điểm danh không tồn tại trong hệ thống.',
+    },
+    'payments_reg_id_fkey': {
+        'on_insert': 'Đăng ký không tồn tại để ghi nhận thanh toán.',
+    },
+    'payments_nv_thu_fkey': {
+        'on_insert': 'Nhân viên thu tiền không tồn tại.',
+    },
+    'notifications_tu_id_fkey': {
+        'on_insert': 'Người gửi thông báo không tồn tại.',
+    },
+    'notifications_den_lop_fkey': {
+        'on_insert': 'Lớp đích không tồn tại.',
+    },
+    'schedules_lop_id_fkey': {
+        'on_insert': 'Lớp không tồn tại để tạo lịch học.',
+    },
+    'exam_schedules_lop_id_fkey': {
+        'on_insert': 'Lớp không tồn tại để tạo lịch thi.',
+    },
+    'exam_schedules_semester_id_fkey': {
+        'on_insert': 'Học kỳ không tồn tại.',
+    },
     'curriculum_ma_mon_fkey': {
         'on_delete': 'Môn này đang trong khung chương trình.',
         'on_insert': 'Mã môn không tồn tại trong hệ thống. Hãy thêm môn học trước khi đưa vào khung CT.',
@@ -108,7 +144,7 @@ _FK_MESSAGES = {
     'registrations_hv_id_fkey': {
         'on_insert': 'Học viên không tồn tại trong hệ thống.',
     },
-    'registrations_nv_dk_fkey': {
+    'registrations_nv_xu_ly_fkey': {
         'on_insert': 'Nhân viên đăng ký không tồn tại.',
     },
     'reviews_hv_id_fkey': {
@@ -189,3 +225,40 @@ def health():
         'api': 'ok',
         'db': 'connected' if db.is_connected() else 'down',
     }
+
+
+@app.get('/health/db', tags=['Health'])
+def health_db():
+    """DB-specific health: ping + version + table count + uptime."""
+    from backend.database.db import db
+    import time
+    out = {'connected': False}
+    t0 = time.perf_counter()
+    try:
+        # 1. Ping
+        ver_row = db.fetch_one('SELECT version() AS v')
+        out['connected'] = True
+        out['ping_ms'] = round((time.perf_counter() - t0) * 1000, 2)
+        if ver_row:
+            ver_str = str(ver_row.get('v', ''))
+            # Trich version PostgreSQL ngan gon (vd "PostgreSQL 16.2")
+            out['version'] = ver_str.split(' on ')[0] if ver_str else 'unknown'
+        # 2. Tables/rows count
+        try:
+            table_row = db.fetch_one(
+                "SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = 'public'"
+            )
+            out['public_tables'] = int(table_row['cnt']) if table_row else 0
+        except Exception:
+            out['public_tables'] = None
+        # 3. Active connections (de phat hien leak)
+        try:
+            conn_row = db.fetch_one(
+                "SELECT COUNT(*) AS cnt FROM pg_stat_activity WHERE datname = current_database()"
+            )
+            out['active_connections'] = int(conn_row['cnt']) if conn_row else 0
+        except Exception:
+            out['active_connections'] = None
+    except Exception as e:
+        out['error'] = str(e)[:200]
+    return out

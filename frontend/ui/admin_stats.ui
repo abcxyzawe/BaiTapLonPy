@@ -188,8 +188,6 @@ QComboBox QAbstractItemView {
   selection-color: #002060;
 }
      </string></property>
-     <item><property name="text"><string>HK2 - 2025-2026</string></property></item>
-     <item><property name="text"><string>HK1 - 2025-2026</string></property></item>
     </widget>
    </widget>
 
@@ -295,7 +293,7 @@ QHeaderView::section {
      <property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property>
      <property name="columnCount"><number>3</number></property>
      <column><property name="text"><string>Khoa</string></property></column>
-     <column><property name="text"><string>Số SV</string></property></column>
+     <column><property name="text"><string>Số HV</string></property></column>
      <column><property name="text"><string>Tỷ lệ</string></property></column>
     </widget>
    </widget>
@@ -348,8 +346,8 @@ QHeaderView::section {
      <property name="columnCount"><number>4</number></property>
      <column><property name="text"><string>Lớp</string></property></column>
      <column><property name="text"><string>Sĩ số</string></property></column>
-     <column><property name="text"><string>TB khóa học/SV</string></property></column>
-     <column><property name="text"><string>Tổng TC đăng ký</string></property></column>
+     <column><property name="text"><string>Điểm TB lớp</string></property></column>
+     <column><property name="text"><string>Doanh thu (đ)</string></property></column>
     </widget>
    </widget>
   </widget>

@@ -63,15 +63,7 @@
     </widget>
     <widget name="cboHocKy" class="QComboBox">
      <property name="geometry"><rect><x>500</x><y>10</y><width>160</width><height>30</height></rect></property>
-     <item><property name="text"><string>Tất cả học kỳ</string></property></item>
-     <item><property name="text"><string>Học kỳ 1</string></property></item>
-     <item><property name="text"><string>Học kỳ 2</string></property></item>
-     <item><property name="text"><string>Học kỳ 3</string></property></item>
-     <item><property name="text"><string>Học kỳ 4</string></property></item>
-     <item><property name="text"><string>Học kỳ 5</string></property></item>
-     <item><property name="text"><string>Học kỳ 6</string></property></item>
-     <item><property name="text"><string>Học kỳ 7</string></property></item>
-     <item><property name="text"><string>Học kỳ 8</string></property></item>
+     <item><property name="text"><string>Tất cả đợt</string></property></item>
     </widget>
     <widget name="cboLoai" class="QComboBox">
      <property name="geometry"><rect><x>680</x><y>10</y><width>160</width><height>30</height></rect></property>
@@ -109,11 +101,11 @@
      <property name="showGrid"><bool>false</bool></property>
      <property name="columnCount"><number>8</number></property>
      <column><property name="text"><string>STT</string></property></column>
-     <column><property name="text"><string>Mã HP</string></property></column>
-     <column><property name="text"><string>Tên học phần</string></property></column>
-     <column><property name="text"><string>TC</string></property></column>
+     <column><property name="text"><string>Mã KH</string></property></column>
+     <column><property name="text"><string>Tên khóa học</string></property></column>
+     <column><property name="text"><string>Số buổi</string></property></column>
      <column><property name="text"><string>Loại</string></property></column>
-     <column><property name="text"><string>Học kỳ</string></property></column>
+     <column><property name="text"><string>Đợt</string></property></column>
      <column><property name="text"><string>Tiên quyết</string></property></column>
      <column><property name="text"><string>Thao tác</string></property></column>
     </widget>

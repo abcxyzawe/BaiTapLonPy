@@ -6,21 +6,22 @@ class StatsService:
 
     @staticmethod
     def admin_overview():
-        """4 stat card chinh cho admin dashboard"""
-        total_students = db.fetch_one("SELECT COUNT(*) AS c FROM students")['c']
-        total_classes = db.fetch_one(
-            "SELECT COUNT(*) AS c FROM classes WHERE trang_thai IN ('open', 'full')"
-        )['c']
-        total_regs = db.fetch_one("SELECT COUNT(*) AS c FROM registrations")['c']
-        cur_sem_row = db.fetch_one(
-            "SELECT id, ten FROM semesters WHERE trang_thai = 'open' LIMIT 1"
-        )
-        current_sem = cur_sem_row['id'] if cur_sem_row else 'HK2'
+        """4 stat card chinh cho admin dashboard.
+
+        Optimize: 1 query voi sub-select thay 4 round-trip db. Latency 4x->1x.
+        """
+        row = db.fetch_one("""
+            SELECT
+              (SELECT COUNT(*) FROM students) AS total_students,
+              (SELECT COUNT(*) FROM classes WHERE trang_thai IN ('open', 'full')) AS total_classes,
+              (SELECT COUNT(*) FROM registrations) AS total_registrations,
+              (SELECT id FROM semesters WHERE trang_thai = 'open' LIMIT 1) AS current_semester
+        """) or {}
         return dict(
-            total_students=total_students,
-            total_classes=total_classes,
-            total_registrations=total_regs,
-            current_semester=current_sem,
+            total_students=row.get('total_students', 0) or 0,
+            total_classes=row.get('total_classes', 0) or 0,
+            total_registrations=row.get('total_registrations', 0) or 0,
+            current_semester=row.get('current_semester') or 'HK2',
         )
 
     @staticmethod
@@ -133,29 +134,26 @@ class StatsService:
     # ===== Employee dashboard =====
     @staticmethod
     def employee_today(emp_id: int):
-        """stat card cho NV: dang ky hom nay / da TT / cho TT / doanh thu"""
-        today_reg = db.fetch_one(
-            """SELECT COUNT(*) AS c
-                 FROM registrations
-                WHERE DATE(ngay_dk) = CURRENT_DATE
-                  AND nv_xu_ly = %s""",
-            (emp_id,)
-        )
-        today_pay = db.fetch_one(
-            """SELECT COUNT(*) AS c, COALESCE(SUM(so_tien), 0) AS tong
-                 FROM payments
-                WHERE DATE(ngay_thu) = CURRENT_DATE
-                  AND nv_thu = %s""",
-            (emp_id,)
-        )
-        pending = db.fetch_one(
-            "SELECT COUNT(*) AS c FROM registrations WHERE trang_thai = 'pending_payment'"
-        )
+        """stat card cho NV: dang ky hom nay / da TT / cho TT / doanh thu
+
+        Optimize: 3 query -> 1 sub-select query (giam 3x round-trip DB).
+        """
+        row = db.fetch_one("""
+            SELECT
+              (SELECT COUNT(*) FROM registrations
+                WHERE DATE(ngay_dk) = CURRENT_DATE AND nv_xu_ly = %s) AS today_reg,
+              (SELECT COUNT(*) FROM payments
+                WHERE DATE(ngay_thu) = CURRENT_DATE AND nv_thu = %s) AS today_paid,
+              (SELECT COALESCE(SUM(so_tien), 0) FROM payments
+                WHERE DATE(ngay_thu) = CURRENT_DATE AND nv_thu = %s) AS today_revenue,
+              (SELECT COUNT(*) FROM registrations
+                WHERE trang_thai = 'pending_payment') AS pending
+        """, (emp_id, emp_id, emp_id)) or {}
         return dict(
-            today_reg=today_reg['c'] if today_reg else 0,
-            today_paid=today_pay['c'] if today_pay else 0,
-            today_revenue=int(today_pay['tong']) if today_pay and today_pay['tong'] else 0,
-            pending=pending['c'] if pending else 0,
+            today_reg=row.get('today_reg', 0) or 0,
+            today_paid=row.get('today_paid', 0) or 0,
+            today_revenue=int(row.get('today_revenue', 0) or 0),
+            pending=row.get('pending', 0) or 0,
         )
 
     @staticmethod
@@ -175,22 +173,16 @@ class StatsService:
     # ===== Teacher dashboard =====
     @staticmethod
     def teacher_overview(gv_id: int):
-        so_lop = db.fetch_one(
-            "SELECT COUNT(*) AS c FROM classes WHERE gv_id = %s", (gv_id,)
-        )['c']
-        tong_hv = db.fetch_one(
-            """SELECT COALESCE(SUM(siso_hien_tai), 0) AS t
-                 FROM classes
-                WHERE gv_id = %s""",
-            (gv_id,)
-        )['t']
-        diem_tb = db.fetch_one(
-            "SELECT COALESCE(AVG(diem), 0) AS d FROM reviews WHERE gv_id = %s",
-            (gv_id,)
-        )['d']
+        """Optimize: 3 query -> 1 sub-select query (giam 3x round-trip DB)."""
+        row = db.fetch_one("""
+            SELECT
+              (SELECT COUNT(*) FROM classes WHERE gv_id = %s) AS so_lop,
+              (SELECT COALESCE(SUM(siso_hien_tai), 0) FROM classes WHERE gv_id = %s) AS tong_hv,
+              (SELECT COALESCE(AVG(diem), 0) FROM reviews WHERE gv_id = %s) AS diem_tb
+        """, (gv_id, gv_id, gv_id)) or {}
         return dict(
-            so_lop=so_lop,
-            tong_hv=int(tong_hv),
+            so_lop=row.get('so_lop', 0) or 0,
+            tong_hv=int(row.get('tong_hv', 0) or 0),
             buoi_tuan=12,  # fake so tuong doi, chua co bang schedule thuc
-            diem_danh_gia=round(float(diem_tb), 1),
+            diem_danh_gia=round(float(row.get('diem_tb', 0) or 0), 1),
         )
