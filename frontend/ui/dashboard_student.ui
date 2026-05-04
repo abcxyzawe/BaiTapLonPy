@@ -4,7 +4,7 @@
  <widget class="QWidget" name="DashboardStudent">
   <property name="geometry"><rect><x>0</x><y>0</y><width>1100</width><height>700</height></rect></property>
   <property name="minimumSize"><size><width>1100</width><height>700</height></size></property>
-  <property name="windowTitle"><string>EAUT - Dashboard Sinh viên</string></property>
+  <property name="windowTitle"><string>EAUT - Dashboard Học viên</string></property>
   <property name="styleSheet"><string notr="true">QWidget#DashboardStudent { background: #edf2f7; }</string></property>
 
   <!-- ===== SIDEBAR ===== -->
@@ -256,7 +256,7 @@
     <widget class="QLabel" name="lblStatCreditsLabel">
      <property name="geometry"><rect><x>72</x><y>48</y><width>170</width><height>18</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
-     <property name="text"><string>Tín chỉ đã đăng ký</string></property>
+     <property name="text"><string>Số buổi đã đăng ký</string></property>
     </widget>
    </widget>
 
@@ -284,7 +284,7 @@
     <widget class="QLabel" name="lblStatRemainingLabel">
      <property name="geometry"><rect><x>72</x><y>48</y><width>170</width><height>18</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
-     <property name="text"><string>Tín chỉ còn lại</string></property>
+     <property name="text"><string>Số buổi còn lại</string></property>
     </widget>
    </widget>
 
@@ -316,7 +316,7 @@
      <property name="columnCount"><number>6</number></property>
      <column><property name="text"><string>Mã KH</string></property></column>
      <column><property name="text"><string>Tên khóa học</string></property></column>
-     <column><property name="text"><string>Tín chỉ</string></property></column>
+     <column><property name="text"><string>Số buổi</string></property></column>
      <column><property name="text"><string>Giảng viên</string></property></column>
      <column><property name="text"><string>Lịch học</string></property></column>
      <column><property name="text"><string>Trạng thái</string></property></column>

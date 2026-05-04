@@ -85,7 +85,7 @@
     <property name="styleSheet"><string notr="true">QFrame#gpaCard3 { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
     <widget class="QLabel" name="lblTotalCredits"><property name="geometry"><rect><x>20</x><y>12</y><width>100</width><height>30</height></rect></property><property name="styleSheet"><string notr="true">color: #c05621; font-size: 24px; font-weight: bold; background: transparent;</string></property><property name="text"><string>45</string></property></widget>
-    <widget class="QLabel" name="lblTotalCreditsLabel"><property name="geometry"><rect><x>20</x><y>46</y><width>200</width><height>16</height></rect></property><property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property><property name="text"><string>Tín chỉ tích lũy</string></property></widget>
+    <widget class="QLabel" name="lblTotalCreditsLabel"><property name="geometry"><rect><x>20</x><y>46</y><width>200</width><height>16</height></rect></property><property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property><property name="text"><string>Số buổi tích lũy</string></property></widget>
    </widget>
 
    <!-- Bang diem -->

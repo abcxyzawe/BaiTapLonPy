@@ -4,7 +4,7 @@
  <widget class="QWidget" name="ExamSchedule">
   <property name="geometry"><rect><x>0</x><y>0</y><width>1100</width><height>700</height></rect></property>
   <property name="minimumSize"><size><width>1100</width><height>700</height></size></property>
-  <property name="windowTitle"><string>EAUT - Lịch thi</string></property>
+  <property name="windowTitle"><string>EAUT - Lịch kiểm tra</string></property>
   <property name="styleSheet"><string notr="true">QWidget#ExamSchedule { background: #edf2f7; }</string></property>
 
   <!-- SIDEBAR -->
@@ -27,7 +27,7 @@
    <widget class="QPushButton" name="btnSchedule"><property name="geometry"><rect><x>10</x><y>162</y><width>210</width><height>36</height></rect></property><property name="styleSheet"><string notr="true">QPushButton { background: transparent; color: #4a5568; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; } QPushButton:hover { background: #edf2f7; }</string></property><property name="text"><string>Lịch học</string></property><property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property></widget>
    <widget class="QLabel" name="iconSchedule"><property name="geometry"><rect><x>24</x><y>170</y><width>18</width><height>18</height></rect></property><property name="styleSheet"><string notr="true">background: transparent;</string></property><property name="text"><string/></property><property name="scaledContents"><bool>true</bool></property></widget>
 
-   <widget class="QPushButton" name="btnExam"><property name="geometry"><rect><x>10</x><y>200</y><width>210</width><height>36</height></rect></property><property name="styleSheet"><string notr="true">QPushButton { background: rgba(0,32,96,0.08); color: #002060; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; font-weight: bold; }</string></property><property name="text"><string>Lịch thi</string></property><property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property></widget>
+   <widget class="QPushButton" name="btnExam"><property name="geometry"><rect><x>10</x><y>200</y><width>210</width><height>36</height></rect></property><property name="styleSheet"><string notr="true">QPushButton { background: rgba(0,32,96,0.08); color: #002060; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; font-weight: bold; }</string></property><property name="text"><string>Lịch kiểm tra</string></property><property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property></widget>
    <widget class="QLabel" name="iconExam"><property name="geometry"><rect><x>24</x><y>208</y><width>18</width><height>18</height></rect></property><property name="styleSheet"><string notr="true">background: transparent;</string></property><property name="text"><string/></property><property name="scaledContents"><bool>true</bool></property></widget>
 
    <widget class="QPushButton" name="btnGrades"><property name="geometry"><rect><x>10</x><y>238</y><width>210</width><height>36</height></rect></property><property name="styleSheet"><string notr="true">QPushButton { background: transparent; color: #4a5568; border: none; border-radius: 8px; text-align: left; padding-left: 46px; font-size: 13px; } QPushButton:hover { background: #edf2f7; }</string></property><property name="text"><string>Xem điểm</string></property><property name="cursor"><cursorShape>PointingHandCursor</cursorShape></property></widget>
@@ -60,7 +60,7 @@
     <property name="geometry"><rect><x>0</x><y>0</y><width>870</width><height>56</height></rect></property>
     <property name="styleSheet"><string notr="true">QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }</string></property>
     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
-    <widget class="QLabel" name="lblPageTitle"><property name="geometry"><rect><x>25</x><y>0</y><width>300</width><height>56</height></rect></property><property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;</string></property><property name="text"><string>Lịch thi</string></property><property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property></widget>
+    <widget class="QLabel" name="lblPageTitle"><property name="geometry"><rect><x>25</x><y>0</y><width>300</width><height>56</height></rect></property><property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;</string></property><property name="text"><string>Lịch kiểm tra</string></property><property name="alignment"><set>Qt::AlignLeft|Qt::AlignVCenter</set></property></widget>
     <widget name="cboSemester" class="QComboBox">
      <property name="geometry"><rect><x>600</x><y>12</y><width>240</width><height>32</height></rect></property>
      <property name="styleSheet"><string notr="true">QComboBox { border: 1px solid #d2d6dc; border-radius: 6px; padding: 5px 10px; font-size: 12px; background: white; color: #4a5568; } QComboBox::drop-down { border: none; }</string></property>
@@ -75,7 +75,7 @@
     <property name="styleSheet"><string notr="true">QFrame#examFrame { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
 
-    <widget class="QLabel" name="lblExamTitle"><property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property><property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property><property name="text"><string>Lịch thi học kỳ</string></property></widget>
+    <widget class="QLabel" name="lblExamTitle"><property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property><property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property><property name="text"><string>Lịch kiểm tra học kỳ</string></property></widget>
 
     <widget class="QTableWidget" name="tblExam">
      <property name="geometry"><rect><x>12</x><y>44</y><width>796</width><height>540</height></rect></property>

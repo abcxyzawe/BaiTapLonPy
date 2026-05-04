@@ -76,9 +76,9 @@
     <widget name="cboLoai" class="QComboBox">
      <property name="geometry"><rect><x>680</x><y>10</y><width>160</width><height>30</height></rect></property>
      <item><property name="text"><string>Tất cả loại</string></property></item>
-     <item><property name="text"><string>Bắt buộc</string></property></item>
-     <item><property name="text"><string>Tự chọn</string></property></item>
-     <item><property name="text"><string>Đại cương</string></property></item>
+     <item><property name="text"><string>Cơ bản</string></property></item>
+     <item><property name="text"><string>Nâng cao</string></property></item>
+     <item><property name="text"><string>Định hướng</string></property></item>
     </widget>
    </widget>
 
