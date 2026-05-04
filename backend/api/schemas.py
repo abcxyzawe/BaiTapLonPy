@@ -108,64 +108,64 @@ class NotificationSend(BaseModel):
 
 # ===== Users (Student/Teacher/Employee) =====
 class StudentCreate(BaseModel):
-    username: str
-    password: str
-    full_name: str
-    msv: str
-    email: Optional[str] = None
-    sdt: Optional[str] = None
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=4, max_length=100)
+    full_name: str = Field(..., min_length=2, max_length=100)
+    msv: str = Field(..., min_length=3, max_length=20)
+    email: Optional[str] = Field(None, max_length=100)
+    sdt: Optional[str] = Field(None, max_length=20)
     ngaysinh: Optional[date] = None
-    gioitinh: Optional[str] = None
-    diachi: Optional[str] = None
+    gioitinh: Optional[str] = Field(None, max_length=10)
+    diachi: Optional[str] = Field(None, max_length=200)
 
 
 class StudentUpdate(BaseModel):
-    email: Optional[str] = None
-    sdt: Optional[str] = None
-    diachi: Optional[str] = None
-    full_name: Optional[str] = None
+    email: Optional[str] = Field(None, max_length=100)
+    sdt: Optional[str] = Field(None, max_length=20)
+    diachi: Optional[str] = Field(None, max_length=200)
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
 
 
 class TeacherCreate(BaseModel):
-    username: str
-    password: str
-    full_name: str
-    ma_gv: str
-    email: Optional[str] = None
-    sdt: Optional[str] = None
-    hoc_vi: Optional[str] = None
-    khoa: Optional[str] = None
-    chuyen_nganh: Optional[str] = None
-    tham_nien: int = 0
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=4, max_length=100)
+    full_name: str = Field(..., min_length=2, max_length=100)
+    ma_gv: str = Field(..., min_length=3, max_length=20)
+    email: Optional[str] = Field(None, max_length=100)
+    sdt: Optional[str] = Field(None, max_length=20)
+    hoc_vi: Optional[str] = Field(None, max_length=50)
+    khoa: Optional[str] = Field(None, max_length=50)
+    chuyen_nganh: Optional[str] = Field(None, max_length=100)
+    tham_nien: int = Field(0, ge=0, le=60)
 
 
 class TeacherUpdate(BaseModel):
-    full_name: Optional[str] = None
-    email: Optional[str] = None
-    sdt: Optional[str] = None
-    hoc_vi: Optional[str] = None
-    khoa: Optional[str] = None
-    chuyen_nganh: Optional[str] = None
-    tham_nien: Optional[int] = None
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    email: Optional[str] = Field(None, max_length=100)
+    sdt: Optional[str] = Field(None, max_length=20)
+    hoc_vi: Optional[str] = Field(None, max_length=50)
+    khoa: Optional[str] = Field(None, max_length=50)
+    chuyen_nganh: Optional[str] = Field(None, max_length=100)
+    tham_nien: Optional[int] = Field(None, ge=0, le=60)
 
 
 class EmployeeCreate(BaseModel):
-    username: str
-    password: str
-    full_name: str
-    ma_nv: str
-    email: Optional[str] = None
-    sdt: Optional[str] = None
-    chuc_vu: Optional[str] = None
-    phong_ban: Optional[str] = None
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=4, max_length=100)
+    full_name: str = Field(..., min_length=2, max_length=100)
+    ma_nv: str = Field(..., min_length=3, max_length=20)
+    email: Optional[str] = Field(None, max_length=100)
+    sdt: Optional[str] = Field(None, max_length=20)
+    chuc_vu: Optional[str] = Field(None, max_length=50)
+    phong_ban: Optional[str] = Field(None, max_length=50)
     ngay_vao_lam: Optional[date] = None
 
 
 class EmployeeUpdate(BaseModel):
-    full_name: Optional[str] = None
-    email: Optional[str] = None
-    sdt: Optional[str] = None
-    chuc_vu: Optional[str] = None
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    email: Optional[str] = Field(None, max_length=100)
+    sdt: Optional[str] = Field(None, max_length=20)
+    chuc_vu: Optional[str] = Field(None, max_length=50)
     phong_ban: Optional[str] = None
 
 
