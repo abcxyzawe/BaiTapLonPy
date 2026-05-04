@@ -122,7 +122,7 @@
     <widget name="cboAuditUser" class="QComboBox">
      <property name="geometry"><rect><x>260</x><y>10</y><width>160</width><height>30</height></rect></property>
      <item><property name="text"><string>Tất cả người dùng</string></property></item>
-     <item><property name="text"><string>Sinh viên</string></property></item>
+     <item><property name="text"><string>Học viên</string></property></item>
      <item><property name="text"><string>Quản trị viên</string></property></item>
     </widget>
     <widget name="cboAuditAction" class="QComboBox">

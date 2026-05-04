@@ -615,7 +615,7 @@ PAGES = [
 MENU_ITEMS = [
     ('btnHome', 'iconHome', 'home', 'Trang chủ'),
     ('btnSchedule', 'iconSchedule', 'calendar', 'Lịch học'),
-    ('btnExam', 'iconExam', 'clipboard', 'Lịch thi'),
+    ('btnExam', 'iconExam', 'clipboard', 'Lịch kiểm tra'),
     ('btnGrades', 'iconGrades', 'bar-chart', 'Xem điểm'),
     ('btnReview', 'iconReview', 'star', 'Đánh giá giảng viên'),
     ('btnNotice', 'iconNotice', 'bell', 'Thông báo'),
@@ -686,7 +686,7 @@ ADMIN_MENU = [
     ('btnAdminTeacher', 'iconAdminTeacher', 'user-check', 'Quản lý giảng viên'),
     ('btnAdminEmployee', 'iconAdminEmployee', 'briefcase', 'Quản lý nhân viên'),
     ('btnAdminSemester', 'iconAdminSemester', 'sliders', 'Quản lý học kỳ'),
-    ('btnAdminCurriculum', 'iconAdminCurriculum', 'file-text', 'Khung chương trình'),
+    ('btnAdminCurriculum', 'iconAdminCurriculum', 'file-text', 'Lộ trình học'),
     ('btnAdminAudit', 'iconAdminAudit', 'shield', 'Nhật ký hệ thống'),
     ('btnAdminStats', 'iconAdminStats', 'pie-chart', 'Thống kê'),
 ]
@@ -2347,7 +2347,7 @@ class AdminWindow(QtWidgets.QWidget):
         txt_gv = QtWidgets.QLineEdit()
         form.addRow('Mã môn:', txt_code)
         form.addRow('Tên môn:', txt_name)
-        form.addRow('Tín chỉ:', txt_tc)
+        form.addRow('Số buổi:', txt_tc)
         form.addRow('GV phụ trách:', txt_gv)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
@@ -2419,7 +2419,7 @@ class AdminWindow(QtWidgets.QWidget):
         txt_lich = QtWidgets.QLineEdit(tbl.item(target_row, 4).text() if tbl.item(target_row, 4) else '')
         form.addRow('Mã môn:', txt_code)
         form.addRow('Tên môn:', txt_name)
-        form.addRow('Tín chỉ:', txt_tc)
+        form.addRow('Số buổi:', txt_tc)
         form.addRow('GV phụ trách:', txt_gv)
         form.addRow('Lịch học:', txt_lich)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
@@ -2820,8 +2820,8 @@ class AdminWindow(QtWidgets.QWidget):
             try:
                 if not CurriculumService: raise RuntimeError("CurriculumService chua co")
                 rows = CurriculumService.get_all()
-                # convert 'Bat buoc' tu DB -> 'Bắt buộc' cho UI
-                loai_map = {'Bat buoc': 'Bắt buộc', 'Tu chon': 'Tự chọn', 'Dai cuong': 'Đại cương'}
+                # convert 'Bat buoc' tu DB -> 'Cơ bản' cho UI
+                loai_map = {'Bat buoc': 'Cơ bản', 'Tu chon': 'Nâng cao', 'Dai cuong': 'Định hướng'}
                 data = []
                 for i, c in enumerate(rows, start=1):
                     data.append([
@@ -2838,20 +2838,20 @@ class AdminWindow(QtWidgets.QWidget):
         self._curr_ids = cur_ids
         if not data:
             data = [
-                ['1', 'IT001', 'Nhập môn lập trình', '3', 'Bắt buộc', 'HK1', '—'],
-                ['2', 'MA001', 'Giải tích 1', '3', 'Bắt buộc', 'HK1', '—'],
-                ['3', 'EN001', 'Tiếng Anh 1', '3', 'Đại cương', 'HK1', '—'],
-                ['4', 'IT002', 'Cấu trúc dữ liệu', '3', 'Bắt buộc', 'HK2', 'IT001'],
-                ['5', 'MA002', 'Đại số tuyến tính', '3', 'Bắt buộc', 'HK2', '—'],
-                ['6', 'IT003', 'Kỹ thuật lập trình', '3', 'Bắt buộc', 'HK3', 'IT002'],
-                ['7', 'IT004', 'Cơ sở dữ liệu', '3', 'Bắt buộc', 'HK3', 'IT002'],
-                ['8', 'IT005', 'Mạng máy tính', '3', 'Bắt buộc', 'HK4', '—'],
-                ['9', 'IT006', 'Hệ điều hành', '3', 'Bắt buộc', 'HK4', 'IT003'],
-                ['10', 'IT007', 'Công nghệ phần mềm', '3', 'Bắt buộc', 'HK5', 'IT003'],
-                ['11', 'IT008', 'Trí tuệ nhân tạo', '3', 'Tự chọn', 'HK5', 'IT002, MA002'],
-                ['12', 'IT009', 'Phát triển web', '3', 'Tự chọn', 'HK5', 'IT003'],
-                ['13', 'IT010', 'An toàn thông tin', '3', 'Tự chọn', 'HK6', 'IT005'],
-                ['14', 'IT011', 'Lập trình di động', '3', 'Tự chọn', 'HK6', 'IT003'],
+                ['1', 'IT001', 'Nhập môn lập trình', '3', 'Cơ bản', 'HK1', '—'],
+                ['2', 'MA001', 'Giải tích 1', '3', 'Cơ bản', 'HK1', '—'],
+                ['3', 'EN001', 'Tiếng Anh 1', '3', 'Định hướng', 'HK1', '—'],
+                ['4', 'IT002', 'Cấu trúc dữ liệu', '3', 'Cơ bản', 'HK2', 'IT001'],
+                ['5', 'MA002', 'Đại số tuyến tính', '3', 'Cơ bản', 'HK2', '—'],
+                ['6', 'IT003', 'Kỹ thuật lập trình', '3', 'Cơ bản', 'HK3', 'IT002'],
+                ['7', 'IT004', 'Cơ sở dữ liệu', '3', 'Cơ bản', 'HK3', 'IT002'],
+                ['8', 'IT005', 'Mạng máy tính', '3', 'Cơ bản', 'HK4', '—'],
+                ['9', 'IT006', 'Hệ điều hành', '3', 'Cơ bản', 'HK4', 'IT003'],
+                ['10', 'IT007', 'Công nghệ phần mềm', '3', 'Cơ bản', 'HK5', 'IT003'],
+                ['11', 'IT008', 'Trí tuệ nhân tạo', '3', 'Nâng cao', 'HK5', 'IT002, MA002'],
+                ['12', 'IT009', 'Phát triển web', '3', 'Nâng cao', 'HK5', 'IT003'],
+                ['13', 'IT010', 'An toàn thông tin', '3', 'Nâng cao', 'HK6', 'IT005'],
+                ['14', 'IT011', 'Lập trình di động', '3', 'Nâng cao', 'HK6', 'IT003'],
             ]
         # tinh trang thai mo lop cho moi mon (de show "Đang mở X lớp")
         # Tinh so lop per ma_mon - lay tu cache MOCK_CLASSES (da load tu API)
@@ -2862,9 +2862,9 @@ class AdminWindow(QtWidgets.QWidget):
 
         # Stats summary tren cung trang
         n_total = len(data)
-        n_bb = sum(1 for r in data if r[4] == 'Bắt buộc')
-        n_tc = sum(1 for r in data if r[4] == 'Tự chọn')
-        n_dc = sum(1 for r in data if r[4] == 'Đại cương')
+        n_bb = sum(1 for r in data if r[4] == 'Cơ bản')
+        n_tc = sum(1 for r in data if r[4] == 'Nâng cao')
+        n_dc = sum(1 for r in data if r[4] == 'Định hướng')
         n_co_lop = sum(1 for r in data if ma_mon_count.get(r[1], 0) > 0)
         # tao label summary o headerBar (dynamic create)
         headerBar = page.findChild(QtWidgets.QFrame, 'headerBar')
@@ -2878,9 +2878,9 @@ class AdminWindow(QtWidgets.QWidget):
             lbl_stats.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 12px; background: transparent;')
             lbl_stats.setText(
                 f'<b>{n_total}</b> môn  ·  '
-                f'<span style="color:{COLORS["navy"]};"><b>{n_bb}</b> Bắt buộc</span>  '
-                f'<span style="color:{COLORS["green"]};"><b>{n_tc}</b> Tự chọn</span>  '
-                f'<span style="color:{COLORS["gold"]};"><b>{n_dc}</b> Đại cương</span>  ·  '
+                f'<span style="color:{COLORS["navy"]};"><b>{n_bb}</b> Cơ bản</span>  '
+                f'<span style="color:{COLORS["green"]};"><b>{n_tc}</b> Nâng cao</span>  '
+                f'<span style="color:{COLORS["gold"]};"><b>{n_dc}</b> Định hướng</span>  ·  '
                 f'<b>{n_co_lop}/{n_total}</b> môn đã mở lớp'
             )
             lbl_stats.show()
@@ -2892,7 +2892,7 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.setHorizontalHeaderItem(7, QtWidgets.QTableWidgetItem('Trạng thái'))
             tbl.setHorizontalHeaderItem(8, QtWidgets.QTableWidgetItem('Thao tác'))
             tbl.setRowCount(len(data))
-            type_colors = {'Bắt buộc': COLORS['navy'], 'Tự chọn': COLORS['green'], 'Đại cương': COLORS['gold']}
+            type_colors = {'Cơ bản': COLORS['navy'], 'Nâng cao': COLORS['green'], 'Định hướng': COLORS['gold']}
             for r, row in enumerate(data):
                 for c, val in enumerate(row):
                     item = QtWidgets.QTableWidgetItem(val)
@@ -2936,7 +2936,7 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_l = page.findChild(QtWidgets.QComboBox, 'cboLoai')
         if cbo_l:
             cbo_l.clear()
-            cbo_l.addItems(['Tất cả loại', 'Bắt buộc', 'Tự chọn', 'Đại cương'])
+            cbo_l.addItems(['Tất cả loại', 'Cơ bản', 'Nâng cao', 'Định hướng'])
         cbo_h = page.findChild(QtWidgets.QComboBox, 'cboHocKy')
         if cbo_h:
             cbo_h.clear()
@@ -2971,8 +2971,8 @@ class AdminWindow(QtWidgets.QWidget):
         txt_name = QtWidgets.QLineEdit(cur[2])
         txt_tc = QtWidgets.QLineEdit(cur[3])
         cbo_loai = QtWidgets.QComboBox()
-        cbo_loai.addItems(['Bắt buộc', 'Tự chọn', 'Đại cương'])
-        if cur[4] in ['Bắt buộc', 'Tự chọn', 'Đại cương']:
+        cbo_loai.addItems(['Cơ bản', 'Nâng cao', 'Định hướng'])
+        if cur[4] in ['Cơ bản', 'Nâng cao', 'Định hướng']:
             cbo_loai.setCurrentText(cur[4])
         cbo_hk = QtWidgets.QComboBox()
         cbo_hk.addItems(['HK1', 'HK2', 'HK3', 'HK4', 'HK5', 'HK6', 'HK7', 'HK8'])
@@ -2983,10 +2983,10 @@ class AdminWindow(QtWidgets.QWidget):
         form.addRow('STT:', txt_stt)
         form.addRow('Mã môn:', txt_code)
         form.addRow('Tên môn:', txt_name)
-        form.addRow('Tín chỉ:', txt_tc)
+        form.addRow('Số buổi:', txt_tc)
         form.addRow('Loại:', cbo_loai)
         form.addRow('Học kỳ:', cbo_hk)
-        form.addRow('Môn tiên quyết:', txt_prereq)
+        form.addRow('Yêu cầu trình độ:', txt_prereq)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
         form.addRow(btns)
@@ -2998,9 +2998,9 @@ class AdminWindow(QtWidgets.QWidget):
         try:
             int(txt_tc.text())
         except ValueError:
-            msg_warn(self, 'Sai dữ liệu', 'Tín chỉ phải là số')
+            msg_warn(self, 'Sai dữ liệu', 'Số buổi phải là số')
             return
-        type_colors = {'Bắt buộc': COLORS['navy'], 'Tự chọn': COLORS['green'], 'Đại cương': COLORS['gold']}
+        type_colors = {'Cơ bản': COLORS['navy'], 'Nâng cao': COLORS['green'], 'Định hướng': COLORS['gold']}
         new_vals = [cur[0], txt_code.text().upper(), txt_name.text(), txt_tc.text(),
                     cbo_loai.currentText(), cbo_hk.currentText(),
                     txt_prereq.text().strip() or '—']
@@ -3018,7 +3018,7 @@ class AdminWindow(QtWidgets.QWidget):
             return
         cur_id = cur_ids[row_idx]
         try:
-            type_to_db = {'Bắt buộc': 'Bat buoc', 'Tự chọn': 'Tu chon', 'Đại cương': 'Dai cuong'}
+            type_to_db = {'Cơ bản': 'Bat buoc', 'Nâng cao': 'Tu chon', 'Định hướng': 'Dai cuong'}
             CurriculumService.update(cur_id,
                 ma_mon=new_vals[1],
                 tin_chi=int(new_vals[3]),
@@ -3090,15 +3090,15 @@ class AdminWindow(QtWidgets.QWidget):
         for c in courses:
             cbo_mon.addItem(f"{c['ma_mon']} - {c.get('ten_mon', '')}", c['ma_mon'])
         txt_tc = QtWidgets.QLineEdit('3')
-        cbo_loai = QtWidgets.QComboBox(); cbo_loai.addItems(['Bắt buộc', 'Tự chọn', 'Đại cương'])
+        cbo_loai = QtWidgets.QComboBox(); cbo_loai.addItems(['Cơ bản', 'Nâng cao', 'Định hướng'])
         cbo_hk = QtWidgets.QComboBox(); cbo_hk.addItems([f'HK{i}' for i in range(1, 9)])
         txt_prereq = QtWidgets.QLineEdit()
         txt_prereq.setPlaceholderText('Vd: IT001 (để trống nếu không có)')
         form.addRow('Môn:', cbo_mon)
-        form.addRow('Tín chỉ:', txt_tc)
+        form.addRow('Số buổi:', txt_tc)
         form.addRow('Loại:', cbo_loai)
         form.addRow('Học kỳ:', cbo_hk)
-        form.addRow('Môn tiên quyết:', txt_prereq)
+        form.addRow('Yêu cầu trình độ:', txt_prereq)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
         form.addRow(btns)
@@ -3110,14 +3110,14 @@ class AdminWindow(QtWidgets.QWidget):
             if tin_chi_n < 1 or tin_chi_n > 10:
                 raise ValueError()
         except ValueError:
-            msg_warn(self, 'Sai dữ liệu', 'Tín chỉ phải là số từ 1-10')
+            msg_warn(self, 'Sai dữ liệu', 'Số buổi phải là số từ 1-10')
             return
         if not (DB_AVAILABLE and CurriculumService):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
         ma_mon_sel = cbo_mon.currentData()
         # Goi API truoc
-        loai_map = {'Bắt buộc': 'Bat buoc', 'Tự chọn': 'Tu chon', 'Đại cương': 'Dai cuong'}
+        loai_map = {'Cơ bản': 'Bat buoc', 'Nâng cao': 'Tu chon', 'Định hướng': 'Dai cuong'}
         try:
             CurriculumService.create(
                 ma_mon=ma_mon_sel,

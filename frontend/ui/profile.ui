@@ -77,7 +77,7 @@
     <widget class="QLabel" name="lblProfileRole">
      <property name="geometry"><rect><x>105</x><y>50</y><width>400</width><height>18</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
-     <property name="text"><string>Sinh viên - Khoa Công nghệ thông tin</string></property>
+     <property name="text"><string>Học viên - Khoa Công nghệ thông tin</string></property>
     </widget>
    </widget>
 

@@ -177,7 +177,7 @@
     <widget class="QLabel" name="lblStat1Label">
      <property name="geometry"><rect><x>18</x><y>48</y><width>160</width><height>18</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #718096; font-size: 12px; background: transparent;</string></property>
-     <property name="text"><string>Sinh viên</string></property>
+     <property name="text"><string>Học viên</string></property>
     </widget>
    </widget>
 

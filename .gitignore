@@ -31,3 +31,4 @@ Thumbs.db
 frontend/screenshots/
 test_ui_screenshot.py
 test_output.log
+.claude/settings.local.json
