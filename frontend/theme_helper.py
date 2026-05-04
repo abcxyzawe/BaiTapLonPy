@@ -19,6 +19,8 @@ COLORS = {
     'orange_hover': '#9c4319',
     'red': '#c53030',
     'red_hover': '#9b2626',
+    'gray': '#9ca3af',
+    'gray_hover': '#6b7280',
     'text_dark': '#1a1a2e',
     'text_mid': '#4a5568',
     'text_light': '#718096',

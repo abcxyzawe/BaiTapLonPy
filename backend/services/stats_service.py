@@ -21,7 +21,7 @@ class StatsService:
             total_students=row.get('total_students', 0) or 0,
             total_classes=row.get('total_classes', 0) or 0,
             total_registrations=row.get('total_registrations', 0) or 0,
-            current_semester=row.get('current_semester') or 'HK2',
+            current_semester=row.get('current_semester'),  # None neu khong co dot open
         )
 
     @staticmethod
@@ -79,7 +79,11 @@ class StatsService:
 
     @staticmethod
     def recent_activity(limit: int = 5):
-        """hoat dong gan day: ket hop dang ky + thanh toan"""
+        """hoat dong gan day: ket hop dang ky + thanh toan.
+
+        Format so tien VN voi dau cham ngan nghin qua TO_CHAR + REPLACE
+        (PostgreSQL khong co built-in '.' separator nhu ',' nen replace).
+        """
         sql = """
             SELECT 'reg' AS loai, r.ngay_dk AS thoi_gian,
                    u.full_name || ' đăng ký ' || r.lop_id AS noi_dung
@@ -88,7 +92,9 @@ class StatsService:
               JOIN users u ON u.id = s.user_id
              UNION ALL
             SELECT 'pay' AS loai, p.ngay_thu AS thoi_gian,
-                   u.full_name || ' thanh toán ' || p.so_tien::text || ' đ' AS noi_dung
+                   u.full_name || ' thanh toán '
+                     || REPLACE(TO_CHAR(p.so_tien, 'FM999,999,999'), ',', '.')
+                     || ' đ' AS noi_dung
               FROM payments p
               JOIN registrations r ON r.id = p.reg_id
               JOIN students s ON s.user_id = r.hv_id

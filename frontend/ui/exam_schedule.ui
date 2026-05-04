@@ -74,7 +74,7 @@
     <property name="styleSheet"><string notr="true">QFrame#examFrame { background: white; border: 1px solid #d2d6dc; border-radius: 10px; }</string></property>
     <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
 
-    <widget class="QLabel" name="lblExamTitle"><property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property><property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property><property name="text"><string>Lịch kiểm tra học kỳ</string></property></widget>
+    <widget class="QLabel" name="lblExamTitle"><property name="geometry"><rect><x>22</x><y>14</y><width>400</width><height>22</height></rect></property><property name="styleSheet"><string notr="true">color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent;</string></property><property name="text"><string>Lịch kiểm tra cuối khóa</string></property></widget>
 
     <widget class="QTableWidget" name="tblExam">
      <property name="geometry"><rect><x>12</x><y>44</y><width>796</width><height>540</height></rect></property>

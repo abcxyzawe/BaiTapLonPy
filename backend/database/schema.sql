@@ -438,20 +438,30 @@ FOR EACH ROW EXECUTE FUNCTION update_class_siso();
 
 
 -- Trigger 2: tu dong log audit khi co thao tac quan trong
+-- Description text co dau tieng Viet + map ten bang -> ten Tieng Viet de user de doc
 CREATE OR REPLACE FUNCTION log_audit_changes() RETURNS TRIGGER AS $$
 DECLARE
     action_name VARCHAR(50);
     desc_text TEXT;
+    table_label TEXT;
 BEGIN
+    -- Map table name -> friendly Vietnamese label
+    table_label := CASE TG_TABLE_NAME
+        WHEN 'registrations' THEN 'đăng ký khoá học'
+        WHEN 'payments' THEN 'thanh toán'
+        WHEN 'grades' THEN 'điểm'
+        WHEN 'attendance' THEN 'điểm danh'
+        ELSE TG_TABLE_NAME
+    END;
     IF TG_OP = 'INSERT' THEN
         action_name := 'create_' || TG_TABLE_NAME;
-        desc_text := 'Tao moi ban ghi o bang ' || TG_TABLE_NAME;
+        desc_text := 'Tạo mới ' || table_label;
     ELSIF TG_OP = 'UPDATE' THEN
         action_name := 'update_' || TG_TABLE_NAME;
-        desc_text := 'Cap nhat ban ghi o bang ' || TG_TABLE_NAME;
+        desc_text := 'Cập nhật ' || table_label;
     ELSIF TG_OP = 'DELETE' THEN
         action_name := 'delete_' || TG_TABLE_NAME;
-        desc_text := 'Xoa ban ghi o bang ' || TG_TABLE_NAME;
+        desc_text := 'Xoá ' || table_label;
     END IF;
 
     INSERT INTO audit_logs (action, target_type, target_id, description)
@@ -476,6 +486,29 @@ FOR EACH ROW EXECUTE FUNCTION log_audit_changes();
 CREATE TRIGGER trg_audit_payments
 AFTER INSERT OR UPDATE OR DELETE ON payments
 FOR EACH ROW EXECUTE FUNCTION log_audit_changes();
+
+
+-- Trigger: tu dong sync classes.siso_hien_tai khi registrations thay doi
+-- (truoc day siso static seed, drift voi actual paid count)
+CREATE OR REPLACE FUNCTION update_class_siso() RETURNS TRIGGER AS $$
+DECLARE
+  target_lop VARCHAR(30);
+BEGIN
+  target_lop := COALESCE(NEW.lop_id, OLD.lop_id);
+  IF target_lop IS NOT NULL THEN
+    UPDATE classes SET siso_hien_tai = (
+      SELECT COUNT(*) FROM registrations
+       WHERE lop_id = target_lop
+         AND trang_thai IN ('pending_payment', 'paid', 'completed')
+    ) WHERE ma_lop = target_lop;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_class_siso
+AFTER INSERT OR UPDATE OR DELETE ON registrations
+FOR EACH ROW EXECUTE FUNCTION update_class_siso();
 
 
 -- Trigger 3: check khong duoc dang ky vao lop da full

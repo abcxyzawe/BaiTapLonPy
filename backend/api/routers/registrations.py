@@ -32,7 +32,11 @@ def get_registration(reg_id: int):
 
 @router.post('')
 def register(req: RegisterRequest):
-    reg_id = RegistrationService.register_student(req.hv_id, req.lop_id, req.nv_id)
+    try:
+        reg_id = RegistrationService.register_student(req.hv_id, req.lop_id, req.nv_id)
+    except ValueError as e:
+        # ValueError = validation lop khong ton tai / dot da closed -> tra 400 voi msg ro rang
+        raise HTTPException(status_code=400, detail=str(e))
     return {'reg_id': reg_id}
 
 

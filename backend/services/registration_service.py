@@ -6,7 +6,29 @@ class RegistrationService:
 
     @staticmethod
     def register_student(hv_id: int, lop_id: str, nv_id: int) -> int:
-        """nhan vien dang ky cho HV, tra ve reg_id. trang thai = pending_payment"""
+        """nhan vien dang ky cho HV, tra ve reg_id. trang thai = pending_payment.
+
+        Validate: lop phai thuoc dot dang OPEN (trang_thai='open'),
+        khong cho register vao lop dot da closed/upcoming.
+        """
+        # Check sem status cua lop truoc khi register
+        sem_row = db.fetch_one(
+            """SELECT s.id, s.trang_thai FROM classes c
+                 LEFT JOIN semesters s ON s.id = c.semester_id
+                WHERE c.ma_lop = %s""",
+            (lop_id,)
+        )
+        if not sem_row:
+            raise ValueError(f'Lớp {lop_id} không tồn tại trong hệ thống')
+        sem_status = sem_row.get('trang_thai')
+        if sem_status != 'open':
+            sem_id_disp = sem_row.get('id') or '(không có đợt)'
+            status_vn = {'closed': 'đã đóng', 'upcoming': 'chưa mở',
+                         None: 'không có đợt nào'}.get(sem_status, sem_status or 'không xác định')
+            raise ValueError(
+                f'Đợt "{sem_id_disp}" của lớp {lop_id} hiện {status_vn}. '
+                'Không thể đăng ký mới vào lớp này.'
+            )
         row = db.execute_returning(
             """INSERT INTO registrations (hv_id, lop_id, nv_xu_ly, trang_thai)
                     VALUES (%s, %s, %s, 'pending_payment')
