@@ -62,15 +62,22 @@ class StudentService:
     @staticmethod
     def update(user_id: int, email: str = None, sdt: str = None,
                diachi: str = None, full_name: str = None):
+        """Return tong rowcount cua tat ca UPDATE - 0 = user khong ton tai."""
+        total = 0
         pairs_u, vals_u = [], []
         if email is not None: pairs_u.append('email = %s'); vals_u.append(email)
         if sdt is not None: pairs_u.append('sdt = %s'); vals_u.append(sdt)
         if full_name is not None: pairs_u.append('full_name = %s'); vals_u.append(full_name)
         if pairs_u:
             vals_u.append(user_id)
-            db.execute(f"UPDATE users SET {', '.join(pairs_u)} WHERE id = %s", tuple(vals_u))
+            total += db.execute(f"UPDATE users SET {', '.join(pairs_u)} WHERE id = %s", tuple(vals_u)) or 0
         if diachi is not None:
-            db.execute("UPDATE students SET diachi = %s WHERE user_id = %s", (diachi, user_id))
+            total += db.execute("UPDATE students SET diachi = %s WHERE user_id = %s", (diachi, user_id)) or 0
+        # Neu khong co field nao, kiem tra user exist (return 1 neu co)
+        if not pairs_u and diachi is None:
+            row = db.fetch_one("SELECT 1 FROM users WHERE id = %s", (user_id,))
+            return 1 if row else 0
+        return total
 
     @staticmethod
     def delete(user_id: int):
@@ -123,16 +130,22 @@ class TeacherService:
 
     @staticmethod
     def update(user_id: int, **fields):
+        """Return tong rowcount - 0 = user khong ton tai."""
+        total = 0
         u_fields = {k: fields[k] for k in ('full_name', 'email', 'sdt') if k in fields}
         t_fields = {k: fields[k] for k in ('hoc_vi', 'khoa', 'chuyen_nganh', 'tham_nien') if k in fields}
         if u_fields:
             pairs = [f'{k} = %s' for k in u_fields]
             vals = list(u_fields.values()) + [user_id]
-            db.execute(f"UPDATE users SET {', '.join(pairs)} WHERE id = %s", tuple(vals))
+            total += db.execute(f"UPDATE users SET {', '.join(pairs)} WHERE id = %s", tuple(vals)) or 0
         if t_fields:
             pairs = [f'{k} = %s' for k in t_fields]
             vals = list(t_fields.values()) + [user_id]
-            db.execute(f"UPDATE teachers SET {', '.join(pairs)} WHERE user_id = %s", tuple(vals))
+            total += db.execute(f"UPDATE teachers SET {', '.join(pairs)} WHERE user_id = %s", tuple(vals)) or 0
+        if not u_fields and not t_fields:
+            row = db.fetch_one("SELECT 1 FROM teachers WHERE user_id = %s", (user_id,))
+            return 1 if row else 0
+        return total
 
     @staticmethod
     def delete(user_id: int):
@@ -176,16 +189,22 @@ class EmployeeService:
 
     @staticmethod
     def update(user_id: int, **fields):
+        """Return tong rowcount - 0 = user khong ton tai."""
+        total = 0
         u_fields = {k: fields[k] for k in ('full_name', 'email', 'sdt') if k in fields}
         e_fields = {k: fields[k] for k in ('chuc_vu', 'phong_ban', 'ngay_vao_lam') if k in fields}
         if u_fields:
             pairs = [f'{k} = %s' for k in u_fields]
             vals = list(u_fields.values()) + [user_id]
-            db.execute(f"UPDATE users SET {', '.join(pairs)} WHERE id = %s", tuple(vals))
+            total += db.execute(f"UPDATE users SET {', '.join(pairs)} WHERE id = %s", tuple(vals)) or 0
         if e_fields:
             pairs = [f'{k} = %s' for k in e_fields]
             vals = list(e_fields.values()) + [user_id]
-            db.execute(f"UPDATE employees SET {', '.join(pairs)} WHERE user_id = %s", tuple(vals))
+            total += db.execute(f"UPDATE employees SET {', '.join(pairs)} WHERE user_id = %s", tuple(vals)) or 0
+        if not u_fields and not e_fields:
+            row = db.fetch_one("SELECT 1 FROM employees WHERE user_id = %s", (user_id,))
+            return 1 if row else 0
+        return total
 
     @staticmethod
     def delete(user_id: int):
