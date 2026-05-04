@@ -1493,22 +1493,14 @@ class MainWindow(QtWidgets.QWidget):
                             item.setFont(QFont('Segoe UI', 11, QFont.Bold))
                         except (ValueError, TypeError): pass
                     tbl.setItem(r, c, item)
-                btn = QtWidgets.QPushButton('Đánh giá')
-                btn.setCursor(Qt.PointingHandCursor)
-                btn.setFixedSize(82, 24)
-                btn.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 5px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
-                w = QtWidgets.QWidget()
-                hl = QtWidgets.QHBoxLayout(w)
-                hl.setContentsMargins(0, 0, 0, 0)
-                hl.setAlignment(Qt.AlignCenter)
-                hl.addWidget(btn)
-                tbl.setCellWidget(r, 5, w)
+                cell, (btn,) = make_action_cell([('Đánh giá', 'navy')])
+                tbl.setCellWidget(r, 5, cell)
             for c, cw in enumerate([40, 195, 115, 80, 90, 120]):
                 tbl.setColumnWidth(c, cw)
             tbl.horizontalHeader().setStretchLastSection(False)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
-                tbl.setRowHeight(r, 50)
+                tbl.setRowHeight(r, 44)
             # connect nut danh gia - pass ca gv_id (de submit_review chinh xac)
             for r, row in enumerate(data):
                 w = tbl.cellWidget(r, 5)
@@ -4981,34 +4973,22 @@ class TeacherWindow(QtWidgets.QWidget):
             gia_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             gia_item.setForeground(QColor(COLORS['gold']))
             tbl.setItem(r, 5, gia_item)
-            # action: xem chi tiet - DUNG PATTERN cua tblReview (da work)
-            btn = QtWidgets.QPushButton('Chi tiết')
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setFixedSize(82, 24)
-            btn.setStyleSheet(
-                f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; '
-                f'border-radius: 5px; font-size: 11px; font-weight: bold; }} '
-                f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
-            )
+            # action: xem chi tiet - dung pattern chuan
+            cell, (btn,) = make_action_cell([('Chi tiết', 'navy')])
+            tbl.setCellWidget(r, 6, cell)
             btn.clicked.connect(lambda ch, m=ma, n=tmon, s=siso, mx=smax, p=phong, l=lich, g=gia:
                 show_detail_dialog(self, 'Chi tiết lớp', [
-                    ('Mã lớp', m), ('Môn học', n), ('Giảng viên', MOCK_TEACHER['name']),
+                    ('Mã lớp', m), ('Khóa học', n), ('Giảng viên', MOCK_TEACHER['name']),
                     ('Lịch học', l), ('Phòng', p),
                     ('Sĩ số', f'{s}/{mx}'),
                     ('Học phí', f'{g:,}'.replace(',', '.') + ' đ'),
                 ], avatar_text=m, subtitle=n))
-            w = QtWidgets.QWidget()
-            hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(0, 0, 0, 0)
-            hl.setAlignment(Qt.AlignCenter)
-            hl.addWidget(btn)
-            tbl.setCellWidget(r, 6, w)
         for c, cw in enumerate([80, 175, 75, 145, 65, 115, 130]):
             tbl.setColumnWidth(c, cw)
         tbl.horizontalHeader().setStretchLastSection(False)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(my_classes)):
-            tbl.setRowHeight(r, 50)
+            tbl.setRowHeight(r, 44)
 
     def _fill_tea_students(self):
         page = self.page_widgets[3]
