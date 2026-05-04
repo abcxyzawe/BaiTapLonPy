@@ -4,7 +4,7 @@
  <widget class="QWidget" name="AdminCurriculum">
   <property name="geometry"><rect><x>0</x><y>0</y><width>1250</width><height>720</height></rect></property>
   <property name="minimumSize"><size><width>1250</width><height>720</height></size></property>
-  <property name="windowTitle"><string>EAUT - Khung chuong trinh</string></property>
+  <property name="windowTitle"><string>EAUT - Lo trinh hoc</string></property>
   <property name="styleSheet"><string notr="true">QWidget#AdminCurriculum { background: #edf2f7; }</string></property>
 
   <!-- SIDEBAR (bo qua boi Python) -->
