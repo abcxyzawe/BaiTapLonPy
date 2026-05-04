@@ -1386,13 +1386,26 @@ class MainWindow(QtWidgets.QWidget):
             btn_prog.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 4px; padding: 4px 12px; font-size: 11px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
             btn_prog.show()
             btn_prog.clicked.connect(self._show_progress_dialog)
-        # combo loc HK
+        # combo loc HK - load dynamic tu API thay vi hardcode
         cbo = page.findChild(QtWidgets.QComboBox, 'cboSemester')
         if cbo:
             cbo.clear()
-            cbo.addItems(['Tất cả học kỳ', 'HK2 - 2025-2026', 'HK1 - 2025-2026'])
-            sem_map = {0: None, 1: 'HK2-2526', 2: 'HK1-2526'}
-            cbo.currentIndexChanged.connect(lambda idx: self._render_student_grades(sem_map.get(idx)))
+            cbo.addItem('Tất cả học kỳ')
+            sem_map = {0: None}
+            if DB_AVAILABLE and SemesterService:
+                try:
+                    sems = SemesterService.get_all() or []
+                    for i, s in enumerate(sems, start=1):
+                        cbo.addItem(f"{s.get('ten', s.get('id', ''))} - {s.get('nam_hoc', '')}")
+                        sem_map[i] = s.get('id', '')
+                except Exception as e:
+                    print(f'[HV_GRADES_SEM] loi: {e}')
+            # fallback static neu API fail
+            if len(sem_map) == 1:
+                cbo.addItems(['HK2 - 2025-2026', 'HK1 - 2025-2026'])
+                sem_map[1] = 'HK2-2526'
+                sem_map[2] = 'HK1-2526'
+            safe_connect(cbo.currentIndexChanged, lambda idx: self._render_student_grades(sem_map.get(idx)))
 
     def _render_student_grades(self, sem_id):
         """Render bang diem theo HK. sem_id=None = all"""
