@@ -1767,7 +1767,7 @@ class MainWindow(QtWidgets.QWidget):
 
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
-        dlg.setWindowTitle('Tiến độ học khung chương trình - Ngành CNTT')
+        dlg.setWindowTitle('Tiến độ học lộ trình học - Ngành CNTT')
         dlg.setFixedSize(720, 580)
         lay = QtWidgets.QVBoxLayout(dlg)
         lay.setContentsMargins(20, 18, 20, 18)
@@ -1864,7 +1864,7 @@ class MainWindow(QtWidgets.QWidget):
         # Note
         note = QtWidgets.QLabel(
             '<i style="color:#718096; font-size:11px;">'
-            '💡 Tổng hợp từ <b>khung chương trình ngành CNTT</b> + bảng điểm cá nhân. '
+            '💡 Tổng hợp từ <b>lộ trình học ngành CNTT</b> + bảng điểm cá nhân. '
             'Môn đạt = tổng kết ≥ 5.0</i>'
         )
         note.setWordWrap(True)
@@ -2950,7 +2950,7 @@ class AdminWindow(QtWidgets.QWidget):
             safe_connect(btn_add.clicked, self._admin_add_curriculum)
         btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportCurr')
         if btn_exp:
-            safe_connect(btn_exp.clicked, lambda: export_table_csv(self, tbl, 'khung_chuong_trinh.csv', 'Xuất khung chương trình'))
+            safe_connect(btn_exp.clicked, lambda: export_table_csv(self, tbl, 'lo_trinh_hoc.csv', 'Xuất lộ trình học'))
 
     def _admin_edit_curriculum(self, row_idx):
         page = self.page_widgets[7]
@@ -5471,23 +5471,11 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.horizontalHeader().setStretchLastSection(True)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
-            tbl.setRowHeight(r, 50)  # PATTERN tblReview: row 50 cho button 24 co cho center
-            # Nut Nhap diem - DUNG PATTERN tblReview
-            btn_enter = QtWidgets.QPushButton('Nhập điểm')
-            btn_enter.setCursor(Qt.PointingHandCursor)
-            btn_enter.setFixedSize(82, 24)
-            btn_enter.setStyleSheet(
-                f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; '
-                f'border-radius: 5px; font-size: 11px; font-weight: bold; }} '
-                f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
-            )
+            tbl.setRowHeight(r, 44)
+            # Nut Nhap diem - dung pattern chuan
+            cell, (btn_enter,) = make_action_cell([('Nhập điểm', 'navy')])
+            tbl.setCellWidget(r, 8, cell)
             btn_enter.clicked.connect(lambda ch, rr=r: self._tea_grade_dialog(tbl, rr))
-            w = QtWidgets.QWidget()
-            hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(0, 0, 0, 0)
-            hl.setAlignment(Qt.AlignCenter)
-            hl.addWidget(btn_enter)
-            tbl.setCellWidget(r, 8, w)
         self._grades_recalc_lock = False
 
     def _tea_grade_dialog(self, tbl, row_idx):
