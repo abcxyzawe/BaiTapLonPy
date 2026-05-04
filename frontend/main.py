@@ -3245,10 +3245,10 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setRowHeight(r, 36)
 
         widen_search(page, 'txtSearchAudit', 260, ['cboAuditUser', 'cboAuditAction', 'cboAuditDate'])
-        # search + filter
+        # search + filter - safe_connect tranh accumulation
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchAudit')
         if txt:
-            txt.textChanged.connect(lambda s: table_filter(tbl, s, cols=[1, 3, 4]))
+            safe_connect(txt.textChanged, lambda s: table_filter(tbl, s, cols=[1, 3, 4]))
         cbo_u = page.findChild(QtWidgets.QComboBox, 'cboAuditUser')
         if cbo_u:
             cbo_u.clear()
@@ -3265,10 +3265,10 @@ class AdminWindow(QtWidgets.QWidget):
         for nm in ('cboAuditUser', 'cboAuditAction', 'cboAuditDate'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
-                cbo.currentIndexChanged.connect(lambda: self._admin_filter_audit())
+                safe_connect(cbo.currentIndexChanged, lambda: self._admin_filter_audit())
         btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportAudit')
         if btn_exp:
-            btn_exp.clicked.connect(lambda: export_table_csv(self, tbl, 'nhat_ky_he_thong.csv', 'Xuất nhật ký hệ thống'))
+            safe_connect(btn_exp.clicked, lambda: export_table_csv(self, tbl, 'nhat_ky_he_thong.csv', 'Xuất nhật ký hệ thống'))
 
     def _admin_filter_audit(self):
         page = self.page_widgets[8]
