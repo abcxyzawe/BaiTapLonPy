@@ -1271,7 +1271,7 @@ class MainWindow(QtWidgets.QWidget):
 
         cbo = page.findChild(QtWidgets.QComboBox, 'cboSemester')
         if cbo:
-            cbo.currentIndexChanged.connect(lambda idx: self._filter_exam_sem(idx))
+            safe_connect(cbo.currentIndexChanged, lambda idx: self._filter_exam_sem(idx))
 
     def _filter_exam_sem(self, idx):
         page = self.page_widgets[2]
@@ -1716,10 +1716,10 @@ class MainWindow(QtWidgets.QWidget):
 
         btn_save = page.findChild(QtWidgets.QPushButton, 'btnSave')
         if btn_save:
-            btn_save.clicked.connect(self._save_profile)
+            safe_connect(btn_save.clicked, self._save_profile)
         btn_cp = page.findChild(QtWidgets.QPushButton, 'btnChangePass')
         if btn_cp:
-            btn_cp.clicked.connect(self._change_pass)
+            safe_connect(btn_cp.clicked, self._change_pass)
 
     def _save_profile(self):
         page = self.page_widgets[6]
