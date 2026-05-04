@@ -5154,13 +5154,13 @@ class TeacherWindow(QtWidgets.QWidget):
                     vlay.addWidget(card)
             vlay.addStretch()
 
-        # nut gui / clear
+        # nut gui / clear - safe_connect tranh accumulation
         btn_send = page.findChild(QtWidgets.QPushButton, 'btnSendNotice')
         if btn_send:
-            btn_send.clicked.connect(self._tea_send_notice)
+            safe_connect(btn_send.clicked, self._tea_send_notice)
         btn_clear = page.findChild(QtWidgets.QPushButton, 'btnClearNotice')
         if btn_clear:
-            btn_clear.clicked.connect(self._tea_clear_notice)
+            safe_connect(btn_clear.clicked, self._tea_clear_notice)
 
     def _make_notice_card(self, to, subj, t):
         card = QtWidgets.QFrame()
@@ -5309,7 +5309,7 @@ class TeacherWindow(QtWidgets.QWidget):
                 'border-radius: 6px; font-size: 12px; font-weight: bold; } '
                 'QPushButton:hover { background: #276749; color: white; }'
             )
-            btn_sync.clicked.connect(lambda: self._sync_cc_from_attendance(tbl, cbo))
+            safe_connect(btn_sync.clicked, lambda: self._sync_cc_from_attendance(tbl, cbo))
             btn_sync.show()
         # cbo chon lop -> load students cua lop do
         if cbo:
