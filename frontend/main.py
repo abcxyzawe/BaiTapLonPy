@@ -5690,10 +5690,10 @@ class TeacherWindow(QtWidgets.QWidget):
 
         btn_save = page.findChild(QtWidgets.QPushButton, 'btnSave')
         if btn_save:
-            btn_save.clicked.connect(self._save_tea_profile)
+            safe_connect(btn_save.clicked, self._save_tea_profile)
         btn_cp = page.findChild(QtWidgets.QPushButton, 'btnChangePass')
         if btn_cp:
-            btn_cp.clicked.connect(lambda: self._tea_change_pass())
+            safe_connect(btn_cp.clicked, lambda: self._tea_change_pass())
 
     def _save_tea_profile(self):
         page = self.page_widgets[7]
@@ -6686,10 +6686,10 @@ class EmployeeWindow(QtWidgets.QWidget):
 
         btn_save = page.findChild(QtWidgets.QPushButton, 'btnSave')
         if btn_save:
-            btn_save.clicked.connect(self._save_emp_profile)
+            safe_connect(btn_save.clicked, self._save_emp_profile)
         btn_cp = page.findChild(QtWidgets.QPushButton, 'btnChangePass')
         if btn_cp:
-            btn_cp.clicked.connect(lambda: self._emp_change_pass())
+            safe_connect(btn_cp.clicked, lambda: self._emp_change_pass())
 
     def _save_emp_profile(self):
         page = self.page_widgets[5]
