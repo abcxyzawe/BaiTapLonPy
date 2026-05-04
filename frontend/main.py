@@ -3248,7 +3248,7 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboAuditDate')
         if cbo_d:
             cbo_d.clear()
-            cbo_d.addItems(['Tất cả thời gian', 'Hôm nay (17/04)', '7 ngày qua', '30 ngày qua'])
+            cbo_d.addItems(['Tất cả thời gian', 'Hôm nay', '7 ngày qua', '30 ngày qua'])
         for nm in ('cboAuditUser', 'cboAuditAction', 'cboAuditDate'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
@@ -5885,6 +5885,12 @@ class EmployeeWindow(QtWidgets.QWidget):
         page = self.page_widgets[0]
         emp_id = MOCK_EMPLOYEE.get('user_id')
 
+        # Cap nhat label hom nay theo ngay he thong (truoc hardcode 18/04/2026)
+        lbl_today = page.findChild(QtWidgets.QLabel, 'lblToday')
+        if lbl_today:
+            from datetime import date as _date
+            lbl_today.setText(f'Hôm nay: {_date.today().strftime("%d/%m/%Y")}')
+
         # Stat cards: today reg / paid / revenue / pending - tu API
         if DB_AVAILABLE and emp_id:
             try:
@@ -6242,7 +6248,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboRegDate')
         if cbo_d:
             cbo_d.clear()
-            cbo_d.addItems(['Tất cả thời gian', 'Hôm nay (18/04)', '7 ngày qua', '30 ngày qua'])
+            cbo_d.addItems(['Tất cả thời gian', 'Hôm nay', '7 ngày qua', '30 ngày qua'])
         for nm in ('cboRegStatus', 'cboRegDate'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
