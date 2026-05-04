@@ -4,7 +4,7 @@
  <widget class="QWidget" name="AdminStudents">
   <property name="geometry"><rect><x>0</x><y>0</y><width>1100</width><height>700</height></rect></property>
   <property name="minimumSize"><size><width>1100</width><height>700</height></size></property>
-  <property name="windowTitle"><string>EAUT - Quan ly sinh vien</string></property>
+  <property name="windowTitle"><string>EAUT - Quan ly hoc vien</string></property>
   <property name="styleSheet"><string notr="true">QWidget#AdminStudents { background: #edf2f7; }</string></property>
 
   <!-- ===== SIDEBAR ===== -->
