@@ -34,5 +34,7 @@ def login(req: LoginRequest):
 @router.put('/password')
 def change_password(req: ChangePasswordRequest):
     """Doi mat khau (hash sha256 ben service)."""
-    AuthService.change_password(req.user_id, req.new_password)
+    affected = AuthService.change_password(req.user_id, req.new_password)
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Tài khoản user_id={req.user_id} không tồn tại')
     return {'status': 'ok'}

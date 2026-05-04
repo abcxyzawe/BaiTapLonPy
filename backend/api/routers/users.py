@@ -17,7 +17,10 @@ def list_students():
 
 @router.get('/students/{msv}')
 def get_student(msv: str):
-    return StudentService.get_by_msv(msv)
+    row = StudentService.get_by_msv(msv)
+    if not row:
+        raise HTTPException(status_code=404, detail=f'Học viên MSV={msv} không tồn tại')
+    return row
 
 
 @router.post('/students')

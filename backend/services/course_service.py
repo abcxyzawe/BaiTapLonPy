@@ -139,7 +139,7 @@ class CourseService:
 
     @staticmethod
     def update_class_price(ma_lop: str, gia: int):
-        db.execute("UPDATE classes SET gia = %s WHERE ma_lop = %s", (gia, ma_lop))
+        return db.execute("UPDATE classes SET gia = %s WHERE ma_lop = %s", (gia, ma_lop))
 
     @staticmethod
     def get_teachers_list():
