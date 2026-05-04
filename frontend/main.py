@@ -6020,17 +6020,19 @@ class EmployeeWindow(QtWidgets.QWidget):
             cbo_cls.addItem('-- Chọn lớp --')
             for cls in MOCK_CLASSES:
                 cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({cls[8]:,}đ)'.replace(',', '.'))
+            # Khi chon lop -> hien info chi tiet vao lblClassDetails
+            safe_connect(cbo_cls.currentIndexChanged, self._emp_show_class_info)
 
-        # buttons
+        # buttons - safe_connect tranh accumulation moi lan re-fill
         btn_lk = page.findChild(QtWidgets.QPushButton, 'btnLookup')
         if btn_lk:
-            btn_lk.clicked.connect(self._emp_lookup_student)
+            safe_connect(btn_lk.clicked, self._emp_lookup_student)
         btn_rg = page.findChild(QtWidgets.QPushButton, 'btnConfirmReg')
         if btn_rg:
-            btn_rg.clicked.connect(self._emp_do_register)
+            safe_connect(btn_rg.clicked, self._emp_do_register)
         btn_rs = page.findChild(QtWidgets.QPushButton, 'btnResetReg')
         if btn_rs:
-            btn_rs.clicked.connect(self._emp_reset_form)
+            safe_connect(btn_rs.clicked, self._emp_reset_form)
 
     def _emp_filter_classes(self, idx):
         page = self.page_widgets[1]
@@ -6048,6 +6050,37 @@ class EmployeeWindow(QtWidgets.QWidget):
         for cls in MOCK_CLASSES:
             if cls[1] == mon_code:
                 cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({cls[8]:,}đ)'.replace(',', '.'))
+
+    def _emp_show_class_info(self, idx):
+        """Khi NV chon lop trong cbo -> hien chi tiet (GV, Lich, Phong, Si so, Hoc phi)."""
+        page = self.page_widgets[1]
+        lbl = page.findChild(QtWidgets.QLabel, 'lblClassDetails')
+        if not lbl:
+            return
+        if idx <= 0:
+            lbl.setText('Vui lòng chọn môn và lớp để xem thông tin chi tiết')
+            return
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboClassEmp')
+        if not cbo:
+            return
+        # Parse ma_lop tu text "MA_LOP — Ten GV (gia)" -> lay ma_lop dau
+        txt = cbo.currentText()
+        ma_lop = txt.split('—')[0].strip() if '—' in txt else txt.split()[0]
+        # Tim trong cache MOCK_CLASSES (ma_lop, ma_mon, ten_mon, ten_gv, lich, phong, smax, scur, gia)
+        cls = next((c for c in MOCK_CLASSES if c[0] == ma_lop), None)
+        if not cls:
+            lbl.setText(f'Không tìm thấy thông tin lớp {ma_lop}')
+            return
+        _, _, ten_mon, gv, lich, phong, smax, scur, gia = cls
+        cho_trong = max(0, smax - scur)
+        info = (
+            f'<b>Khóa:</b> {ten_mon}<br>'
+            f'<b>Giảng viên:</b> {gv or "—"}<br>'
+            f'<b>Lịch học:</b> {lich or "—"}  ·  <b>Phòng:</b> {phong or "—"}<br>'
+            f'<b>Còn:</b> {cho_trong}/{smax} chỗ  ·  '
+            f'<b>Học phí:</b> <span style="color:#c05621;">{gia:,}đ</span>'.replace(',', '.')
+        )
+        lbl.setText(info)
 
     def _emp_lookup_student(self):
         page = self.page_widgets[1]
@@ -6112,34 +6145,8 @@ class EmployeeWindow(QtWidgets.QWidget):
                             return
             except Exception as e:
                 print(f'[REG] check duplicate loi: {e}')
-        if DB_AVAILABLE and CurriculumService:
-            try:
-                hv_row = StudentService.get_by_msv(msv.text().strip())
-                if hv_row and ma_mon_lop:
-                    hv_uid = hv_row.get('user_id') or hv_row.get('id')
-                    check = CurriculumService.check_prerequisites_for_student(
-                        hv_uid, ma_mon_lop)
-                    if not check['ok']:
-                        warn_msg = (
-                            f'<b>Học viên chưa đủ điều kiện học môn {ma_mon_lop}!</b><br><br>'
-                            f'Theo khung chương trình, cần hoàn thành các môn tiên quyết:<br>'
-                            f'<span style="color:red;">• {", ".join(check["missing"])}</span><br><br>'
-                            f'Vẫn tiếp tục đăng ký?'
-                        )
-                        box = QtWidgets.QMessageBox(self)
-                        box.setIcon(QtWidgets.QMessageBox.Warning)
-                        box.setWindowTitle('Cảnh báo môn tiên quyết')
-                        box.setTextFormat(Qt.RichText)
-                        box.setText(warn_msg)
-                        box.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-                        box.button(QtWidgets.QMessageBox.Yes).setText('Tiếp tục')
-                        box.button(QtWidgets.QMessageBox.No).setText('Hủy')
-                        box.setDefaultButton(QtWidgets.QMessageBox.No)
-                        _style_msgbox(box)
-                        if box.exec_() != QtWidgets.QMessageBox.Yes:
-                            return
-            except Exception as e:
-                print(f'[REG] check prereq loi: {e}')
+        # Khoa hoc ngoai khoa: KHONG check tien quyet/lo trinh hoc.
+        # NV chi can xac nhan dang ky + thu tien, HV tu chiu trach nhiem ve trinh do.
 
         if not msg_confirm(self, 'Xác nhận', f'Đăng ký {hoten.text()} vào lớp {cbo_cls.currentText()}?'):
             return
@@ -6227,44 +6234,33 @@ class EmployeeWindow(QtWidgets.QWidget):
             color = COLORS['green'] if st == 'Đã thanh toán' else COLORS['orange'] if st == 'Chờ thanh toán' else COLORS['red']
             item_st.setForeground(QColor(color))
             tbl.setItem(r, 5, item_st)
-            # action - 2 nut: Xem + Hủy. An nut Huy neu da huy/hoan thanh
-            btn_view = QtWidgets.QPushButton('Xem')
-            btn_view.setCursor(Qt.PointingHandCursor)
-            btn_view.setFixedSize(48, 22)
-            btn_view.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 3px; font-size: 10px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
+            # action - dung pattern chuan make_action_cell, button kich thuoc dong bo
+            cell, (btn_view, btn_cancel) = make_action_cell([('Xem', 'navy'), ('Hủy', 'red')])
+            tbl.setCellWidget(r, 6, cell)
             btn_view.clicked.connect(lambda ch, rdata=row: show_detail_dialog(
                 self, 'Chi tiết đăng ký',
                 [('Mã đăng ký', rdata[0]), ('Ngày đăng ký', rdata[1]),
                  ('Học viên', rdata[2]), ('Lớp', rdata[3]),
                  ('Học phí', f'{rdata[4]} đ'), ('Trạng thái', rdata[5])],
                 avatar_text='DK', subtitle=rdata[2]))
-            btn_cancel = QtWidgets.QPushButton('Hủy')
-            btn_cancel.setCursor(Qt.PointingHandCursor)
-            btn_cancel.setFixedSize(40, 22)
-            # an nut huy neu trang thai khong cho phep
+            # An nut huy neu trang thai khong cho phep
             cur_status = 'Đã thanh toán' if row[0] in self._paid_dks else row[5]
             can_cancel = cur_status == 'Chờ thanh toán'
             if can_cancel:
-                btn_cancel.setStyleSheet(f'QPushButton {{ background: {COLORS["red"]}; color: white; border: none; border-radius: 3px; font-size: 10px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["red_hover"]}; }}')
                 btn_cancel.clicked.connect(lambda ch, ma_dk=row[0], hv=row[2], lop=row[3], t=tbl: self._emp_cancel_reg(t, ma_dk, hv, lop))
             else:
                 btn_cancel.setEnabled(False)
-                btn_cancel.setStyleSheet('QPushButton { background: #e2e8f0; color: #a0aec0; border: none; border-radius: 3px; font-size: 10px; font-weight: bold; }')
+                btn_cancel.setStyleSheet(
+                    'QPushButton { background: #e2e8f0; color: #a0aec0; border: none; '
+                    'border-radius: 4px; font-size: 11px; font-weight: bold; }'
+                )
                 btn_cancel.setToolTip(f'Không thể hủy ở trạng thái "{cur_status}"')
-            w = QtWidgets.QWidget()
-            hl = QtWidgets.QHBoxLayout(w)
-            hl.setContentsMargins(0, 0, 0, 0)
-            hl.setSpacing(4)
-            hl.setAlignment(Qt.AlignCenter)
-            hl.addWidget(btn_view)
-            hl.addWidget(btn_cancel)
-            tbl.setCellWidget(r, 6, w)
         tbl.horizontalHeader().setStretchLastSection(True)
-        for c, cw in enumerate([70, 95, 195, 90, 110, 125, 70]):
+        for c, cw in enumerate([70, 95, 195, 90, 110, 125, 130]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
-            tbl.setRowHeight(r, 36)
+            tbl.setRowHeight(r, 44)
 
         widen_search(page, 'txtSearchReg', 300, ['cboRegStatus', 'cboRegDate'])
         # search + filter + export - safe_connect tranh accumulation
@@ -6621,29 +6617,22 @@ class EmployeeWindow(QtWidgets.QWidget):
                 item_tt.setTextAlignment(Qt.AlignCenter)
                 item_tt.setForeground(QColor(COLORS['red'] if trang_thai == 'Đầy' else COLORS['green']))
                 tbl.setItem(r, 6, item_tt)
-                # nut chi tiet lop - thu nho de hop voi row (NV chi xem)
-                btn_detail = QtWidgets.QPushButton('Xem')
-                btn_detail.setCursor(Qt.PointingHandCursor)
-                btn_detail.setFixedSize(54, 22)
-                btn_detail.setStyleSheet(f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; border-radius: 3px; font-size: 10px; font-weight: bold; }} QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}')
+                # nut chi tiet lop - dung pattern chuan
+                cell, (btn_detail,) = make_action_cell([('Xem', 'navy')])
+                tbl.setCellWidget(r, 7, cell)
                 btn_detail.clicked.connect(lambda ch, cls_data=cls: show_detail_dialog(
                     self, 'Chi tiết lớp',
-                    [('Mã lớp', cls_data[0]), ('Môn học', cls_data[2]),
+                    [('Mã lớp', cls_data[0]), ('Khóa học', cls_data[2]),
                      ('Giảng viên', cls_data[3]), ('Lịch học', cls_data[4]),
                      ('Phòng', cls_data[5]),
                      ('Sĩ số', f'{cls_data[7]}/{cls_data[6]}'),
                      ('Học phí', f'{cls_data[8]:,}'.replace(',', '.') + ' đ'),
                      ('Trạng thái', 'Đầy' if cls_data[7] >= cls_data[6] else 'Còn chỗ')],
                     avatar_text=cls_data[0][:2], subtitle=cls_data[2]))
-                w = QtWidgets.QWidget()
-                hl = QtWidgets.QHBoxLayout(w)
-                hl.setContentsMargins(0, 0, 0, 0); hl.setAlignment(Qt.AlignCenter)
-                hl.addWidget(btn_detail)
-                tbl.setCellWidget(r, 7, w)
             for r in range(len(cls_list)):
-                tbl.setRowHeight(r, 36)
+                tbl.setRowHeight(r, 44)
         tbl.horizontalHeader().setStretchLastSection(True)
-        for c, cw in enumerate([78, 150, 125, 140, 68, 100, 85, 70]):
+        for c, cw in enumerate([78, 150, 125, 140, 68, 100, 85, 90]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
 
