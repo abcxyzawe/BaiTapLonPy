@@ -24,7 +24,10 @@ def revenue_today():
 
 @router.get('/{reg_id}')
 def get_registration(reg_id: int):
-    return RegistrationService.get_registration(reg_id)
+    row = RegistrationService.get_registration(reg_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f'Đăng ký id={reg_id} không tồn tại')
+    return row
 
 
 @router.post('')
