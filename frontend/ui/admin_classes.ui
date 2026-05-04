@@ -46,7 +46,7 @@
     </widget>
     <widget class="QComboBox" name="cboAdmClsCourse">
      <property name="geometry"><rect><x>280</x><y>10</y><width>200</width><height>30</height></rect></property>
-     <item><property name="text"><string>Tất cả môn học</string></property></item>
+     <item><property name="text"><string>Tất cả khóa học</string></property></item>
     </widget>
     <widget class="QComboBox" name="cboAdmClsTeacher">
      <property name="geometry"><rect><x>500</x><y>10</y><width>180</width><height>30</height></rect></property>
@@ -79,7 +79,7 @@
      <property name="showGrid"><bool>false</bool></property>
      <property name="columnCount"><number>8</number></property>
      <column><property name="text"><string>Mã lớp</string></property></column>
-     <column><property name="text"><string>Môn học</string></property></column>
+     <column><property name="text"><string>Khóa học</string></property></column>
      <column><property name="text"><string>Giảng viên</string></property></column>
      <column><property name="text"><string>Lịch</string></property></column>
      <column><property name="text"><string>Phòng</string></property></column>

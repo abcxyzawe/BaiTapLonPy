@@ -105,11 +105,11 @@
     <widget class="QLabel" name="lblCourseSelect">
      <property name="geometry"><rect><x>22</x><y>54</y><width>360</width><height>18</height></rect></property>
      <property name="styleSheet"><string notr="true">color: #4a5568; font-size: 12px; background: transparent;</string></property>
-     <property name="text"><string>Môn học</string></property>
+     <property name="text"><string>Khóa học</string></property>
     </widget>
     <widget class="QComboBox" name="cboCourse">
      <property name="geometry"><rect><x>22</x><y>76</y><width>356</width><height>34</height></rect></property>
-     <item><property name="text"><string>-- Chọn môn học --</string></property></item>
+     <item><property name="text"><string>-- Chọn khóa học --</string></property></item>
     </widget>
 
     <widget class="QLabel" name="lblClassSelect">

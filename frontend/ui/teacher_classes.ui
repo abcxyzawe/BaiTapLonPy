@@ -49,7 +49,7 @@
      <property name="showGrid"><bool>false</bool></property>
      <property name="columnCount"><number>7</number></property>
      <column><property name="text"><string>Mã lớp</string></property></column>
-     <column><property name="text"><string>Tên môn</string></property></column>
+     <column><property name="text"><string>Tên khóa</string></property></column>
      <column><property name="text"><string>Sĩ số</string></property></column>
      <column><property name="text"><string>Lịch học</string></property></column>
      <column><property name="text"><string>Phòng</string></property></column>

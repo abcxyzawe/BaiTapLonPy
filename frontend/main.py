@@ -680,7 +680,7 @@ ADMIN_PAGES = [
 
 ADMIN_MENU = [
     ('btnAdminDash', 'iconAdminDash', 'grid', 'Tổng quan'),
-    ('btnAdminCourse', 'iconAdminCourse', 'database', 'Quản lý môn học'),
+    ('btnAdminCourse', 'iconAdminCourse', 'database', 'Quản lý khóa học'),
     ('btnAdminClasses', 'iconAdminClasses', 'layers', 'Quản lý lớp'),
     ('btnAdminStudent', 'iconAdminStudent', 'users', 'Quản lý học viên'),
     ('btnAdminTeacher', 'iconAdminTeacher', 'user-check', 'Quản lý giảng viên'),
@@ -1417,7 +1417,7 @@ class MainWindow(QtWidgets.QWidget):
                     all_rows.append([sem_labels.get(s_id, s_id)] + r)
 
         tbl.setColumnCount(8)
-        headers = ['Học kỳ', 'Mã môn', 'Tên môn', 'TC', 'Điểm QT', 'Điểm thi', 'Tổng kết', 'Xếp loại']
+        headers = ['Học kỳ', 'Mã khóa', 'Tên khóa', 'TC', 'Điểm QT', 'Điểm thi', 'Tổng kết', 'Xếp loại']
         for c, h in enumerate(headers):
             tbl.setHorizontalHeaderItem(c, QtWidgets.QTableWidgetItem(h))
 
@@ -1815,7 +1815,7 @@ class MainWindow(QtWidgets.QWidget):
         # Bang chi tiet 14 mon
         tbl = QtWidgets.QTableWidget()
         tbl.setColumnCount(6)
-        tbl.setHorizontalHeaderLabels(['Mã môn', 'Tên môn', 'TC', 'HK', 'Điểm', 'Trạng thái'])
+        tbl.setHorizontalHeaderLabels(['Mã khóa', 'Tên khóa', 'TC', 'HK', 'Điểm', 'Trạng thái'])
         tbl.setRowCount(len(prog['chi_tiet']))
         tbl.setAlternatingRowColors(True)
         tbl.verticalHeader().setVisible(False)
@@ -2283,7 +2283,7 @@ class AdminWindow(QtWidgets.QWidget):
                 cell, (btn_edit, btn_del) = make_action_cell([('Sửa', 'navy'), ('Xóa', 'red')])
                 tbl.setCellWidget(r, 6, cell)
                 btn_edit.clicked.connect(lambda ch, ma=row[0], nm=row[1]: self._admin_edit_course(ma, nm))
-                btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'môn học'))
+                btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'khóa học'))
             tbl.horizontalHeader().setStretchLastSection(True)
             for c, cw in enumerate([70, 180, 30, 140, 130, 110, 150]):
                 tbl.setColumnWidth(c, cw)
@@ -2330,15 +2330,15 @@ class AdminWindow(QtWidgets.QWidget):
     def _admin_add_course(self):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
-        dlg.setWindowTitle('Thêm môn học')
+        dlg.setWindowTitle('Thêm khóa học')
         dlg.setFixedSize(380, 260)
         form = QtWidgets.QFormLayout(dlg)
         txt_code = QtWidgets.QLineEdit()
         txt_name = QtWidgets.QLineEdit()
         txt_tc = QtWidgets.QLineEdit('3')
         txt_gv = QtWidgets.QLineEdit()
-        form.addRow('Mã môn:', txt_code)
-        form.addRow('Tên môn:', txt_name)
+        form.addRow('Mã khóa:', txt_code)
+        form.addRow('Tên khóa:', txt_name)
         form.addRow('Số buổi:', txt_tc)
         form.addRow('GV phụ trách:', txt_gv)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
@@ -2347,7 +2347,7 @@ class AdminWindow(QtWidgets.QWidget):
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
         if not txt_code.text().strip() or not txt_name.text().strip():
-            msg_warn(self, 'Thiếu', 'Mã môn và tên môn không được trống')
+            msg_warn(self, 'Thiếu', 'Mã khóa và tên môn không được trống')
             return
         if not DB_AVAILABLE:
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
@@ -2382,7 +2382,7 @@ class AdminWindow(QtWidgets.QWidget):
             cell, (btn_edit, btn_del) = make_action_cell([('Sửa', 'navy'), ('Xóa', 'red')])
             tbl.setCellWidget(r, 6, cell)
             btn_edit.clicked.connect(lambda ch, ma=new_code, nm=new_name: self._admin_edit_course(ma, nm))
-            btn_del.clicked.connect(lambda ch, ma=new_code, nm=new_name: self._admin_del_row(tbl, ma, nm, 'môn học'))
+            btn_del.clicked.connect(lambda ch, ma=new_code, nm=new_name: self._admin_del_row(tbl, ma, nm, 'khóa học'))
         msg_info(self, 'Thành công', f'Đã thêm môn {new_code} - {new_name}')
 
     def _admin_edit_course(self, ma, nm):
@@ -2401,7 +2401,7 @@ class AdminWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
 
         style_dialog(dlg)
-        dlg.setWindowTitle(f'Sửa môn học - {ma}')
+        dlg.setWindowTitle(f'Sửa khóa học - {ma}')
         dlg.setFixedSize(400, 320)
         form = QtWidgets.QFormLayout(dlg)
         txt_code = QtWidgets.QLineEdit(tbl.item(target_row, 0).text() if tbl.item(target_row, 0) else ma)
@@ -2409,8 +2409,8 @@ class AdminWindow(QtWidgets.QWidget):
         txt_tc = QtWidgets.QLineEdit(tbl.item(target_row, 2).text() if tbl.item(target_row, 2) else '3')
         txt_gv = QtWidgets.QLineEdit(tbl.item(target_row, 3).text() if tbl.item(target_row, 3) else '')
         txt_lich = QtWidgets.QLineEdit(tbl.item(target_row, 4).text() if tbl.item(target_row, 4) else '')
-        form.addRow('Mã môn:', txt_code)
-        form.addRow('Tên môn:', txt_name)
+        form.addRow('Mã khóa:', txt_code)
+        form.addRow('Tên khóa:', txt_name)
         form.addRow('Số buổi:', txt_tc)
         form.addRow('GV phụ trách:', txt_gv)
         form.addRow('Lịch học:', txt_lich)
@@ -2452,7 +2452,7 @@ class AdminWindow(QtWidgets.QWidget):
             return
         # Ghi DB - PHAI thanh cong moi xoa UI. Khong silent catch nua.
         try:
-            if loai == 'môn học':
+            if loai == 'khóa học':
                 CourseService.delete_course(ma)
             elif loai == 'lớp':
                 CourseService.delete_class(ma)
@@ -2973,8 +2973,8 @@ class AdminWindow(QtWidgets.QWidget):
         txt_prereq = QtWidgets.QLineEdit(cur[6] if cur[6] != '—' else '')
         txt_prereq.setPlaceholderText('Để trống nếu không có, cách nhau bởi dấu phẩy')
         form.addRow('STT:', txt_stt)
-        form.addRow('Mã môn:', txt_code)
-        form.addRow('Tên môn:', txt_name)
+        form.addRow('Mã khóa:', txt_code)
+        form.addRow('Tên khóa:', txt_name)
         form.addRow('Số buổi:', txt_tc)
         form.addRow('Loại:', cbo_loai)
         form.addRow('Học kỳ:', cbo_hk)
@@ -2985,7 +2985,7 @@ class AdminWindow(QtWidgets.QWidget):
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
         if not txt_code.text().strip() or not txt_name.text().strip():
-            msg_warn(self, 'Thiếu', 'Mã môn và tên môn không được trống')
+            msg_warn(self, 'Thiếu', 'Mã khóa và tên môn không được trống')
             return
         try:
             int(txt_tc.text())
@@ -3069,7 +3069,7 @@ class AdminWindow(QtWidgets.QWidget):
         except Exception:
             courses = []
         if not courses:
-            msg_warn(self, 'Không có môn nào', 'Hãy thêm môn học trước khi đưa vào khung CT.')
+            msg_warn(self, 'Không có môn nào', 'Hãy thêm khóa học trước khi đưa vào khung CT.')
             return
 
         dlg = QtWidgets.QDialog(self)
@@ -3175,7 +3175,7 @@ class AdminWindow(QtWidgets.QWidget):
             try:
                 if not AuditService: raise RuntimeError("AuditService chua co")
                 rows = AuditService.get_all(limit=50)
-                role_map = {'admin': 'QTV', 'teacher': 'GV', 'employee': 'NV', 'student': 'SV'}
+                role_map = {'admin': 'QTV', 'teacher': 'GV', 'employee': 'NV', 'student': 'HV'}
                 data = []
                 for l in rows:
                     ts = fmt_date(l.get('created_at'), fmt='%d/%m/%Y %H:%M:%S')
@@ -3192,16 +3192,16 @@ class AdminWindow(QtWidgets.QWidget):
             data = [
                 ['17/04/2026 08:12:34', 'admin', 'QTV', 'Đăng nhập', 'Đăng nhập thành công', '192.168.1.10'],
                 ['17/04/2026 08:15:02', 'admin', 'QTV', 'Mở đăng ký', 'Mở đăng ký HK2-2526', '192.168.1.10'],
-                ['17/04/2026 08:30:11', '2024001', 'SV', 'Đăng nhập', 'Đăng nhập thành công', '10.0.0.55'],
-                ['17/04/2026 08:31:45', '2024001', 'SV', 'Đăng ký', 'Đăng ký IT004 - Trí tuệ nhân tạo', '10.0.0.55'],
-                ['17/04/2026 08:32:10', '2024001', 'SV', 'Đăng ký', 'Đăng ký IT005 - Phát triển web', '10.0.0.55'],
-                ['17/04/2026 08:45:30', '2024002', 'SV', 'Đăng nhập', 'Đăng nhập thành công', '10.0.0.87'],
-                ['17/04/2026 08:46:12', '2024002', 'SV', 'Hủy ĐK', 'Hủy đăng ký MA002 - Xác suất TK', '10.0.0.87'],
-                ['17/04/2026 09:00:05', '2024003', 'SV', 'Đăng nhập', 'Đăng nhập thất bại (sai MK)', '10.0.0.42'],
-                ['17/04/2026 09:00:15', '2024003', 'SV', 'Đăng nhập', 'Đăng nhập thất bại (sai MK)', '10.0.0.42'],
-                ['17/04/2026 09:00:25', '2024003', 'SV', 'Cảnh báo', 'Khóa tài khoản 15 phút (3 lần sai)', '10.0.0.42'],
+                ['17/04/2026 08:30:11', '2024001', 'HV', 'Đăng nhập', 'Đăng nhập thành công', '10.0.0.55'],
+                ['17/04/2026 08:31:45', '2024001', 'HV', 'Đăng ký', 'Đăng ký IT004 - Trí tuệ nhân tạo', '10.0.0.55'],
+                ['17/04/2026 08:32:10', '2024001', 'HV', 'Đăng ký', 'Đăng ký IT005 - Phát triển web', '10.0.0.55'],
+                ['17/04/2026 08:45:30', '2024002', 'HV', 'Đăng nhập', 'Đăng nhập thành công', '10.0.0.87'],
+                ['17/04/2026 08:46:12', '2024002', 'HV', 'Hủy ĐK', 'Hủy đăng ký MA002 - Xác suất TK', '10.0.0.87'],
+                ['17/04/2026 09:00:05', '2024003', 'HV', 'Đăng nhập', 'Đăng nhập thất bại (sai MK)', '10.0.0.42'],
+                ['17/04/2026 09:00:15', '2024003', 'HV', 'Đăng nhập', 'Đăng nhập thất bại (sai MK)', '10.0.0.42'],
+                ['17/04/2026 09:00:25', '2024003', 'HV', 'Cảnh báo', 'Khóa tài khoản 15 phút (3 lần sai)', '10.0.0.42'],
                 ['17/04/2026 09:15:30', 'admin', 'QTV', 'Cập nhật', 'Sửa sĩ số IT001 từ 35 → 40', '192.168.1.10'],
-                ['17/04/2026 09:30:00', '2024010', 'SV', 'Thanh toán', 'Thanh toán 9,000,000 đ - HK2', '10.0.0.91'],
+                ['17/04/2026 09:30:00', '2024010', 'HV', 'Thanh toán', 'Thanh toán 9,000,000 đ - HK2', '10.0.0.91'],
             ]
         action_colors = {
             'Đăng nhập': COLORS['green'], 'Đăng ký': COLORS['navy'],
@@ -3239,7 +3239,7 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_u = page.findChild(QtWidgets.QComboBox, 'cboAuditUser')
         if cbo_u:
             cbo_u.clear()
-            cbo_u.addItems(['Tất cả người dùng', 'admin', 'QTV', 'SV'])
+            cbo_u.addItems(['Tất cả người dùng', 'QTV', 'GV', 'NV', 'HV'])
         cbo_a = page.findChild(QtWidgets.QComboBox, 'cboAuditAction')
         if cbo_a:
             cbo_a.clear()
@@ -3482,7 +3482,7 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboAdmClsCourse')
         if cbo_c:
             cbo_c.clear()
-            cbo_c.addItem('Tất cả môn học')
+            cbo_c.addItem('Tất cả khóa học')
             # uu tien lay tu API, fallback sang MOCK neu API loi
             courses_for_cbo = []
             if DB_AVAILABLE:
@@ -3701,7 +3701,7 @@ class AdminWindow(QtWidgets.QWidget):
         so_buoi = QtWidgets.QSpinBox(); so_buoi.setRange(4, 60); so_buoi.setValue(24)
 
         form.addRow('Mã lớp (*):', ma)
-        form.addRow('Môn học (*):', cbo_mon)
+        form.addRow('Khóa học (*):', cbo_mon)
         form.addRow('Giảng viên (*):', cbo_gv)
         form.addRow('Lịch học:', lich)
         form.addRow('Phòng:', phong)
@@ -3719,7 +3719,7 @@ class AdminWindow(QtWidgets.QWidget):
             msg_warn(self, 'Thiếu', 'Mã lớp không được trống')
             return
         if cbo_mon.currentIndex() == 0:
-            msg_warn(self, 'Thiếu', 'Hãy chọn môn học')
+            msg_warn(self, 'Thiếu', 'Hãy chọn khóa học')
             return
         if cbo_gv.currentIndex() == 0:
             msg_warn(self, 'Thiếu', 'Hãy chọn giảng viên')
@@ -5978,7 +5978,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboCourse')
         if cbo_c:
             cbo_c.clear()
-            cbo_c.addItem('-- Chọn môn học --')
+            cbo_c.addItem('-- Chọn khóa học --')
             for code, name in MOCK_COURSES:
                 cbo_c.addItem(f'{code} - {name}')
             safe_connect(cbo_c.currentIndexChanged, self._emp_filter_classes)
@@ -6090,7 +6090,7 @@ class EmployeeWindow(QtWidgets.QWidget):
             msg_warn(self, 'Thiếu', 'Hãy nhập họ tên')
             return
         if cbo_c.currentIndex() == 0:
-            msg_warn(self, 'Thiếu', 'Hãy chọn môn học')
+            msg_warn(self, 'Thiếu', 'Hãy chọn khóa học')
             return
         if cbo_cls.currentIndex() == 0:
             msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
@@ -6612,7 +6612,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboEmpClsCourse')
         if cbo_c:
             cbo_c.clear()
-            cbo_c.addItem('Tất cả môn học')
+            cbo_c.addItem('Tất cả khóa học')
             # uu tien lay courses tu API, fallback MOCK_COURSES
             courses_for_cbo = []
             if DB_AVAILABLE:
