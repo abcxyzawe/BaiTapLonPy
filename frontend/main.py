@@ -410,6 +410,990 @@ def install_refresh_shortcut(window):
         sc.activated.connect(_make_nav(n - 1))
 
 
+def export_schedule_ics(parent, schedules: list, default_filename='lich_hoc.ics',
+                         calendar_name='Lich hoc EAUT'):
+    """Xuat schedules sang file .ics (iCalendar) - import duoc vao Google/Apple Calendar.
+
+    Args:
+        schedules: list of dict chua: lop_id, ngay, gio_bat_dau, gio_ket_thuc,
+                   phong, ten_mon, ten_gv, noi_dung
+        default_filename: ten file mac dinh khi save
+        calendar_name: ten calendar trong app
+    """
+    if not schedules:
+        msg_warn(parent, 'Trống', 'Không có buổi học nào để xuất.')
+        return False
+    path, _ = QtWidgets.QFileDialog.getSaveFileName(
+        parent, 'Xuất lịch học (iCalendar)',
+        os.path.join(os.path.expanduser('~'), 'Desktop', default_filename),
+        'iCalendar (*.ics)'
+    )
+    if not path:
+        return False
+    if not path.lower().endswith('.ics'):
+        path += '.ics'
+
+    from datetime import datetime as _dt, date as _date, time as _time
+
+    def _ics_dt(d, t):
+        """Format datetime cho ICS: 20260505T070000 (local time)."""
+        if isinstance(d, str):
+            try:
+                d = _date.fromisoformat(d[:10])
+            except Exception:
+                return None
+        if isinstance(t, str):
+            try:
+                parts = t[:8].split(':')
+                t = _time(int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0)
+            except Exception:
+                t = _time(0)
+        if not (hasattr(d, 'year') and hasattr(t, 'hour')):
+            return None
+        return _dt.combine(d, t).strftime('%Y%m%dT%H%M%S')
+
+    def _escape(s):
+        """ICS escape: comma, semicolon, backslash, newline."""
+        if s is None:
+            return ''
+        s = str(s).replace('\\', '\\\\').replace(',', '\\,').replace(';', '\\;')
+        s = s.replace('\n', '\\n').replace('\r', '')
+        return s
+
+    now_stamp = _dt.now().strftime('%Y%m%dT%H%M%S')
+    lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//EAUT//Schedule Export//VN',
+        'CALSCALE:GREGORIAN',
+        f'X-WR-CALNAME:{_escape(calendar_name)}',
+        'X-WR-TIMEZONE:Asia/Ho_Chi_Minh',
+    ]
+    valid = 0
+    for sc in schedules:
+        dt_start = _ics_dt(sc.get('ngay'), sc.get('gio_bat_dau'))
+        dt_end = _ics_dt(sc.get('ngay'), sc.get('gio_ket_thuc'))
+        if not dt_start or not dt_end:
+            continue
+        sid = sc.get('id', valid)
+        lop = sc.get('lop_id', '?')
+        ten_mon = sc.get('ten_mon', '') or ''
+        phong = sc.get('phong', '') or ''
+        gv = sc.get('ten_gv', '') or ''
+        buoi_so = sc.get('buoi_so')
+        nd = sc.get('noi_dung', '') or ''
+        # Summary: "IT001-A · Lap trinh Python"
+        summary = f'{lop}'
+        if ten_mon:
+            summary += f' · {ten_mon}'
+        # Description: GV + buoi + noi dung
+        desc_parts = []
+        if gv:
+            desc_parts.append(f'GV: {gv}')
+        if buoi_so:
+            desc_parts.append(f'Buổi {buoi_so}')
+        if nd:
+            desc_parts.append(nd)
+        desc = '\\n'.join(_escape(p) for p in desc_parts)
+        lines.extend([
+            'BEGIN:VEVENT',
+            f'UID:eaut-{sid}-{now_stamp}@eaut.edu.vn',
+            f'DTSTAMP:{now_stamp}',
+            f'DTSTART:{dt_start}',
+            f'DTEND:{dt_end}',
+            f'SUMMARY:{_escape(summary)}',
+            f'LOCATION:{_escape(phong)}',
+            f'DESCRIPTION:{desc}',
+            'STATUS:CONFIRMED',
+            'END:VEVENT',
+        ])
+        valid += 1
+    lines.append('END:VCALENDAR')
+    try:
+        # ICS spec: CRLF line ending
+        content = '\r\n'.join(lines) + '\r\n'
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        msg_info(parent, 'Đã xuất lịch',
+                 f'Đã xuất {valid} buổi học ra:\n{path}\n\n'
+                 'Bạn có thể import file này vào Google Calendar, Apple Calendar, '
+                 'Outlook, hoặc Samsung Calendar...')
+        return True
+    except Exception as e:
+        msg_warn(parent, 'Lỗi', f'Không xuất được:\n{e}')
+        return False
+
+
+def export_schedule_week_pdf(parent, schedules: list, monday_qdate,
+                              owner_role='hv', owner_name='', owner_code='',
+                              default_filename='LichTuan.pdf'):
+    """In lich hoc 1 tuan ra PDF (de in mang theo / dan bang).
+
+    schedules: list dict da loc theo tuan (gom 7 ngay tu Thu 2 -> CN)
+    monday_qdate: QDate cua thu 2 trong tuan
+    owner_role: 'hv' | 'gv'
+    """
+    try:
+        from PyQt5.QtPrintSupport import QPrinter
+        from PyQt5.QtGui import QTextDocument
+    except ImportError:
+        msg_warn(parent, 'Lỗi', 'PyQt5.QtPrintSupport không có sẵn.')
+        return False
+
+    path, _ = QtWidgets.QFileDialog.getSaveFileName(
+        parent, 'In lịch tuần (PDF)',
+        os.path.join(os.path.expanduser('~'), 'Desktop', default_filename),
+        'PDF Files (*.pdf)'
+    )
+    if not path:
+        return False
+    if not path.lower().endswith('.pdf'):
+        path += '.pdf'
+
+    from datetime import datetime as _dt, date as _date
+    # Group schedules theo ngay (yyyy-mm-dd)
+    by_day = {}
+    for s in (schedules or []):
+        ngay = str(s.get('ngay', ''))[:10]
+        if not ngay:
+            continue
+        by_day.setdefault(ngay, []).append(s)
+    # Sort theo gio bat dau
+    for k in by_day:
+        by_day[k].sort(key=lambda x: str(x.get('gio_bat_dau', '')))
+
+    # Build 7 hang Thu 2 - CN
+    days_vn = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật']
+    rows_html = []
+    for offset in range(7):
+        d = monday_qdate.addDays(offset)
+        iso = d.toString('yyyy-MM-dd')
+        ddmm = d.toString('dd/MM')
+        sess = by_day.get(iso, [])
+        # Cot trai: ten thu + ngay
+        is_today = (d == QDate.currentDate())
+        bg_left = '#fff8e1' if is_today else '#edf2f7'
+        border_left = '4px solid #c05621' if is_today else '4px solid #002060'
+        if sess:
+            # Build cells session
+            sess_rows = []
+            for sc in sess:
+                gio_bd = str(sc.get('gio_bat_dau', ''))[:5]
+                gio_kt = str(sc.get('gio_ket_thuc', ''))[:5]
+                lop = sc.get('lop_id', '?') or '?'
+                ten_mon = sc.get('ten_mon', '') or ''
+                phong = sc.get('phong', '') or '—'
+                buoi_so = sc.get('buoi_so')
+                buoi_str = f' · Buổi {buoi_so}' if buoi_so else ''
+                # GV thi hien lop / ten_mon, HV thi hien GV
+                if owner_role == 'gv':
+                    extra = ''
+                else:
+                    gv = sc.get('ten_gv', '') or ''
+                    extra = f' · GV: {gv}' if gv else ''
+                sess_rows.append(f'''
+                    <div style="margin-bottom: 6px; padding: 6px 8px; background: white; border-left: 3px solid #5c8a5c; border-radius: 4px;">
+                        <div style="color: #1a1a2e; font-weight: bold; font-size: 11px;">
+                            {gio_bd} - {gio_kt} &nbsp;·&nbsp; {lop}
+                        </div>
+                        <div style="color: #4a5568; font-size: 10px; margin-top: 2px;">
+                            {ten_mon} · Phòng {phong}{buoi_str}{extra}
+                        </div>
+                    </div>''')
+            sess_html = ''.join(sess_rows)
+        else:
+            sess_html = '<div style="color: #a0aec0; font-size: 10px; font-style: italic; padding: 4px;">— Không có buổi —</div>'
+
+        rows_html.append(f'''
+            <tr>
+                <td style="width: 16%; padding: 8px; background: {bg_left}; border: 1px solid #e2e8f0; border-left: {border_left}; vertical-align: top;">
+                    <div style="font-weight: bold; color: #002060; font-size: 12px;">{days_vn[offset]}</div>
+                    <div style="color: #4a5568; font-size: 11px; margin-top: 2px;">{ddmm}</div>
+                </td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; vertical-align: top;">{sess_html}</td>
+            </tr>
+        ''')
+
+    # Header info
+    role_label = 'Học viên' if owner_role == 'hv' else 'Giảng viên'
+    code_label = 'MSV' if owner_role == 'hv' else 'Mã GV'
+    sun = monday_qdate.addDays(6)
+    range_str = f'{monday_qdate.toString("dd/MM/yyyy")} — {sun.toString("dd/MM/yyyy")}'
+    total = sum(len(v) for v in by_day.values())
+
+    html = f'''
+    <html><head><meta charset="utf-8"></head>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e;">
+    <div style="text-align: center; border-bottom: 3px solid #002060; padding-bottom: 12px; margin-bottom: 14px;">
+        <h1 style="color: #002060; margin: 0; font-size: 22px;">TRUNG TÂM NGOẠI KHÓA EAUT</h1>
+        <p style="margin: 4px 0; color: #4a5568; font-size: 11px;">
+            Km 23, QL5, Trưng Trắc, Văn Lâm, Hưng Yên · Hotline: 024.3999.1111
+        </p>
+    </div>
+
+    <h2 style="text-align: center; color: #c05621; margin: 0 0 4px 0;">LỊCH HỌC TUẦN</h2>
+    <p style="text-align: center; color: #4a5568; font-size: 12px; margin: 0 0 14px 0;">
+        {range_str} &nbsp;·&nbsp; <b>{total}</b> buổi
+    </p>
+
+    <table cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px;">
+        <tr style="background: #edf2f7;">
+            <td style="width: 18%; padding: 6px 8px; color: #4a5568;">{role_label}:</td>
+            <td style="padding: 6px 8px;"><b>{owner_name or '—'}</b></td>
+            <td style="width: 14%; padding: 6px 8px; color: #4a5568;">{code_label}:</td>
+            <td style="padding: 6px 8px;"><b>{owner_code or '—'}</b></td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 8px; color: #4a5568;">Ngày in:</td>
+            <td style="padding: 6px 8px;">{_dt.now().strftime('%d/%m/%Y %H:%M')}</td>
+            <td style="padding: 6px 8px; color: #4a5568;">Tổng buổi:</td>
+            <td style="padding: 6px 8px;"><b style="color: #c05621;">{total}</b> buổi</td>
+        </tr>
+    </table>
+
+    <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 10px;">
+        <thead><tr style="background: #002060; color: white;">
+            <th style="padding: 8px; border: 1px solid #002060; text-align: left;">Ngày</th>
+            <th style="padding: 8px; border: 1px solid #002060; text-align: left;">Buổi học</th>
+        </tr></thead>
+        <tbody>{''.join(rows_html)}</tbody>
+    </table>
+
+    <p style="margin-top: 14px; color: #a0aec0; font-size: 9px; text-align: center; font-style: italic;">
+        File này được in từ phần mềm quản lý ngoại khoá EAUT. Nếu có thay đổi, vui lòng kiểm tra trên hệ thống.
+    </p>
+    </body></html>
+    '''
+
+    try:
+        doc = QTextDocument()
+        doc.setHtml(html)
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(path)
+        printer.setPageSize(QPrinter.A4)
+        printer.setOrientation(QPrinter.Portrait)
+        printer.setPageMargins(15, 15, 15, 15, QPrinter.Millimeter)
+        doc.print_(printer)
+        msg_info(parent, 'Đã xuất PDF', f'Lịch tuần đã lưu:\n{path}\n\nTổng {total} buổi.')
+        return True
+    except Exception as e:
+        msg_warn(parent, 'Lỗi xuất PDF', f'Không xuất được:\n{e}')
+        return False
+
+
+def export_class_roster_pdf(parent, class_info: dict, students: list,
+                             default_filename='DanhSachLop.pdf'):
+    """Xuat danh sach HV cua 1 lop ra PDF chuyen nghiep.
+
+    Args:
+        class_info: dict {ma_lop, ten_mon, ten_gv, lich, phong, semester_id, siso_max}
+        students: list of dict {msv, full_name, sdt, email, gioitinh, ngaysinh, ngay_dk, reg_status}
+    """
+    if not students:
+        msg_warn(parent, 'Trống', 'Lớp này chưa có học viên nào để in.')
+        return False
+    try:
+        from PyQt5.QtPrintSupport import QPrinter
+        from PyQt5.QtGui import QTextDocument
+    except ImportError:
+        msg_warn(parent, 'Lỗi', 'PyQt5.QtPrintSupport không có sẵn.')
+        return False
+    path, _ = QtWidgets.QFileDialog.getSaveFileName(
+        parent, 'Xuất danh sách lớp PDF',
+        os.path.join(os.path.expanduser('~'), 'Desktop', default_filename),
+        'PDF Files (*.pdf)'
+    )
+    if not path:
+        return False
+    if not path.lower().endswith('.pdf'):
+        path += '.pdf'
+
+    from datetime import datetime as _dt
+    # Status map -> Vietnamese
+    st_vn = {'paid': 'Đã thanh toán', 'pending_payment': 'Chờ TT',
+             'completed': 'Hoàn thành', 'cancelled': 'Đã huỷ'}
+
+    # Build student rows
+    rows_html = []
+    for i, s in enumerate(students, 1):
+        zebra = '#f7fafc' if i % 2 == 0 else 'white'
+        ngay_sinh = s.get('ngaysinh') or '—'
+        if hasattr(ngay_sinh, 'strftime'):
+            ngay_sinh = ngay_sinh.strftime('%d/%m/%Y')
+        ngay_dk = s.get('ngay_dk') or '—'
+        if hasattr(ngay_dk, 'strftime'):
+            ngay_dk = ngay_dk.strftime('%d/%m/%Y')
+        st_raw = s.get('reg_status', '')
+        st_color = '#166534' if st_raw == 'paid' else ('#92400e' if st_raw == 'pending_payment'
+                                                       else '#1e3a8a' if st_raw == 'completed' else '#991b1b')
+        rows_html.append(f'''
+            <tr style="background: {zebra};">
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center;">{i}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; font-weight: bold;">{s.get('msv', '—')}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0;">{s.get('full_name', '—')}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center;">{s.get('gioitinh', '—') or '—'}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center;">{ngay_sinh}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0;">{s.get('sdt', '—') or '—'}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0;">{s.get('email', '—') or '—'}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center; color: {st_color}; font-weight: bold;">{st_vn.get(st_raw, st_raw)}</td>
+            </tr>
+        ''')
+
+    # Class info header
+    ma_lop = class_info.get('ma_lop', '—')
+    ten_mon = class_info.get('ten_mon', '—')
+    ten_gv = class_info.get('ten_gv', '—')
+    lich = class_info.get('lich', '—') or '—'
+    phong = class_info.get('phong', '—') or '—'
+    sem_id = class_info.get('semester_id', '—') or '—'
+    siso_max = class_info.get('siso_max', 0)
+
+    html = f'''
+    <html><head><meta charset="utf-8"></head>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e;">
+    <div style="text-align: center; border-bottom: 3px solid #002060; padding-bottom: 12px; margin-bottom: 16px;">
+        <h1 style="color: #002060; margin: 0; font-size: 22px;">TRUNG TÂM NGOẠI KHÓA EAUT</h1>
+        <p style="margin: 4px 0; color: #4a5568; font-size: 11px;">
+            Km 23, QL5, Trưng Trắc, Văn Lâm, Hưng Yên · Hotline: 024.3999.1111
+        </p>
+    </div>
+
+    <h2 style="text-align: center; color: #c05621; margin: 0 0 4px 0;">DANH SÁCH HỌC VIÊN</h2>
+    <p style="text-align: center; color: #4a5568; font-size: 12px; margin: 0 0 16px 0;">
+        Lớp <b>{ma_lop}</b> · {ten_mon}
+    </p>
+
+    <table cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px;">
+        <tr style="background: #edf2f7;">
+            <td style="width: 25%; padding: 8px; color: #4a5568;">Mã lớp:</td>
+            <td style="padding: 8px;"><b>{ma_lop}</b></td>
+            <td style="width: 25%; padding: 8px; color: #4a5568;">Đợt:</td>
+            <td style="padding: 8px;">{sem_id}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; color: #4a5568;">Khóa học:</td>
+            <td style="padding: 8px;"><b>{ten_mon}</b></td>
+            <td style="padding: 8px; color: #4a5568;">Giảng viên:</td>
+            <td style="padding: 8px;"><b>{ten_gv}</b></td>
+        </tr>
+        <tr style="background: #edf2f7;">
+            <td style="padding: 8px; color: #4a5568;">Lịch học:</td>
+            <td style="padding: 8px;">{lich}</td>
+            <td style="padding: 8px; color: #4a5568;">Phòng:</td>
+            <td style="padding: 8px;">{phong}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; color: #4a5568;">Sĩ số:</td>
+            <td style="padding: 8px;"><b style="color: #c05621;">{len(students)}</b> / {siso_max} HV</td>
+            <td style="padding: 8px; color: #4a5568;">Ngày in:</td>
+            <td style="padding: 8px;">{_dt.now().strftime('%d/%m/%Y %H:%M')}</td>
+        </tr>
+    </table>
+
+    <table cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 10px;">
+        <thead><tr style="background: #002060; color: white;">
+            <th style="padding: 6px; border: 1px solid #002060; width: 4%;">#</th>
+            <th style="padding: 6px; border: 1px solid #002060; width: 11%;">MSV</th>
+            <th style="padding: 6px; border: 1px solid #002060;">Họ và tên</th>
+            <th style="padding: 6px; border: 1px solid #002060; width: 7%;">Giới tính</th>
+            <th style="padding: 6px; border: 1px solid #002060; width: 11%;">Ngày sinh</th>
+            <th style="padding: 6px; border: 1px solid #002060; width: 12%;">SĐT</th>
+            <th style="padding: 6px; border: 1px solid #002060;">Email</th>
+            <th style="padding: 6px; border: 1px solid #002060; width: 12%;">Trạng thái</th>
+        </tr></thead>
+        <tbody>{''.join(rows_html)}</tbody>
+    </table>
+
+    <div style="margin-top: 30px; display: flex; justify-content: space-between;">
+        <div style="text-align: center; width: 40%;">
+            <p style="color: #4a5568; font-size: 11px;">Lớp trưởng</p>
+            <p style="font-size: 10px; color: #718096; font-style: italic;">(ký tên)</p>
+        </div>
+        <div style="text-align: center; width: 40%;">
+            <p style="color: #4a5568; font-size: 11px;">Hà Nội, ngày {_dt.now().day}/{_dt.now().month}/{_dt.now().year}</p>
+            <p style="margin-top: 4px;"><b>Giảng viên / Quản lý</b></p>
+            <p style="font-size: 10px; color: #718096; font-style: italic;">(ký tên)</p>
+        </div>
+    </div>
+    </body></html>
+    '''
+    try:
+        doc = QTextDocument()
+        doc.setHtml(html)
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(path)
+        printer.setPageSize(QPrinter.A4)
+        printer.setOrientation(QPrinter.Landscape)  # ngang cho table rong
+        printer.setPageMargins(15, 15, 15, 15, QPrinter.Millimeter)
+        doc.print_(printer)
+        msg_info(parent, 'Đã xuất PDF', f'Danh sách lớp đã lưu:\n{path}')
+        return True
+    except Exception as e:
+        msg_warn(parent, 'Lỗi xuất PDF', f'Không xuất được:\n{e}')
+        return False
+
+
+def export_class_full_schedule_pdf(parent, lop_id, ten_mon, schedules,
+                                     ten_gv='', default_filename='LichLop.pdf'):
+    """In toan bo lich (24 buoi du kien) cua 1 lop ra PDF.
+
+    schedules: list dict {id, ngay, gio_bat_dau, gio_ket_thuc, phong, buoi_so,
+                          noi_dung, trang_thai}
+    """
+    if not schedules:
+        msg_warn(parent, 'Trống', 'Lớp này chưa có buổi học nào.')
+        return False
+    try:
+        from PyQt5.QtPrintSupport import QPrinter
+        from PyQt5.QtGui import QTextDocument
+    except ImportError:
+        msg_warn(parent, 'Lỗi', 'PyQt5.QtPrintSupport không có sẵn.')
+        return False
+    path, _ = QtWidgets.QFileDialog.getSaveFileName(
+        parent, 'In lịch toàn bộ lớp PDF',
+        os.path.join(os.path.expanduser('~'), 'Desktop', default_filename),
+        'PDF Files (*.pdf)'
+    )
+    if not path:
+        return False
+    if not path.lower().endswith('.pdf'):
+        path += '.pdf'
+
+    from datetime import datetime as _dt, date as _date
+    today = _date.today()
+
+    # Sap xep theo ngay -> gio bat dau
+    rows = list(schedules)
+
+    def _key(s):
+        ngay = s.get('ngay', '')
+        if isinstance(ngay, _date):
+            return (ngay.isoformat(), str(s.get('gio_bat_dau', '')))
+        return (str(ngay)[:10], str(s.get('gio_bat_dau', '')))
+
+    rows.sort(key=_key)
+
+    days_vn_short = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
+    st_vn = {'planned': 'Đã lên lịch', 'done': 'Đã diễn ra',
+             'cancelled': 'Đã huỷ', 'rescheduled': 'Đã dời lịch'}
+    st_color = {'planned': '#1e3a8a', 'done': '#166534',
+                'cancelled': '#991b1b', 'rescheduled': '#92400e'}
+
+    # Stats: tong / da dien ra / sap toi / huy
+    n_done = n_upcoming = n_cancel = 0
+    for s in rows:
+        ng = s.get('ngay', '')
+        if isinstance(ng, str):
+            try: ng = _date.fromisoformat(ng[:10])
+            except Exception: ng = None
+        st = s.get('trang_thai') or ''
+        if st == 'cancelled':
+            n_cancel += 1
+        elif ng and ng < today:
+            n_done += 1
+        else:
+            n_upcoming += 1
+
+    rows_html = []
+    for i, sc in enumerate(rows, 1):
+        zebra = '#f7fafc' if i % 2 == 0 else 'white'
+        buoi_so = sc.get('buoi_so') or i
+        ngay_v = sc.get('ngay', '')
+        ngay_d = None
+        if isinstance(ngay_v, _date):
+            ngay_d = ngay_v
+        else:
+            try:
+                ngay_d = _date.fromisoformat(str(ngay_v)[:10])
+            except Exception:
+                ngay_d = None
+        ngay_str = ngay_d.strftime('%d/%m/%Y') if ngay_d else (str(ngay_v)[:10] or '—')
+        thu_str = days_vn_short[ngay_d.weekday()] if ngay_d else '—'
+        gio_bd = str(sc.get('gio_bat_dau', ''))[:5]
+        gio_kt = str(sc.get('gio_ket_thuc', ''))[:5]
+        gio_str = f'{gio_bd}-{gio_kt}' if gio_bd and gio_kt else '—'
+        phong = sc.get('phong', '') or '—'
+        nd = sc.get('noi_dung', '') or '—'
+        st_raw = sc.get('trang_thai') or 'planned'
+        # Auto downgrade planned -> done neu da qua
+        display_st = st_raw
+        if st_raw == 'planned' and ngay_d and ngay_d < today:
+            display_st = 'done'
+        st_label = st_vn.get(display_st, display_st)
+        st_clr = st_color.get(display_st, '#1a1a2e')
+        # Highlight today
+        ngay_style = ''
+        if ngay_d and ngay_d == today:
+            ngay_style = 'color: #c05621; font-weight: bold;'
+
+        rows_html.append(f'''
+            <tr style="background: {zebra};">
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center; font-weight: bold;">{buoi_so}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center; {ngay_style}">{ngay_str}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center; color: #718096;">{thu_str}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center;">{gio_str}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center;">{phong}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center; color: {st_clr}; font-weight: bold;">{st_label}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0;">{nd}</td>
+            </tr>
+        ''')
+
+    html = f'''
+    <html><head><meta charset="utf-8"></head>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e;">
+    <div style="text-align: center; border-bottom: 3px solid #002060; padding-bottom: 12px; margin-bottom: 14px;">
+        <h1 style="color: #002060; margin: 0; font-size: 22px;">TRUNG TÂM NGOẠI KHÓA EAUT</h1>
+        <p style="margin: 4px 0; color: #4a5568; font-size: 11px;">
+            Km 23, QL5, Trưng Trắc, Văn Lâm, Hưng Yên · Hotline: 024.3999.1111
+        </p>
+    </div>
+
+    <h2 style="text-align: center; color: #c05621; margin: 0 0 4px 0;">LỊCH HỌC TOÀN BỘ LỚP</h2>
+    <p style="text-align: center; color: #4a5568; font-size: 12px; margin: 0 0 14px 0;">
+        Lớp <b>{lop_id}</b> · {ten_mon or '—'}
+    </p>
+
+    <table cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px;">
+        <tr style="background: #edf2f7;">
+            <td style="width: 18%; padding: 6px 8px; color: #4a5568;">Mã lớp:</td>
+            <td style="padding: 6px 8px;"><b>{lop_id}</b></td>
+            <td style="width: 14%; padding: 6px 8px; color: #4a5568;">Giảng viên:</td>
+            <td style="padding: 6px 8px;"><b>{ten_gv or '—'}</b></td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 8px; color: #4a5568;">Khóa học:</td>
+            <td style="padding: 6px 8px;"><b>{ten_mon or '—'}</b></td>
+            <td style="padding: 6px 8px; color: #4a5568;">Ngày in:</td>
+            <td style="padding: 6px 8px;">{_dt.now().strftime('%d/%m/%Y %H:%M')}</td>
+        </tr>
+        <tr style="background: #edf2f7;">
+            <td style="padding: 6px 8px; color: #4a5568;">Tổng buổi:</td>
+            <td style="padding: 6px 8px;"><b style="color: #002060;">{len(rows)}</b></td>
+            <td style="padding: 6px 8px; color: #4a5568;">Phân bổ:</td>
+            <td style="padding: 6px 8px;">
+                <span style="color: #166534;"><b>{n_done}</b> đã diễn ra</span>
+                &nbsp;·&nbsp; <span style="color: #c05621;"><b>{n_upcoming}</b> sắp tới</span>
+                &nbsp;·&nbsp; <span style="color: #991b1b;"><b>{n_cancel}</b> đã huỷ</span>
+            </td>
+        </tr>
+    </table>
+
+    <table cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 11px;">
+        <thead><tr style="background: #002060; color: white;">
+            <th style="padding: 8px; border: 1px solid #002060; width: 6%;">Buổi</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 12%;">Ngày</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 6%;">Thứ</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 12%;">Giờ</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 10%;">Phòng</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 14%;">Trạng thái</th>
+            <th style="padding: 8px; border: 1px solid #002060;">Nội dung buổi</th>
+        </tr></thead>
+        <tbody>{''.join(rows_html)}</tbody>
+    </table>
+
+    <div style="margin-top: 24px; display: flex; justify-content: space-between;">
+        <div style="text-align: center; width: 35%;">
+            <p style="color: #4a5568; font-size: 11px;">Lớp trưởng</p>
+            <p style="font-size: 10px; color: #718096; font-style: italic;">(ký tên)</p>
+        </div>
+        <div style="text-align: center; width: 35%;">
+            <p style="color: #4a5568; font-size: 11px;">Hà Nội, ngày {_dt.now().day}/{_dt.now().month}/{_dt.now().year}</p>
+            <p style="margin-top: 4px;"><b>Giảng viên</b></p>
+            <p style="font-size: 10px; color: #718096; font-style: italic;">(ký tên)</p>
+        </div>
+    </div>
+    </body></html>
+    '''
+    try:
+        doc = QTextDocument()
+        doc.setHtml(html)
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(path)
+        printer.setPageSize(QPrinter.A4)
+        printer.setOrientation(QPrinter.Portrait)
+        printer.setPageMargins(15, 15, 15, 15, QPrinter.Millimeter)
+        doc.print_(printer)
+        msg_info(parent, 'Đã xuất PDF', f'Lịch toàn bộ lớp {lop_id} đã lưu:\n{path}\n\nTổng {len(rows)} buổi.')
+        return True
+    except Exception as e:
+        msg_warn(parent, 'Lỗi xuất PDF', f'Không xuất được:\n{e}')
+        return False
+
+
+def export_exam_schedule_pdf(parent, exams: list, owner_role='hv',
+                               owner_name='', owner_code='',
+                               default_filename='LichThi.pdf'):
+    """In lich thi cua HV / GV ra PDF.
+
+    exams: list dict {lop_id, ten_mon, ngay_thi, ca_thi, gio_bat_dau, gio_ket_thuc,
+                       phong, hinh_thuc, semester_id}
+    """
+    if not exams:
+        msg_warn(parent, 'Trống', 'Không có lịch thi nào để in.')
+        return False
+    try:
+        from PyQt5.QtPrintSupport import QPrinter
+        from PyQt5.QtGui import QTextDocument
+    except ImportError:
+        msg_warn(parent, 'Lỗi', 'PyQt5.QtPrintSupport không có sẵn.')
+        return False
+    path, _ = QtWidgets.QFileDialog.getSaveFileName(
+        parent, 'In lịch thi PDF',
+        os.path.join(os.path.expanduser('~'), 'Desktop', default_filename),
+        'PDF Files (*.pdf)'
+    )
+    if not path:
+        return False
+    if not path.lower().endswith('.pdf'):
+        path += '.pdf'
+
+    from datetime import datetime as _dt, date as _date
+    today = _date.today()
+
+    # Sap xep theo ngay thi -> gio bat dau
+    rows = list(exams)
+
+    def _key(s):
+        ngay = s.get('ngay_thi') or s.get('ngay', '')
+        if isinstance(ngay, _date):
+            return (ngay.isoformat(), str(s.get('gio_bat_dau', '')))
+        return (str(ngay)[:10], str(s.get('gio_bat_dau', '')))
+
+    rows.sort(key=_key)
+
+    n_done = n_upcoming = 0
+    for s in rows:
+        ng = s.get('ngay_thi') or s.get('ngay', '')
+        if isinstance(ng, str):
+            try: ng = _date.fromisoformat(ng[:10])
+            except Exception: ng = None
+        if ng and ng < today:
+            n_done += 1
+        else:
+            n_upcoming += 1
+
+    days_vn_short = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
+    rows_html = []
+    for i, ex in enumerate(rows, 1):
+        zebra = '#f7fafc' if i % 2 == 0 else 'white'
+        ma_lop = ex.get('lop_id', '') or ex.get('ma_mon', '') or '—'
+        ten_mon = ex.get('ten_mon', '') or '—'
+        ngay_v = ex.get('ngay_thi') or ex.get('ngay', '')
+        ngay_d = None
+        if isinstance(ngay_v, _date):
+            ngay_d = ngay_v
+        else:
+            try: ngay_d = _date.fromisoformat(str(ngay_v)[:10])
+            except Exception: ngay_d = None
+        ngay_str = ngay_d.strftime('%d/%m/%Y') if ngay_d else (str(ngay_v)[:10] or '—')
+        thu_str = days_vn_short[ngay_d.weekday()] if ngay_d else '—'
+        ca = ex.get('ca_thi', '') or ''
+        gio_bd = str(ex.get('gio_bat_dau', ''))[:5]
+        gio_kt = str(ex.get('gio_ket_thuc', ''))[:5]
+        if gio_bd and gio_kt:
+            ca = f'{ca}<br><span style="color:#718096; font-size:9px;">{gio_bd}-{gio_kt}</span>' if ca else f'{gio_bd}-{gio_kt}'
+        phong = ex.get('phong', '') or '—'
+        ht = ex.get('hinh_thuc', '') or '—'
+
+        # Highlight: ngay thi sap toi (<=7 ngay) -> bold cam
+        ngay_style = ''
+        if ngay_d and ngay_d >= today:
+            days_left = (ngay_d - today).days
+            if days_left <= 7:
+                ngay_style = 'color: #c05621; font-weight: bold;'
+
+        rows_html.append(f'''
+            <tr style="background: {zebra};">
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center; font-weight: bold;">{i}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center; font-weight: bold;">{ma_lop}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0;">{ten_mon}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center; {ngay_style}">{ngay_str}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center; color: #718096;">{thu_str}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center;">{ca}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center;">{phong}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center; color: #1e3a8a;">{ht}</td>
+            </tr>
+        ''')
+
+    role_label = 'Học viên' if owner_role == 'hv' else 'Giảng viên'
+    code_label = 'MSV' if owner_role == 'hv' else 'Mã GV'
+
+    html = f'''
+    <html><head><meta charset="utf-8"></head>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e;">
+    <div style="text-align: center; border-bottom: 3px solid #002060; padding-bottom: 12px; margin-bottom: 14px;">
+        <h1 style="color: #002060; margin: 0; font-size: 22px;">TRUNG TÂM NGOẠI KHÓA EAUT</h1>
+        <p style="margin: 4px 0; color: #4a5568; font-size: 11px;">
+            Km 23, QL5, Trưng Trắc, Văn Lâm, Hưng Yên · Hotline: 024.3999.1111
+        </p>
+    </div>
+
+    <h2 style="text-align: center; color: #c05621; margin: 0 0 4px 0;">LỊCH KIỂM TRA</h2>
+    <p style="text-align: center; color: #4a5568; font-size: 12px; margin: 0 0 14px 0;">
+        Tổng <b>{len(rows)}</b> môn thi
+    </p>
+
+    <table cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px;">
+        <tr style="background: #edf2f7;">
+            <td style="width: 18%; padding: 6px 8px; color: #4a5568;">{role_label}:</td>
+            <td style="padding: 6px 8px;"><b>{owner_name or '—'}</b></td>
+            <td style="width: 14%; padding: 6px 8px; color: #4a5568;">{code_label}:</td>
+            <td style="padding: 6px 8px;"><b>{owner_code or '—'}</b></td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 8px; color: #4a5568;">Ngày in:</td>
+            <td style="padding: 6px 8px;">{_dt.now().strftime('%d/%m/%Y %H:%M')}</td>
+            <td style="padding: 6px 8px; color: #4a5568;">Phân bổ:</td>
+            <td style="padding: 6px 8px;">
+                <span style="color: #166534;"><b>{n_done}</b> đã thi</span>
+                &nbsp;·&nbsp; <span style="color: #c05621;"><b>{n_upcoming}</b> sắp tới</span>
+            </td>
+        </tr>
+    </table>
+
+    <table cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 11px;">
+        <thead><tr style="background: #002060; color: white;">
+            <th style="padding: 8px; border: 1px solid #002060; width: 5%;">#</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 11%;">Lớp</th>
+            <th style="padding: 8px; border: 1px solid #002060;">Khóa học</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 11%;">Ngày thi</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 5%;">Thứ</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 14%;">Ca / Giờ</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 10%;">Phòng</th>
+            <th style="padding: 8px; border: 1px solid #002060; width: 12%;">Hình thức</th>
+        </tr></thead>
+        <tbody>{''.join(rows_html)}</tbody>
+    </table>
+
+    <p style="margin-top: 14px; color: #718096; font-size: 10px;">
+        <b>Ghi chú:</b> Ngày thi <span style="color: #c05621; font-weight: bold;">tô cam</span> = trong vòng 7 ngày tới — vui lòng chú ý chuẩn bị.
+    </p>
+
+    <p style="margin-top: 18px; color: #a0aec0; font-size: 9px; text-align: center; font-style: italic;">
+        File này được in từ phần mềm quản lý ngoại khoá EAUT.
+    </p>
+    </body></html>
+    '''
+    try:
+        doc = QTextDocument()
+        doc.setHtml(html)
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(path)
+        printer.setPageSize(QPrinter.A4)
+        printer.setOrientation(QPrinter.Portrait)
+        printer.setPageMargins(15, 15, 15, 15, QPrinter.Millimeter)
+        doc.print_(printer)
+        msg_info(parent, 'Đã xuất PDF', f'Lịch thi đã lưu:\n{path}\n\nTổng {len(rows)} môn thi.')
+        return True
+    except Exception as e:
+        msg_warn(parent, 'Lỗi xuất PDF', f'Không xuất được:\n{e}')
+        return False
+
+
+def export_class_grades_pdf(parent, class_info: dict, grades: list,
+                              default_filename='BangDiemLop.pdf'):
+    """Xuat bang diem ca lop ra PDF (cho GV in nop van phong / dan bang).
+
+    Args:
+        class_info: dict {ma_lop, ten_mon, ten_gv, semester_id, siso_max}
+        grades: list of dict {msv, full_name, diem_qt, diem_thi, tong_ket, xep_loai}
+    """
+    if not grades:
+        msg_warn(parent, 'Trống', 'Lớp này chưa có học viên hoặc chưa có điểm.')
+        return False
+    try:
+        from PyQt5.QtPrintSupport import QPrinter
+        from PyQt5.QtGui import QTextDocument
+    except ImportError:
+        msg_warn(parent, 'Lỗi', 'PyQt5.QtPrintSupport không có sẵn.')
+        return False
+    path, _ = QtWidgets.QFileDialog.getSaveFileName(
+        parent, 'Xuất bảng điểm lớp PDF',
+        os.path.join(os.path.expanduser('~'), 'Desktop', default_filename),
+        'PDF Files (*.pdf)'
+    )
+    if not path:
+        return False
+    if not path.lower().endswith('.pdf'):
+        path += '.pdf'
+
+    from datetime import datetime as _dt
+
+    # Compute aggregate stats
+    total_g = [g for g in grades if g.get('tong_ket') is not None]
+    n_passed = sum(1 for g in total_g if float(g['tong_ket']) >= 4.0)
+    n_excellent = sum(1 for g in total_g if float(g['tong_ket']) >= 8.0)
+    avg = sum(float(g['tong_ket']) for g in total_g) / len(total_g) if total_g else 0
+    n_total = len(grades)
+    n_pending = n_total - len(total_g)  # chua cham
+
+    # Build student rows
+    rows_html = []
+    for i, g in enumerate(grades, 1):
+        zebra = '#f7fafc' if i % 2 == 0 else 'white'
+        qt = f"{float(g['diem_qt']):.1f}" if g.get('diem_qt') is not None else '—'
+        thi = f"{float(g['diem_thi']):.1f}" if g.get('diem_thi') is not None else '—'
+        tk = g.get('tong_ket')
+        xl = g.get('xep_loai') or '—'
+        if tk is not None:
+            tk_v = float(tk)
+            tk_disp = f'{tk_v:.1f}'
+            tk_color = '#166534' if tk_v >= 8 else ('#1e3a8a' if tk_v >= 6.5
+                       else '#92400e' if tk_v >= 5 else '#991b1b')
+        else:
+            tk_disp = '—'
+            tk_color = '#a0aec0'
+        # XL color
+        xl_color = '#166534' if xl in ('A+', 'A') else (
+            '#1e3a8a' if xl in ('B+', 'B') else (
+                '#92400e' if xl in ('C+', 'C') else (
+                    '#991b1b' if xl in ('D', 'F') else '#a0aec0')))
+        rows_html.append(f'''
+            <tr style="background: {zebra};">
+                <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{i}</td>
+                <td style="padding: 5px; border: 1px solid #e2e8f0; font-weight: bold;">{g.get('msv', '—')}</td>
+                <td style="padding: 5px; border: 1px solid #e2e8f0;">{g.get('full_name', '—')}</td>
+                <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{qt}</td>
+                <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{thi}</td>
+                <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center; color: {tk_color}; font-weight: bold;">{tk_disp}</td>
+                <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center; color: {xl_color}; font-weight: bold;">{xl}</td>
+            </tr>
+        ''')
+
+    ma_lop = class_info.get('ma_lop', '—')
+    ten_mon = class_info.get('ten_mon', '—')
+    ten_gv = class_info.get('ten_gv', '—')
+    sem_id = class_info.get('semester_id', '—') or '—'
+    siso_max = class_info.get('siso_max', 0)
+
+    html = f'''
+    <html><head><meta charset="utf-8"></head>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e;">
+    <div style="text-align: center; border-bottom: 3px solid #002060; padding-bottom: 12px; margin-bottom: 16px;">
+        <h1 style="color: #002060; margin: 0; font-size: 22px;">TRUNG TÂM NGOẠI KHÓA EAUT</h1>
+        <p style="margin: 4px 0; color: #4a5568; font-size: 11px;">
+            Km 23, QL5, Trưng Trắc, Văn Lâm, Hưng Yên · Hotline: 024.3999.1111
+        </p>
+    </div>
+
+    <h2 style="text-align: center; color: #c05621; margin: 0 0 4px 0;">BẢNG ĐIỂM LỚP HỌC</h2>
+    <p style="text-align: center; color: #4a5568; font-size: 12px; margin: 0 0 16px 0;">
+        Lớp <b>{ma_lop}</b> · {ten_mon}
+    </p>
+
+    <table cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px;">
+        <tr style="background: #edf2f7;">
+            <td style="width: 25%; padding: 8px; color: #4a5568;">Mã lớp:</td>
+            <td style="padding: 8px;"><b>{ma_lop}</b></td>
+            <td style="width: 25%; padding: 8px; color: #4a5568;">Khóa học:</td>
+            <td style="padding: 8px;"><b>{ten_mon}</b></td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; color: #4a5568;">Giảng viên:</td>
+            <td style="padding: 8px;"><b>{ten_gv}</b></td>
+            <td style="padding: 8px; color: #4a5568;">Đợt:</td>
+            <td style="padding: 8px;">{sem_id}</td>
+        </tr>
+        <tr style="background: #edf2f7;">
+            <td style="padding: 8px; color: #4a5568;">Sĩ số:</td>
+            <td style="padding: 8px;"><b>{n_total}</b> / {siso_max} HV</td>
+            <td style="padding: 8px; color: #4a5568;">Ngày in:</td>
+            <td style="padding: 8px;">{_dt.now().strftime('%d/%m/%Y %H:%M')}</td>
+        </tr>
+    </table>
+
+    <table cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 11px;">
+        <thead><tr style="background: #002060; color: white;">
+            <th style="padding: 6px; border: 1px solid #002060; width: 5%;">#</th>
+            <th style="padding: 6px; border: 1px solid #002060; width: 14%;">MSV</th>
+            <th style="padding: 6px; border: 1px solid #002060;">Họ và tên</th>
+            <th style="padding: 6px; border: 1px solid #002060; width: 9%;">QT</th>
+            <th style="padding: 6px; border: 1px solid #002060; width: 9%;">Thi</th>
+            <th style="padding: 6px; border: 1px solid #002060; width: 11%;">Tổng kết</th>
+            <th style="padding: 6px; border: 1px solid #002060; width: 11%;">Xếp loại</th>
+        </tr></thead>
+        <tbody>{''.join(rows_html)}</tbody>
+    </table>
+
+    <div style="margin-top: 18px; padding: 12px; background: #f7fafc; border-left: 4px solid #002060; border-radius: 4px;">
+        <p style="margin: 4px 0; font-size: 12px;"><b style="color: #002060;">Tổng kết lớp:</b></p>
+        <p style="margin: 4px 0; font-size: 12px;">
+            · Tổng học viên: <b>{n_total}</b> (đã chấm: <b>{len(total_g)}</b> · chưa chấm: <b>{n_pending}</b>)<br>
+            · Đậu (≥ 4.0): <b style="color:#166534;">{n_passed}/{len(total_g)}</b>
+                ({(n_passed*100//len(total_g)) if total_g else 0}%)<br>
+            · Xuất sắc (≥ 8.0): <b style="color:#c05621;">{n_excellent}/{len(total_g)}</b><br>
+            · Điểm trung bình lớp: <b style="color:#c05621;">{avg:.2f}</b>
+        </p>
+    </div>
+
+    <div style="margin-top: 30px; display: flex; justify-content: space-between;">
+        <div style="text-align: center; width: 40%;">
+            <p style="color: #4a5568; font-size: 11px;">Phòng đào tạo</p>
+            <p style="font-size: 10px; color: #718096; font-style: italic;">(ký tên, đóng dấu)</p>
+        </div>
+        <div style="text-align: center; width: 40%;">
+            <p style="color: #4a5568; font-size: 11px;">Hà Nội, ngày {_dt.now().day}/{_dt.now().month}/{_dt.now().year}</p>
+            <p style="margin-top: 4px;"><b>Giảng viên</b></p>
+            <p style="font-size: 10px; color: #718096; font-style: italic;">(ký, họ tên)</p>
+            <p style="margin-top: 40px;"><b>{ten_gv}</b></p>
+        </div>
+    </div>
+    </body></html>
+    '''
+    try:
+        doc = QTextDocument()
+        doc.setHtml(html)
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(path)
+        printer.setPageSize(QPrinter.A4)
+        printer.setPageMargins(15, 15, 15, 15, QPrinter.Millimeter)
+        doc.print_(printer)
+        msg_info(parent, 'Đã xuất PDF', f'Bảng điểm lớp đã lưu:\n{path}')
+        return True
+    except Exception as e:
+        msg_warn(parent, 'Lỗi xuất PDF', f'Không xuất được:\n{e}')
+        return False
+
+
+def check_schedule_conflict_warn(parent, ngay, gio_bd, gio_kt, phong=None,
+                                  lop_id=None, gv_id=None, exclude_id=None) -> bool:
+    """Check conflict + hoi user confirm neu trung. Tra ve True = continue, False = cancel.
+
+    Goi truoc khi save schedule (create/update). Format msg_confirm voi ds buoi conflict.
+    """
+    if not DB_AVAILABLE:
+        return True  # khong check duoc -> cho qua
+    try:
+        result = ScheduleService.check_conflict(
+            ngay=ngay, gio_bat_dau=gio_bd, gio_ket_thuc=gio_kt,
+            phong=phong, lop_id=lop_id, gv_id=gv_id, exclude_id=exclude_id,
+        )
+        conflicts = result.get('conflicts', []) if result else []
+    except Exception as e:
+        print(f'[CHECK_CONFLICT] loi: {e}')
+        return True  # API loi -> cho qua, khong block user
+    if not conflicts:
+        return True
+    # Build msg chi tiet
+    lines = [f'⚠ <b>Trùng lịch với {len(conflicts)} buổi đã có:</b><br>']
+    for c in conflicts[:5]:  # cap 5 dong
+        lop = c.get('lop_id', '?')
+        gio = f"{str(c.get('gio_bat_dau', ''))[:5]}-{str(c.get('gio_ket_thuc', ''))[:5]}"
+        phong_c = c.get('phong', '—') or '—'
+        gv = c.get('ten_gv', '—') or '—'
+        lines.append(f'• <b>{lop}</b> ({c.get("ten_mon", "")}) · {gio} · P.{phong_c} · GV {gv}')
+    if len(conflicts) > 5:
+        lines.append(f'<i>... và {len(conflicts) - 5} buổi nữa</i>')
+    lines.append('<br>Bạn có muốn tạo buổi học này không (sẽ tạo dù trùng)?')
+    msg = '<br>'.join(lines)
+    return msg_confirm(parent, '⚠ Trùng lịch', msg)
+
+
 def fmt_vnd(amount, suffix=' đ', empty_zero=False) -> str:
     """Format so tien Viet Nam Dong: 1500000 -> '1.500.000 đ'.
 
@@ -840,6 +1824,374 @@ def show_detail_dialog(parent, title, fields, avatar_text=None, subtitle=None):
                       f'QPushButton:hover {{ background: {navy_hover}; }}')
     btn.clicked.connect(dlg.accept)
     fl.addWidget(btn)
+    lay.addWidget(footer)
+
+    dlg.exec_()
+
+
+def pick_week_jumper_dialog(parent, current_qdate=None, title='Chọn ngày để xem tuần'):
+    """Dialog cho user chon 1 ngay tuy y -> tra ve QDate cua ngay duoc chon
+    (caller tu lay Monday cua tuan chua ngay do).
+
+    Returns: QDate hoac None neu user huy.
+    """
+    navy = '#002060'
+    border = '#d2d6dc'
+
+    dlg = QtWidgets.QDialog(parent)
+    dlg.setWindowTitle(title)
+    dlg.setFixedSize(360, 380)
+    dlg.setFont(QFont('Segoe UI', 10))
+    dlg.setStyleSheet('QDialog { background: white; font-family: "Segoe UI"; }')
+
+    lay = QtWidgets.QVBoxLayout(dlg)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(0)
+
+    # Header navy
+    header = QtWidgets.QFrame()
+    header.setFixedHeight(60)
+    header.setStyleSheet(f'QFrame {{ background: {navy}; border: none; }}')
+    hv = QtWidgets.QVBoxLayout(header)
+    hv.setContentsMargins(20, 10, 20, 8)
+    hv.setSpacing(2)
+    lbl_title = QtWidgets.QLabel('📅 Chọn ngày để xem tuần')
+    lbl_title.setStyleSheet('color: white; font-size: 14px; font-weight: bold; background: transparent;')
+    hv.addWidget(lbl_title)
+    lbl_sub = QtWidgets.QLabel('Tuần chứa ngày bạn chọn sẽ được hiển thị')
+    lbl_sub.setStyleSheet('color: rgba(255,255,255,0.75); font-size: 10px; background: transparent;')
+    hv.addWidget(lbl_sub)
+    lay.addWidget(header)
+
+    # Body: calendar widget
+    body = QtWidgets.QFrame()
+    bv = QtWidgets.QVBoxLayout(body)
+    bv.setContentsMargins(15, 12, 15, 12)
+    bv.setSpacing(8)
+
+    cal = QtWidgets.QCalendarWidget()
+    cal.setVerticalHeaderFormat(QtWidgets.QCalendarWidget.NoVerticalHeader)
+    cal.setGridVisible(False)
+    cal.setFirstDayOfWeek(Qt.Monday)
+    cal.setNavigationBarVisible(True)
+    if current_qdate:
+        cal.setSelectedDate(current_qdate)
+    cal.setStyleSheet(
+        'QCalendarWidget QToolButton { color: white; background: #002060; '
+        '  font-size: 12px; padding: 4px 8px; border: none; } '
+        'QCalendarWidget QToolButton:hover { background: #003080; } '
+        'QCalendarWidget QMenu { background: white; } '
+        'QCalendarWidget QSpinBox { background: white; padding: 2px 4px; } '
+        'QCalendarWidget QAbstractItemView:enabled { '
+        '  font-size: 12px; color: #1a1a2e; '
+        '  selection-background-color: #002060; selection-color: white; }'
+    )
+    bv.addWidget(cal, 1)
+
+    # Hien thi tuan tuong ung
+    lbl_preview = QtWidgets.QLabel()
+    lbl_preview.setStyleSheet('color: #4a5568; font-size: 11px; background: #f7fafc; '
+                               'border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;')
+    lbl_preview.setAlignment(Qt.AlignCenter)
+
+    def _update_preview():
+        d = cal.selectedDate()
+        mon = d.addDays(-(d.dayOfWeek() - 1))
+        sun = mon.addDays(6)
+        lbl_preview.setText(
+            f'Tuần: {mon.toString("dd/MM/yyyy")} → {sun.toString("dd/MM/yyyy")}'
+        )
+
+    cal.selectionChanged.connect(_update_preview)
+    _update_preview()
+    bv.addWidget(lbl_preview)
+    lay.addWidget(body, 1)
+
+    # Footer
+    footer = QtWidgets.QFrame()
+    footer.setFixedHeight(54)
+    footer.setStyleSheet(f'QFrame {{ background: #f7fafc; border-top: 1px solid {border}; }}')
+    fl = QtWidgets.QHBoxLayout(footer)
+    fl.setContentsMargins(15, 10, 15, 10)
+    fl.setSpacing(8)
+
+    btn_today = QtWidgets.QPushButton('Hôm nay')
+    btn_today.setFixedHeight(32)
+    btn_today.setMinimumWidth(80)
+    btn_today.setCursor(Qt.PointingHandCursor)
+    btn_today.setStyleSheet('QPushButton { background: white; color: #4a5568; '
+                             'border: 1px solid #d2d6dc; border-radius: 6px; font-size: 11px; '
+                             'padding: 0 12px; } '
+                             'QPushButton:hover { background: #edf2f7; border-color: #002060; color: #002060; }')
+    btn_today.clicked.connect(lambda: cal.setSelectedDate(QDate.currentDate()))
+    fl.addWidget(btn_today)
+    fl.addStretch()
+
+    btn_cancel = QtWidgets.QPushButton('Huỷ')
+    btn_cancel.setFixedSize(80, 32)
+    btn_cancel.setCursor(Qt.PointingHandCursor)
+    btn_cancel.setStyleSheet('QPushButton { background: white; color: #4a5568; '
+                              'border: 1px solid #d2d6dc; border-radius: 6px; font-size: 12px; } '
+                              'QPushButton:hover { background: #edf2f7; }')
+    btn_cancel.clicked.connect(dlg.reject)
+    fl.addWidget(btn_cancel)
+
+    btn_ok = QtWidgets.QPushButton('Đi đến tuần')
+    btn_ok.setFixedHeight(32)
+    btn_ok.setMinimumWidth(110)
+    btn_ok.setCursor(Qt.PointingHandCursor)
+    btn_ok.setStyleSheet(f'QPushButton {{ background: {navy}; color: white; border: none; '
+                          f'border-radius: 6px; font-size: 12px; font-weight: bold; padding: 0 12px; }} '
+                          f'QPushButton:hover {{ background: #1a3a6c; }}')
+    btn_ok.clicked.connect(dlg.accept)
+    fl.addWidget(btn_ok)
+
+    lay.addWidget(footer)
+
+    if dlg.exec_() == QtWidgets.QDialog.Accepted:
+        return cal.selectedDate()
+    return None
+
+
+def show_class_full_schedule_dialog(parent, lop_id, ten_mon, schedules, role='hv', ten_gv=''):
+    """Dialog hien tat ca buoi cua 1 lop (24 buoi du kien) - dung cho HV va GV.
+
+    schedules: list dict {id, ngay, gio_bat_dau, gio_ket_thuc, phong, buoi_so,
+                          noi_dung, trang_thai, ten_gv}
+    ten_gv: dung cho header PDF khi user click "In PDF"
+    """
+    navy = '#002060'
+    text_dark = '#1a1a2e'
+    text_light = '#718096'
+    border = '#d2d6dc'
+
+    dlg = QtWidgets.QDialog(parent)
+    dlg.setWindowTitle(f'Toàn bộ lịch lớp {lop_id}')
+    dlg.setFixedSize(720, 580)
+    dlg.setFont(QFont('Segoe UI', 10))
+    dlg.setStyleSheet('QDialog { background: white; font-family: "Segoe UI"; }')
+
+    lay = QtWidgets.QVBoxLayout(dlg)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(0)
+
+    # Header navy
+    header = QtWidgets.QFrame()
+    header.setFixedHeight(80)
+    header.setStyleSheet(f'QFrame {{ background: {navy}; border: none; }}')
+    hv = QtWidgets.QVBoxLayout(header)
+    hv.setContentsMargins(20, 14, 20, 14)
+    hv.setSpacing(2)
+    lbl_title = QtWidgets.QLabel(f'Lịch học toàn bộ · {lop_id}')
+    lbl_title.setStyleSheet('color: white; font-size: 15px; font-weight: bold; background: transparent;')
+    hv.addWidget(lbl_title)
+    lbl_sub = QtWidgets.QLabel(ten_mon or '—')
+    lbl_sub.setStyleSheet('color: rgba(255,255,255,0.75); font-size: 11px; background: transparent;')
+    hv.addWidget(lbl_sub)
+    lay.addWidget(header)
+
+    # Body
+    body = QtWidgets.QFrame()
+    body.setStyleSheet('QFrame { background: white; border: none; }')
+    bv = QtWidgets.QVBoxLayout(body)
+    bv.setContentsMargins(20, 16, 20, 16)
+    bv.setSpacing(10)
+
+    from datetime import date as _date, datetime as _dt
+    # Sap xep: ngay -> gio_bat_dau
+    rows = list(schedules or [])
+
+    def _key(s):
+        ngay = s.get('ngay', '')
+        if isinstance(ngay, _date):
+            ngay_iso = ngay.isoformat()
+        else:
+            ngay_iso = str(ngay)[:10]
+        return (ngay_iso, str(s.get('gio_bat_dau', '')))
+
+    rows.sort(key=_key)
+
+    # Tinh: bao nhieu buoi da xay ra, bao nhieu sap toi
+    today = _date.today()
+    done_count = 0
+    upcoming_count = 0
+    cancelled_count = 0
+    for s in rows:
+        ngay = s.get('ngay', '')
+        if isinstance(ngay, str):
+            try:
+                ngay = _date.fromisoformat(ngay[:10])
+            except Exception:
+                ngay = None
+        st = s.get('trang_thai') or ''
+        if st == 'cancelled':
+            cancelled_count += 1
+        elif ngay and ngay < today:
+            done_count += 1
+        else:
+            upcoming_count += 1
+
+    # Stats bar
+    stat_bar = QtWidgets.QFrame()
+    stat_bar.setFixedHeight(48)
+    stat_bar.setStyleSheet('QFrame { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; }')
+    sb = QtWidgets.QHBoxLayout(stat_bar)
+    sb.setContentsMargins(14, 8, 14, 8)
+    sb.setSpacing(0)
+    for label, val, color in [
+        (f'Tổng', f'{len(rows)}', navy),
+        (f'Đã diễn ra', f'{done_count}', '#276749'),
+        (f'Sắp tới', f'{upcoming_count}', '#c05621'),
+        (f'Đã huỷ', f'{cancelled_count}', '#991b1b'),
+    ]:
+        col = QtWidgets.QVBoxLayout()
+        col.setSpacing(0)
+        l1 = QtWidgets.QLabel(label)
+        l1.setStyleSheet(f'color: {text_light}; font-size: 10px; background: transparent; border: none;')
+        l1.setAlignment(Qt.AlignCenter)
+        l2 = QtWidgets.QLabel(val)
+        l2.setStyleSheet(f'color: {color}; font-size: 16px; font-weight: bold; background: transparent; border: none;')
+        l2.setAlignment(Qt.AlignCenter)
+        col.addWidget(l1)
+        col.addWidget(l2)
+        sb.addLayout(col, 1)
+    bv.addWidget(stat_bar)
+
+    # Table
+    tbl = QtWidgets.QTableWidget()
+    tbl.setColumnCount(7)
+    tbl.setHorizontalHeaderLabels(['Buổi', 'Ngày', 'Thứ', 'Giờ', 'Phòng', 'Trạng thái', 'Nội dung'])
+    tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+    tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+    tbl.setShowGrid(False)
+    tbl.setAlternatingRowColors(True)
+    tbl.verticalHeader().setVisible(False)
+    tbl.setStyleSheet(
+        f'QTableWidget {{ background: white; border: 1px solid {border}; border-radius: 6px; '
+        f'gridline-color: #edf2f7; alternate-background-color: #fafbfc; font-size: 12px; }} '
+        f'QHeaderView::section {{ background: {navy}; color: white; padding: 6px; '
+        f'border: none; font-weight: bold; font-size: 11px; }}'
+    )
+
+    if not rows:
+        tbl.setRowCount(1)
+        item = QtWidgets.QTableWidgetItem('Lớp này chưa có buổi học nào được lập lịch')
+        item.setTextAlignment(Qt.AlignCenter)
+        item.setForeground(QColor(text_light))
+        tbl.setItem(0, 0, item)
+        tbl.setSpan(0, 0, 1, 7)
+        tbl.setRowHeight(0, 60)
+    else:
+        tbl.setRowCount(len(rows))
+        days_vn_short = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
+        st_vn = {'planned': 'Đã lên lịch', 'done': 'Đã diễn ra',
+                 'cancelled': 'Đã huỷ', 'rescheduled': 'Đã dời lịch'}
+        st_color = {'planned': '#1e3a8a', 'done': '#166534',
+                    'cancelled': '#991b1b', 'rescheduled': '#92400e'}
+        for r, sc in enumerate(rows):
+            tbl.setRowHeight(r, 36)
+            buoi_so = sc.get('buoi_so')
+            it_buoi = QtWidgets.QTableWidgetItem(str(buoi_so) if buoi_so else str(r + 1))
+            it_buoi.setTextAlignment(Qt.AlignCenter)
+            f = it_buoi.font(); f.setBold(True); it_buoi.setFont(f)
+            tbl.setItem(r, 0, it_buoi)
+
+            ngay_v = sc.get('ngay', '')
+            ngay_d = None
+            if isinstance(ngay_v, _date):
+                ngay_d = ngay_v
+                ngay_str = ngay_v.strftime('%d/%m/%Y')
+            else:
+                try:
+                    ngay_d = _date.fromisoformat(str(ngay_v)[:10])
+                    ngay_str = ngay_d.strftime('%d/%m/%Y')
+                except Exception:
+                    ngay_str = str(ngay_v)[:10] or '—'
+            it_ngay = QtWidgets.QTableWidgetItem(ngay_str)
+            it_ngay.setTextAlignment(Qt.AlignCenter)
+            # Highlight today
+            if ngay_d and ngay_d == today:
+                it_ngay.setForeground(QColor('#c05621'))
+                f = it_ngay.font(); f.setBold(True); it_ngay.setFont(f)
+            tbl.setItem(r, 1, it_ngay)
+
+            thu_str = days_vn_short[ngay_d.weekday()] if ngay_d else '—'
+            it_thu = QtWidgets.QTableWidgetItem(thu_str)
+            it_thu.setTextAlignment(Qt.AlignCenter)
+            tbl.setItem(r, 2, it_thu)
+
+            gio_bd = str(sc.get('gio_bat_dau', ''))[:5]
+            gio_kt = str(sc.get('gio_ket_thuc', ''))[:5]
+            gio_str = f'{gio_bd}-{gio_kt}' if gio_bd and gio_kt else '—'
+            it_gio = QtWidgets.QTableWidgetItem(gio_str)
+            it_gio.setTextAlignment(Qt.AlignCenter)
+            tbl.setItem(r, 3, it_gio)
+
+            it_phong = QtWidgets.QTableWidgetItem(sc.get('phong', '') or '—')
+            it_phong.setTextAlignment(Qt.AlignCenter)
+            tbl.setItem(r, 4, it_phong)
+
+            st_raw = sc.get('trang_thai') or 'planned'
+            # Auto downgrade planned -> done neu ngay da qua va chua co status overide
+            display_st = st_raw
+            if st_raw == 'planned' and ngay_d and ngay_d < today:
+                display_st = 'done'
+            it_st = QtWidgets.QTableWidgetItem(st_vn.get(display_st, display_st))
+            it_st.setTextAlignment(Qt.AlignCenter)
+            it_st.setForeground(QColor(st_color.get(display_st, text_dark)))
+            f = it_st.font(); f.setBold(True); it_st.setFont(f)
+            tbl.setItem(r, 5, it_st)
+
+            nd = sc.get('noi_dung', '') or '—'
+            it_nd = QtWidgets.QTableWidgetItem(nd)
+            it_nd.setToolTip(nd if nd != '—' else '')
+            tbl.setItem(r, 6, it_nd)
+
+        tbl.setColumnWidth(0, 50)
+        tbl.setColumnWidth(1, 95)
+        tbl.setColumnWidth(2, 40)
+        tbl.setColumnWidth(3, 90)
+        tbl.setColumnWidth(4, 70)
+        tbl.setColumnWidth(5, 100)
+        tbl.horizontalHeader().setStretchLastSection(True)
+
+    bv.addWidget(tbl, 1)
+    lay.addWidget(body, 1)
+
+    # Footer: nut "In PDF" + "Dong"
+    footer = QtWidgets.QFrame()
+    footer.setFixedHeight(58)
+    footer.setStyleSheet(f'QFrame {{ background: #f7fafc; border-top: 1px solid {border}; }}')
+    fl = QtWidgets.QHBoxLayout(footer)
+    fl.setContentsMargins(20, 10, 20, 10)
+    fl.setSpacing(10)
+
+    # Nut In PDF (chi enable neu co buoi)
+    btn_pdf = QtWidgets.QPushButton('🖨 In toàn bộ lịch lớp (PDF)')
+    btn_pdf.setFixedHeight(36)
+    btn_pdf.setMinimumWidth(220)
+    btn_pdf.setCursor(Qt.PointingHandCursor)
+    btn_pdf.setStyleSheet('QPushButton { background: #c05621; color: white; border: none; '
+                          'border-radius: 6px; font-size: 12px; font-weight: bold; padding: 0 12px; } '
+                          'QPushButton:hover { background: #9c4419; } '
+                          'QPushButton:disabled { background: #cbd5e0; color: #a0aec0; }')
+    btn_pdf.setEnabled(bool(rows))
+    btn_pdf.clicked.connect(lambda: export_class_full_schedule_pdf(
+        dlg, lop_id, ten_mon, rows, ten_gv=ten_gv,
+        default_filename=f'LichLop_{lop_id}.pdf'
+    ))
+    fl.addWidget(btn_pdf)
+
+    fl.addStretch()
+
+    btn_close = QtWidgets.QPushButton('Đóng')
+    btn_close.setFixedSize(110, 36)
+    btn_close.setCursor(Qt.PointingHandCursor)
+    btn_close.setStyleSheet(f'QPushButton {{ background: {navy}; color: white; border: none; '
+                            f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                            f'QPushButton:hover {{ background: #1a3a6c; }}')
+    btn_close.clicked.connect(dlg.accept)
+    fl.addWidget(btn_close)
     lay.addWidget(footer)
 
     dlg.exec_()
@@ -1331,6 +2683,7 @@ ADMIN_PAGES = [
     ('btnAdminEmployee', 'admin_employees.ui'),
     ('btnAdminSemester', 'admin_semester.ui'),
     ('btnAdminCurriculum', 'admin_curriculum.ui'),
+    ('btnAdminSchedule', None),  # Quan ly lich hoc - build pure Python
     ('btnAdminAudit', 'admin_audit.ui'),
     ('btnAdminStats', 'admin_stats.ui'),
 ]
@@ -1344,6 +2697,7 @@ ADMIN_MENU = [
     ('btnAdminEmployee', 'iconAdminEmployee', 'briefcase', 'Quản lý nhân viên'),
     ('btnAdminSemester', 'iconAdminSemester', 'sliders', 'Quản lý đợt'),
     ('btnAdminCurriculum', 'iconAdminCurriculum', 'file-text', 'Lộ trình học'),
+    ('btnAdminSchedule', 'iconAdminSchedule', 'calendar', 'Quản lý lịch học'),
     ('btnAdminAudit', 'iconAdminAudit', 'shield', 'Nhật ký hệ thống'),
     ('btnAdminStats', 'iconAdminStats', 'pie-chart', 'Thống kê'),
 ]
@@ -1689,6 +3043,15 @@ class MainWindow(QtWidgets.QWidget):
                         if c == 5 and val:
                             style_status_item(item, val)
                         tbl.setItem(r, c, item)
+                    # Tooltip cot Ma KH va Ten khoa hoc -> nhac user double-click
+                    if tbl.item(r, 0):
+                        tbl.item(r, 0).setToolTip('Double-click để xem toàn bộ lịch của lớp này')
+                    if tbl.item(r, 1):
+                        tbl.item(r, 1).setToolTip('Double-click để xem toàn bộ lịch của lớp này')
+                # Wire double-click row -> show full schedule (1 lan)
+                if not getattr(self, '_stu_courses_dblclick_wired', False):
+                    tbl.cellDoubleClicked.connect(self._stu_on_course_dblclick)
+                    self._stu_courses_dblclick_wired = True
             # Stretch col 1 (Ten khoa hoc) - cot dai nhat - cho cac cot khac giu width
             tbl.setColumnWidth(0, 70)    # Ma KH
             tbl.setColumnWidth(1, 180)   # Ten khoa hoc (se stretch) - shrink cho cot trang thai
@@ -1699,6 +3062,158 @@ class MainWindow(QtWidgets.QWidget):
             tbl.horizontalHeader().setStretchLastSection(False)
             tbl.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
             tbl.verticalHeader().setVisible(False)
+
+    def _stu_export_ics(self):
+        """Xuat tat ca lich hoc cua HV ra file .ics."""
+        hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        if not hv_id:
+            msg_warn(self, 'Lỗi', 'Chưa có thông tin học viên')
+            return
+        if not (DB_AVAILABLE and ScheduleService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+            return
+        try:
+            schedules = ScheduleService.get_all_for_student(hv_id) or []
+        except Exception as e:
+            msg_warn(self, 'Lỗi tải', api_error_msg(e))
+            return
+        msv = MOCK_USER.get('msv', 'HV')
+        export_schedule_ics(self, schedules,
+                            default_filename=f'LichHoc_{msv}.ics',
+                            calendar_name=f'Lịch học EAUT - {MOCK_USER.get("name", "")}')
+
+    def _stu_export_schedule_week_pdf(self):
+        """In lich tuan dang xem ra PDF."""
+        hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        if not hv_id:
+            msg_warn(self, 'Lỗi', 'Chưa có thông tin học viên')
+            return
+        monday = getattr(self, '_stu_current_monday', None)
+        if monday is None:
+            today = QDate.currentDate()
+            monday = today.addDays(-(today.dayOfWeek() - 1))
+        if not (DB_AVAILABLE and ScheduleService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+            return
+        try:
+            schedules = ScheduleService.get_for_student_week(hv_id, monday.toPyDate()) or []
+        except Exception as e:
+            msg_warn(self, 'Lỗi tải', api_error_msg(e))
+            return
+        msv = MOCK_USER.get('msv', 'HV')
+        name = MOCK_USER.get('name', '') or MOCK_USER.get('full_name', '')
+        fname = f'LichTuan_{msv}_{monday.toString("yyyyMMdd")}.pdf'
+        export_schedule_week_pdf(self, schedules, monday,
+                                  owner_role='hv', owner_name=name, owner_code=msv,
+                                  default_filename=fname)
+
+    def _stu_export_exam_pdf(self):
+        """In lich thi cua HV ra PDF."""
+        # Re-fetch de data luon fresh (user co the vao trang lich thi luu lau)
+        hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        if not hv_id:
+            msg_warn(self, 'Lỗi', 'Chưa có thông tin học viên')
+            return
+        rows = []
+        if DB_AVAILABLE and ExamService:
+            try:
+                rows = ExamService.get_for_student(hv_id) or []
+            except Exception as e:
+                msg_warn(self, 'Lỗi tải', api_error_msg(e))
+                return
+        if not rows:
+            # Fallback dung cache neu co
+            rows = getattr(self, '_stu_exam_rows_cache', [])
+        if not rows:
+            msg_warn(self, 'Trống', 'Chưa có lịch thi nào để in.')
+            return
+        msv = MOCK_USER.get('msv', 'HV')
+        name = MOCK_USER.get('name', '') or MOCK_USER.get('full_name', '')
+        fname = f'LichThi_{msv}.pdf'
+        export_exam_schedule_pdf(self, rows, owner_role='hv',
+                                  owner_name=name, owner_code=msv,
+                                  default_filename=fname)
+
+    def _stu_on_course_dblclick(self, row, col):
+        """HV double-click 1 row tbl tblCourses -> mo dialog xem toan bo lich cua lop."""
+        page = self.page_widgets[0]
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblCourses')
+        if not tbl:
+            return
+        it_ma = tbl.item(row, 0)
+        it_ten = tbl.item(row, 1)
+        it_gv = tbl.item(row, 3)  # cot Giang vien
+        if not it_ma:
+            return
+        ma_lop = it_ma.text().strip()
+        ten_mon = it_ten.text().strip() if it_ten else ''
+        ten_gv = it_gv.text().strip() if it_gv else ''
+        if ten_gv == '—':
+            ten_gv = ''
+        if not ma_lop:
+            return
+        if not (DB_AVAILABLE and ScheduleService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+            return
+        try:
+            schedules = ScheduleService.get_for_class(ma_lop) or []
+        except Exception as e:
+            msg_warn(self, 'Lỗi tải', api_error_msg(e))
+            return
+        show_class_full_schedule_dialog(self, ma_lop, ten_mon, schedules,
+                                          role='hv', ten_gv=ten_gv)
+
+    def _show_session_detail(self, sched_row, role='hv'):
+        """Popup chi tiet 1 buoi hoc khi click vao card lich. role: 'hv' | 'gv'."""
+        from datetime import date as _date
+        ngay_v = sched_row.get('ngay', '')
+        if isinstance(ngay_v, _date):
+            ngay_str = ngay_v.strftime('%d/%m/%Y')
+            try:
+                wd = ngay_v.weekday()
+                thu_vn = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm',
+                          'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][wd]
+                ngay_str = f'{thu_vn}, {ngay_str}'
+            except Exception:
+                pass
+        else:
+            ngay_str = str(ngay_v)[:10] or '—'
+        gio_bd = str(sched_row.get('gio_bat_dau', ''))[:5]
+        gio_kt = str(sched_row.get('gio_ket_thuc', ''))[:5]
+        gio_str = f'{gio_bd} - {gio_kt}' if gio_bd and gio_kt else '—'
+        phong = sched_row.get('phong', '') or '—'
+        ma_lop = sched_row.get('lop_id', '?') or '?'
+        ten_mon = sched_row.get('ten_mon', '') or '—'
+        ten_gv = sched_row.get('ten_gv', '') or '—'
+        buoi_so = sched_row.get('buoi_so')
+        nd = sched_row.get('noi_dung', '') or ''
+        trang_thai = sched_row.get('trang_thai') or 'planned'
+        st_vn = {'planned': 'Đã lên lịch', 'done': 'Đã diễn ra',
+                 'cancelled': 'Đã huỷ', 'rescheduled': 'Đã dời lịch'}
+        st_label = st_vn.get(trang_thai, trang_thai)
+
+        fields = [
+            ('NGÀY HỌC', ngay_str),
+            ('THỜI GIAN', gio_str),
+            ('PHÒNG', phong),
+            ('LỚP', ma_lop),
+            ('KHÓA HỌC', ten_mon),
+        ]
+        if role == 'hv':
+            fields.append(('GIẢNG VIÊN', ten_gv))
+        if buoi_so:
+            fields.append(('BUỔI SỐ', f'Buổi {buoi_so}'))
+        if nd:
+            fields.append(('NỘI DUNG BUỔI', nd))
+        fields.append(('TRẠNG THÁI', st_label))
+
+        show_detail_dialog(
+            self,
+            title=f'Chi tiết buổi học · {ma_lop}',
+            fields=fields,
+            avatar_text=ma_lop[:2],
+            subtitle=ten_mon,
+        )
 
     def _render_today_banner_hv(self, page, hv_id):
         """Render banner 'Lich hoc hom nay' giua 3 stat cards va tableFrame.
@@ -1776,6 +3291,50 @@ class MainWindow(QtWidgets.QWidget):
         hb = page.findChild(QtWidgets.QFrame, 'headerBar')
         if hb:
             hb.setGeometry(0, 0, 870, 56)
+            # Combo "Loc lop" - de loc lich theo 1 lop cu the
+            if not hb.findChild(QtWidgets.QComboBox, 'cboSchedFilter'):
+                lbl_f = QtWidgets.QLabel('Lọc:', hb)
+                lbl_f.setObjectName('lblSchedFilter')
+                lbl_f.setGeometry(245, 18, 38, 24)
+                lbl_f.setStyleSheet('color: #4a5568; font-size: 12px; font-weight: bold; background: transparent;')
+                lbl_f.show()
+                cbo = QtWidgets.QComboBox(hb)
+                cbo.setObjectName('cboSchedFilter')
+                cbo.setGeometry(285, 12, 280, 32)
+                cbo.setCursor(Qt.PointingHandCursor)
+                cbo.setStyleSheet('QComboBox { background: white; border: 1px solid #d2d6dc; '
+                                   'border-radius: 6px; padding: 4px 10px; font-size: 12px; } '
+                                   'QComboBox:hover { border-color: #002060; } '
+                                   'QComboBox::drop-down { border: none; padding-right: 6px; }')
+                cbo.show()
+            # Them nut "In lich tuan PDF" - shift trai cho cho combo filter
+            if not hb.findChild(QtWidgets.QPushButton, 'btnPrintSchedHV'):
+                btn_pdf = QtWidgets.QPushButton('🖨 In tuần PDF', hb)
+                btn_pdf.setObjectName('btnPrintSchedHV')
+                btn_pdf.setGeometry(580, 12, 130, 32)
+                btn_pdf.setCursor(Qt.PointingHandCursor)
+                btn_pdf.setToolTip('In lịch tuần đang xem ra PDF để mang theo')
+                btn_pdf.setStyleSheet(
+                    'QPushButton { background: #c05621; color: white; border: none; '
+                    'border-radius: 6px; font-size: 12px; font-weight: bold; } '
+                    'QPushButton:hover { background: #9c4419; }'
+                )
+                btn_pdf.clicked.connect(self._stu_export_schedule_week_pdf)
+                btn_pdf.show()
+            # Them nut "Xuat lich (.ics)" 1 lan
+            if not hb.findChild(QtWidgets.QPushButton, 'btnExportICS'):
+                btn_ics = QtWidgets.QPushButton('📅 Xuất .ics', hb)
+                btn_ics.setObjectName('btnExportICS')
+                btn_ics.setGeometry(720, 12, 130, 32)
+                btn_ics.setCursor(Qt.PointingHandCursor)
+                btn_ics.setToolTip('Xuất lịch học sang file .ics để import vào Google/Apple Calendar')
+                btn_ics.setStyleSheet(
+                    f'QPushButton {{ background: {COLORS["green"]}; color: white; border: none; '
+                    f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                    f'QPushButton:hover {{ background: {COLORS["green_hover"]}; }}'
+                )
+                btn_ics.clicked.connect(self._stu_export_ics)
+                btn_ics.show()
 
         # Schedule frame to, calendar Frame giu nhung an cal widget va dat prev/next button
         sf = page.findChild(QtWidgets.QFrame, 'scheduleFrame')
@@ -1830,10 +3389,19 @@ class MainWindow(QtWidgets.QWidget):
             btn_today.setCursor(Qt.PointingHandCursor)
             btn_today.show()
 
-            hint = QtWidgets.QLabel('Dùng nút trên để chuyển tuần', cf)
+            # Nut chon ngay tuy y -> jump tuan chua ngay do
+            btn_goto = QtWidgets.QPushButton('📅 Chọn ngày...', cf)
+            btn_goto.setObjectName('btnGotoWeek')
+            btn_goto.setGeometry(15, 170, 195, 30)
+            btn_goto.setStyleSheet('QPushButton { background: white; color: #c05621; border: 1px solid #c05621; border-radius: 6px; font-size: 11px; font-weight: bold; } QPushButton:hover { background: #fef5f0; }')
+            btn_goto.setCursor(Qt.PointingHandCursor)
+            btn_goto.setToolTip('Mở lịch để chọn 1 ngày bất kỳ - tự động nhảy đến tuần chứa ngày đó')
+            btn_goto.show()
+
+            hint = QtWidgets.QLabel('Click "Chọn ngày..." để xem tuần xa', cf)
             hint.setObjectName('lblNavHint')
-            hint.setGeometry(15, 175, 195, 40)
-            hint.setStyleSheet('color: #a0aec0; font-size: 10px; background: transparent;')
+            hint.setGeometry(15, 207, 195, 18)
+            hint.setStyleSheet('color: #a0aec0; font-size: 9px; background: transparent;')
             hint.setWordWrap(True)
             hint.setAlignment(Qt.AlignCenter)
             hint.show()
@@ -1916,6 +3484,43 @@ class MainWindow(QtWidgets.QWidget):
                 QDate.currentDate().addDays(-(QDate.currentDate().dayOfWeek() - 1))
             ))
 
+        # Wire nut "Chon ngay..." -> mo dialog -> jump
+        btn_goto = cf.findChild(QtWidgets.QPushButton, 'btnGotoWeek') if cf else None
+        if btn_goto:
+            def _on_goto():
+                picked = pick_week_jumper_dialog(self, self._stu_current_monday)
+                if picked:
+                    new_mon = picked.addDays(-(picked.dayOfWeek() - 1))
+                    _reload_with_debounce(new_mon)
+            btn_goto.clicked.connect(_on_goto)
+
+        # Populate combo loc lop + wire change
+        cbo_filter = hb.findChild(QtWidgets.QComboBox, 'cboSchedFilter') if hb else None
+        if cbo_filter is not None and cbo_filter.count() == 0:
+            cbo_filter.blockSignals(True)
+            cbo_filter.addItem('Tất cả lớp', None)
+            if DB_AVAILABLE and hv_id:
+                try:
+                    my_classes = CourseService.get_classes_by_student(hv_id) or []
+                    seen = set()
+                    for r in my_classes:
+                        ma = r.get('ma_lop')
+                        if ma and ma not in seen:
+                            seen.add(ma)
+                            ten = r.get('ten_mon', '') or ''
+                            label = f'{ma} · {ten}' if ten else ma
+                            cbo_filter.addItem(label, ma)
+                except Exception as e:
+                    print(f'[STU_SCHED] populate filter loi: {e}')
+            cbo_filter.blockSignals(False)
+            # Wire 1 lan
+            cbo_filter.currentIndexChanged.connect(
+                lambda idx: (
+                    setattr(self, '_stu_sched_filter', cbo_filter.itemData(idx)),
+                    self._load_student_schedule_week(page, tbl, self._stu_current_monday, hours, days_vn),
+                )
+            )
+
     def _load_student_schedule_week(self, page, tbl, monday, hours, days_vn):
         """Reload lich hoc HV cho tuan bat dau bang `monday` (QDate)."""
         # Update header cot ngay + label tuan; highlight cot HOM NAY mau xanh
@@ -1952,9 +3557,28 @@ class MainWindow(QtWidgets.QWidget):
                     tbl.setSpan(r, c, 1, 1)
                 tbl.setItem(r, c, QtWidgets.QTableWidgetItem(''))
 
-        def mk_card(ma_lop, ten_mon, ts, phong, gv, color):
+        def mk_card(ma_lop, ten_mon, ts, phong, gv, color, ngay_str='', sched_row=None):
             f = QtWidgets.QFrame()
             f.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #d2d6dc; border-radius: 4px; border-top: 3px solid {color}; margin: 1px; }}')
+            f.setCursor(Qt.PointingHandCursor)
+            # Tooltip rich HTML voi day du info (hover show full detail)
+            phong_disp = phong if phong.lower().startswith(('p.', 'p ', 'phòng', 'phong')) else f'P. {phong}'
+            tip = (
+                f'<b style="color:{color};">{ma_lop}</b><br>'
+                f'<b>{ten_mon}</b><br>'
+                f'<span style="color:#718096;">━━━━━━━━━━━━</span><br>'
+                f'🕒 <b>{ts}</b>{("<br>📅 " + ngay_str) if ngay_str else ""}<br>'
+                f'📍 {phong_disp}<br>'
+                f'👨‍🏫 {gv or "—"}<br>'
+                f'<span style="color:#a0aec0; font-size:10px;">━━━ Click để xem chi tiết ━━━</span>'
+            )
+            f.setToolTip(tip)
+            # Click vao card -> popup chi tiet buoi hoc
+            if sched_row is not None:
+                def _click(ev, _r=sched_row):
+                    if ev.button() == Qt.LeftButton:
+                        self._show_session_detail(_r, role='hv')
+                f.mousePressEvent = _click
             vb = QtWidgets.QVBoxLayout(f)
             vb.setContentsMargins(4, 3, 4, 3)
             vb.setSpacing(1)
@@ -1973,7 +3597,6 @@ class MainWindow(QtWidgets.QWidget):
             l3.setStyleSheet('color: #4a5568; font-size: 9px; font-weight: bold; border: none; background: transparent;')
             vb.addWidget(l3)
             # Dong 4: phong (smart prefix: chi them "P. " neu chua co)
-            phong_disp = phong if phong.lower().startswith(('p.', 'p ', 'phòng', 'phong')) else f'P. {phong}'
             l4 = QtWidgets.QLabel(phong_disp)
             l4.setStyleSheet('color: #718096; font-size: 9px; border: none; background: transparent;')
             vb.addWidget(l4)
@@ -1991,6 +3614,10 @@ class MainWindow(QtWidgets.QWidget):
         if DB_AVAILABLE and hv_id:
             try:
                 rows = ScheduleService.get_for_student_week(hv_id, monday.toPyDate()) or []
+                # Filter neu user da chon 1 lop trong combo cboSchedFilter
+                sel_lop = getattr(self, '_stu_sched_filter', None)
+                if sel_lop:
+                    rows = [r for r in rows if r.get('lop_id') == sel_lop]
                 color_palette = ['#002060', '#c68a1e', '#276749', '#c53030', '#3182ce']
                 color_by_lop = {}
                 from datetime import date as _date
@@ -2026,6 +3653,8 @@ class MainWindow(QtWidgets.QWidget):
                             r.get('phong', '') or '—',
                             r.get('ten_gv', '') or '',
                             color_by_lop[ma_lop],
+                            d.strftime('%d/%m/%Y') if hasattr(d, 'strftime') else str(d),
+                            r,  # raw row de show detail dialog khi click
                         ))
                     except Exception as e:
                         print(f'[STU_SCHED] parse row loi: {e}')
@@ -2050,8 +3679,8 @@ class MainWindow(QtWidgets.QWidget):
             tbl.setCellWidget(3, 1, ph)
             tbl.setSpan(3, 1, 4, 6)
         else:
-            for rs, span, col, ma_lop, ten_mon, ts, phong, gv, color in sched:
-                tbl.setCellWidget(rs, col, mk_card(ma_lop, ten_mon, ts, phong, gv, color))
+            for rs, span, col, ma_lop, ten_mon, ts, phong, gv, color, ngay_str, raw in sched:
+                tbl.setCellWidget(rs, col, mk_card(ma_lop, ten_mon, ts, phong, gv, color, ngay_str, raw))
                 tbl.setSpan(rs, col, span, 1)
 
     def _fill_exam(self):
@@ -2059,13 +3688,33 @@ class MainWindow(QtWidgets.QWidget):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblExam')
         if not tbl:
             return
+
+        # Them nut "In PDF" vao headerBar 1 lan
+        hb = page.findChild(QtWidgets.QFrame, 'headerBar')
+        if hb and not hb.findChild(QtWidgets.QPushButton, 'btnPrintExam'):
+            btn_pdf = QtWidgets.QPushButton('🖨 In PDF', hb)
+            btn_pdf.setObjectName('btnPrintExam')
+            btn_pdf.setGeometry(470, 12, 120, 32)
+            btn_pdf.setCursor(Qt.PointingHandCursor)
+            btn_pdf.setToolTip('In danh sách lịch thi ra PDF')
+            btn_pdf.setStyleSheet(
+                'QPushButton { background: #c05621; color: white; border: none; '
+                'border-radius: 6px; font-size: 12px; font-weight: bold; } '
+                'QPushButton:hover { background: #9c4419; }'
+            )
+            btn_pdf.clicked.connect(self._stu_export_exam_pdf)
+            btn_pdf.show()
+
         # Load exams cua HV tu API + luu semester_id de filter
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
         data = []
         self._exam_sem_ids = []  # song song voi data, luu sem_id de filter
+        # Cache full rows de _stu_export_exam_pdf re-use khong query lai
+        self._stu_exam_rows_cache = []
         if DB_AVAILABLE and hv_id and ExamService:
             try:
                 rows = ExamService.get_for_student(hv_id) or []
+                self._stu_exam_rows_cache = rows
                 for i, r in enumerate(rows, start=1):
                     ngay = fmt_date(r.get('ngay_thi'))
                     ca = r.get('ca_thi', '')
@@ -2199,18 +3848,32 @@ class MainWindow(QtWidgets.QWidget):
             if w:
                 w.setText(val)
                 w.setStyleSheet(f'color: {color}; font-size: 22px; font-weight: bold; background: transparent;')
-        # don dep nut cu (neu co tu lan render truoc)
+        # Header: them nut "Xuat PDF bang diem" + cboSemester
         header = page.findChild(QtWidgets.QFrame, 'headerBar')
         if header:
-            for old_name in ('btnExportPDF', 'btnProgressCT'):
+            # Cleanup nut cu (neu co)
+            for old_name in ('btnProgressCT',):
                 old = header.findChild(QtWidgets.QPushButton, old_name)
                 if old:
                     old.deleteLater()
-        # cboSemester chiem tron khong gian (bo nut Tien do CT - khoa ngoai khoa
-        # khong co lo trinh CT, HV tu chon khoa)
+            # Add or reuse PDF export button (idempotent re-fill)
+            btn_pdf = header.findChild(QtWidgets.QPushButton, 'btnExportPDF')
+            if not btn_pdf:
+                btn_pdf = QtWidgets.QPushButton('🖨 Xuất PDF', header)
+                btn_pdf.setObjectName('btnExportPDF')
+                btn_pdf.setGeometry(720, 12, 130, 32)
+                btn_pdf.setCursor(Qt.PointingHandCursor)
+                btn_pdf.setStyleSheet(
+                    f'QPushButton {{ background: {COLORS["gold"]}; color: white; border: none; '
+                    f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                    f'QPushButton:hover {{ background: {COLORS["gold_hover"]}; }}'
+                )
+                btn_pdf.show()
+            safe_connect(btn_pdf.clicked, self._stu_export_grades_pdf)
+        # cboSemester nho hon de fit nut PDF
         cbo_sem = page.findChild(QtWidgets.QComboBox, 'cboSemester')
         if cbo_sem:
-            cbo_sem.setGeometry(600, 12, 240, 32)
+            cbo_sem.setGeometry(470, 12, 240, 32)
 
         # combo loc - load dynamic tu API. Khoa ngoai khoa: filter theo dot
         # khai giang (semester_id) hoac "Tat ca khoa hoc"
@@ -2230,6 +3893,151 @@ class MainWindow(QtWidgets.QWidget):
                 except Exception as e:
                     print(f'[HV_GRADES_SEM] loi: {e}')
             safe_connect(cbo.currentIndexChanged, lambda idx: self._render_student_grades(sem_map.get(idx)))
+
+    def _stu_export_grades_pdf(self):
+        """Xuat bang diem PDF cho HV - dung QPrinter + HTML template chinh quy."""
+        try:
+            from PyQt5.QtPrintSupport import QPrinter
+            from PyQt5.QtGui import QTextDocument
+        except ImportError:
+            msg_warn(self, 'Lỗi', 'PyQt5.QtPrintSupport không có sẵn.')
+            return
+        if not self._student_grades_by_sem:
+            msg_warn(self, 'Trống', 'Bạn chưa có điểm để xuất PDF.')
+            return
+        msv = MOCK_USER.get('msv', 'N/A')
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, 'Xuất bảng điểm PDF',
+            os.path.join(os.path.expanduser('~'), 'Desktop', f'BangDiem_{msv}.pdf'),
+            'PDF Files (*.pdf)'
+        )
+        if not path:
+            return
+        if not path.lower().endswith('.pdf'):
+            path += '.pdf'
+
+        # Compute aggregated stats
+        from datetime import datetime
+        all_rows = []
+        for rows in self._student_grades_by_sem.values():
+            all_rows.extend(rows)
+        # Get GPA + completed count
+        gpa_he10 = 0.0
+        try:
+            hv_id = MOCK_USER.get('id')
+            if hv_id and DB_AVAILABLE:
+                stats = GradeService.get_gpa_stats(hv_id) or {}
+                gpa_he10 = float(stats.get('gpa') or 0.0)
+        except Exception:
+            pass
+
+        # Build HTML
+        u = MOCK_USER
+        rows_html = []
+        for i, row in enumerate(all_rows, 1):
+            ma_kh, ten, sb, qt, thi, tk, xl = row
+            # Color theo xep loai
+            xl_color = '#166534' if xl in ('A+', 'A') else (
+                '#1e3a8a' if xl in ('B+', 'B') else (
+                    '#92400e' if xl in ('C+', 'C') else '#991b1b'
+                )
+            )
+            tk_color = '#166534' if (tk and tk != '' and float(tk) >= 8) else '#1a1a2e'
+            rows_html.append(f'''
+                <tr style="background: {'#f7fafc' if i % 2 == 0 else 'white'};">
+                    <td style="text-align: center; padding: 8px; border: 1px solid #e2e8f0;">{i}</td>
+                    <td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold;">{ma_kh}</td>
+                    <td style="padding: 8px; border: 1px solid #e2e8f0;">{ten}</td>
+                    <td style="text-align: center; padding: 8px; border: 1px solid #e2e8f0;">{sb}</td>
+                    <td style="text-align: center; padding: 8px; border: 1px solid #e2e8f0;">{qt or '—'}</td>
+                    <td style="text-align: center; padding: 8px; border: 1px solid #e2e8f0;">{thi or '—'}</td>
+                    <td style="text-align: center; padding: 8px; border: 1px solid #e2e8f0; color: {tk_color}; font-weight: bold;">{tk or '—'}</td>
+                    <td style="text-align: center; padding: 8px; border: 1px solid #e2e8f0; color: {xl_color}; font-weight: bold; font-size: 13px;">{xl or '—'}</td>
+                </tr>
+            ''')
+        html = f'''
+        <html><head><meta charset="utf-8"></head>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e;">
+        <div style="text-align: center; border-bottom: 3px solid #002060; padding-bottom: 12px; margin-bottom: 20px;">
+            <h1 style="color: #002060; margin: 0; font-size: 22px;">TRUNG TÂM NGOẠI KHÓA EAUT</h1>
+            <p style="margin: 4px 0; color: #4a5568; font-size: 11px;">
+                Km 23, QL5, Trưng Trắc, Văn Lâm, Hưng Yên · Hotline: 024.3999.1111
+            </p>
+        </div>
+
+        <h2 style="text-align: center; color: #c05621; margin: 0 0 4px 0; letter-spacing: 1px;">BẢNG ĐIỂM HỌC VIÊN</h2>
+        <p style="text-align: center; color: #718096; font-size: 11px; margin: 0 0 18px 0;">
+            Cập nhật: <b>{datetime.now().strftime('%d/%m/%Y %H:%M')}</b>
+        </p>
+
+        <table cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px;">
+            <tr style="background: #edf2f7;">
+                <td style="width: 25%; color: #4a5568; padding: 8px;">Họ và tên</td>
+                <td style="padding: 8px;"><b>{u.get('name', '—')}</b></td>
+                <td style="width: 18%; color: #4a5568; padding: 8px;">Mã số HV</td>
+                <td style="padding: 8px;"><b>{u.get('msv', '—')}</b></td>
+            </tr>
+            <tr>
+                <td style="color: #4a5568; padding: 8px;">Ngày sinh</td>
+                <td style="padding: 8px;">{u.get('ngaysinh', '—')}</td>
+                <td style="color: #4a5568; padding: 8px;">Giới tính</td>
+                <td style="padding: 8px;">{u.get('gioitinh', '—')}</td>
+            </tr>
+        </table>
+
+        <table cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 11px;">
+            <thead>
+                <tr style="background: #002060; color: white;">
+                    <th style="padding: 8px; border: 1px solid #002060; width: 4%;">#</th>
+                    <th style="padding: 8px; border: 1px solid #002060; width: 12%;">Mã KH</th>
+                    <th style="padding: 8px; border: 1px solid #002060;">Tên khóa học</th>
+                    <th style="padding: 8px; border: 1px solid #002060; width: 8%;">Số buổi</th>
+                    <th style="padding: 8px; border: 1px solid #002060; width: 8%;">QT</th>
+                    <th style="padding: 8px; border: 1px solid #002060; width: 8%;">Thi</th>
+                    <th style="padding: 8px; border: 1px solid #002060; width: 10%;">TK</th>
+                    <th style="padding: 8px; border: 1px solid #002060; width: 10%;">Xếp loại</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(rows_html) if rows_html else '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #a0aec0;">(Chưa có điểm)</td></tr>'}
+            </tbody>
+        </table>
+
+        <div style="margin-top: 18px; padding: 12px; background: #f7fafc; border-left: 4px solid #002060; border-radius: 4px;">
+            <p style="margin: 4px 0; font-size: 12px;"><b style="color: #002060;">Tổng kết:</b></p>
+            <p style="margin: 4px 0; font-size: 13px;">
+                · Điểm trung bình hệ 10: <b style="color: #c05621;">{gpa_he10:.2f}</b><br>
+                · Số khóa học hoàn thành: <b>{self._grades_completed}</b><br>
+                · Tổng số buổi học: <b>{self._grades_total_buoi}</b>
+            </p>
+        </div>
+
+        <div style="margin-top: 40px; display: flex; justify-content: flex-end;">
+            <div style="text-align: center; width: 40%;">
+                <p style="color: #4a5568; font-size: 11px;">Hà Nội, ngày {datetime.now().day} tháng {datetime.now().month} năm {datetime.now().year}</p>
+                <p style="margin-top: 4px; color: #4a5568;"><b>Trưởng phòng đào tạo</b></p>
+                <p style="font-size: 10px; color: #718096; font-style: italic;">(ký tên, đóng dấu)</p>
+            </div>
+        </div>
+
+        <p style="text-align: center; color: #718096; font-size: 10px; margin-top: 30px; font-style: italic;">
+            Bảng điểm này có giá trị tham khảo. Bản chính thức cấp tại văn phòng Trung tâm.
+        </p>
+        </body></html>
+        '''
+        try:
+            doc = QTextDocument()
+            doc.setHtml(html)
+            printer = QPrinter(QPrinter.HighResolution)
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(path)
+            printer.setPageSize(QPrinter.A4)
+            printer.setPageMargins(15, 15, 15, 15, QPrinter.Millimeter)
+            doc.print_(printer)
+            msg_info(self, 'Đã xuất PDF', f'Bảng điểm đã lưu:\n{path}')
+        except Exception as e:
+            print(f'[STU_PDF] loi: {e}')
+            msg_warn(self, 'Lỗi xuất PDF', f'Không xuất được:\n{e}')
 
     def _render_student_grades(self, sem_id):
         """Render bang diem cua HV. sem_id=None = tat ca khoa hoc.
@@ -2967,6 +4775,13 @@ class AdminWindow(QtWidgets.QWidget):
         return sidebar
 
     def _load_page(self, ui_file):
+        # ui_file=None -> tao QFrame trong de fill bang code (cho Quan ly lich hoc)
+        if ui_file is None:
+            content = QtWidgets.QFrame()
+            content.setObjectName('contentArea')
+            content.setFixedSize(1020, 720)
+            content.setStyleSheet('QFrame#contentArea { background: #edf2f7; }')
+            return content
         temp = uic.loadUi(os.path.join(UI, ui_file))
         content = temp.findChild(QtWidgets.QFrame, 'contentArea')
         if content:
@@ -2982,6 +4797,7 @@ class AdminWindow(QtWidgets.QWidget):
                     self._fill_admin_classes, self._fill_admin_students,
                     self._fill_admin_teachers, self._fill_admin_employees,
                     self._fill_admin_semester, self._fill_admin_curriculum,
+                    self._fill_admin_schedule,  # NEW idx 8
                     self._fill_admin_audit, self._fill_admin_stats]
             fill[index]()
             self.pages_filled[index] = True
@@ -3039,6 +4855,22 @@ class AdminWindow(QtWidgets.QWidget):
         title = page.findChild(QtWidgets.QLabel, 'lblPageTitle')
         if title:
             title.setText(f'Tổng quan · {time_greeting()}')
+
+        # Them nut "Xuat tong ket PDF" o header (idempotent)
+        header = page.findChild(QtWidgets.QFrame, 'headerBar')
+        if header is not None and not header.findChild(QtWidgets.QPushButton, 'btnAdmExportSummary'):
+            btn_pdf = QtWidgets.QPushButton('🖨 Xuất tổng kết', header)
+            btn_pdf.setObjectName('btnAdmExportSummary')
+            btn_pdf.setGeometry(835, 12, 160, 32)
+            btn_pdf.setCursor(Qt.PointingHandCursor)
+            btn_pdf.setToolTip('Xuất báo cáo tổng kết trung tâm ra PDF (4 stats + top classes + recent activity)')
+            btn_pdf.setStyleSheet(
+                f'QPushButton {{ background: {COLORS["gold"]}; color: white; border: none; '
+                f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                f'QPushButton:hover {{ background: {COLORS["gold_hover"]}; }}'
+            )
+            btn_pdf.clicked.connect(self._adm_export_summary_pdf)
+            btn_pdf.show()
         # 4 stat card o tren cung - lay tu /stats/admin/overview
         stat_card_data = None
         if DB_AVAILABLE:
@@ -3188,6 +5020,195 @@ class AdminWindow(QtWidgets.QWidget):
             for c, w in enumerate([200, 80, 80, 80]):
                 tbl3.setColumnWidth(c, w)
             tbl3.verticalHeader().setVisible(False)
+
+    def _adm_export_summary_pdf(self):
+        """Xuat bao cao tong ket trung tam PDF: 4 stats + top classes + recent activity."""
+        try:
+            from PyQt5.QtPrintSupport import QPrinter
+            from PyQt5.QtGui import QTextDocument
+        except ImportError:
+            msg_warn(self, 'Lỗi', 'PyQt5.QtPrintSupport không có sẵn.')
+            return
+        if not (DB_AVAILABLE and StatsService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống.')
+            return
+        # Fetch all data
+        try:
+            overview = StatsService.admin_overview() or {}
+            top_classes = StatsService.top_classes(limit=10) or []
+            recent_acts = StatsService.recent_activity(limit=15) or []
+            by_course = StatsService.by_course() or []
+        except Exception as e:
+            msg_warn(self, 'Lỗi tải', api_error_msg(e))
+            return
+
+        from datetime import datetime as _dt
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, 'Xuất báo cáo tổng kết PDF',
+            os.path.join(os.path.expanduser('~'), 'Desktop',
+                         f'BaoCaoTongKet_EAUT_{_dt.now().strftime("%Y%m%d")}.pdf'),
+            'PDF Files (*.pdf)'
+        )
+        if not path:
+            return
+        if not path.lower().endswith('.pdf'):
+            path += '.pdf'
+
+        # Get current semester name
+        cur_sem_id = overview.get('current_semester')
+        cur_sem_name = '—'
+        if cur_sem_id:
+            try:
+                sem = SemesterService.get(cur_sem_id) if SemesterService else None
+                if sem:
+                    cur_sem_name = sem.get('ten') or cur_sem_id
+                else:
+                    cur_sem_name = cur_sem_id
+            except Exception:
+                cur_sem_name = cur_sem_id
+
+        # Build top classes rows
+        top_rows = []
+        for i, c in enumerate(top_classes, 1):
+            zebra = '#f7fafc' if i % 2 == 0 else 'white'
+            siso_cur = c.get('siso_hien_tai', 0)
+            siso_max = c.get('siso_max', 0)
+            ty_le = int(c.get('ty_le', 0) or 0)
+            color = '#991b1b' if ty_le >= 95 else ('#92400e' if ty_le >= 70 else '#166534')
+            top_rows.append(f'''
+                <tr style="background: {zebra};">
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{i}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; font-weight: bold;">{c.get('ma_lop', '—')}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0;">{c.get('ten_mon', '—')}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{siso_cur}/{siso_max}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center; color: {color}; font-weight: bold;">{ty_le}%</td>
+                </tr>
+            ''')
+
+        # Build recent activity rows
+        act_rows = []
+        for i, a in enumerate(recent_acts, 1):
+            zebra = '#f7fafc' if i % 2 == 0 else 'white'
+            ngay = fmt_date(a.get('thoi_gian'), fmt='%d/%m/%Y %H:%M')
+            loai = a.get('loai', '')
+            loai_label = 'Đăng ký' if loai == 'reg' else ('Thanh toán' if loai == 'pay' else loai)
+            loai_color = '#1e3a8a' if loai == 'reg' else '#166534'
+            act_rows.append(f'''
+                <tr style="background: {zebra};">
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{i}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{ngay}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; color: {loai_color}; font-weight: bold;">{loai_label}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0;">{a.get('noi_dung', '—')}</td>
+                </tr>
+            ''')
+
+        # Build by_course rows (top 10)
+        course_rows = []
+        for i, c in enumerate(by_course[:10], 1):
+            zebra = '#f7fafc' if i % 2 == 0 else 'white'
+            course_rows.append(f'''
+                <tr style="background: {zebra};">
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{i}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; font-weight: bold;">{c.get('ma_mon', '—')}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0;">{c.get('ten_mon', '—')}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{c.get('so_lop', 0)}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center; font-weight: bold; color: #c05621;">{c.get('tong_hv', 0)}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{c.get('so_dang_ky', 0)}</td>
+                </tr>
+            ''')
+
+        admin_name = MOCK_ADMIN.get('name', '—')
+
+        html = f'''
+        <html><head><meta charset="utf-8"></head>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e;">
+        <div style="text-align: center; border-bottom: 3px solid #002060; padding-bottom: 12px; margin-bottom: 16px;">
+            <h1 style="color: #002060; margin: 0; font-size: 22px;">TRUNG TÂM NGOẠI KHÓA EAUT</h1>
+            <p style="margin: 4px 0; color: #4a5568; font-size: 11px;">
+                Km 23, QL5, Trưng Trắc, Văn Lâm, Hưng Yên · Hotline: 024.3999.1111
+            </p>
+        </div>
+
+        <h2 style="text-align: center; color: #c05621; margin: 0 0 4px 0;">BÁO CÁO TỔNG KẾT TRUNG TÂM</h2>
+        <p style="text-align: center; color: #4a5568; font-size: 12px; margin: 0 0 16px 0;">
+            Đợt hiện tại: <b>{cur_sem_name}</b> · Cập nhật: <b>{_dt.now().strftime('%d/%m/%Y %H:%M')}</b>
+        </p>
+
+        <h3 style="color: #002060; margin: 12px 0 6px 0;">📊 Tổng quan</h3>
+        <table cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px;">
+            <tr style="background: #002060; color: white; text-align: center;">
+                <th style="padding: 12px; border: 1px solid #002060;">Tổng học viên</th>
+                <th style="padding: 12px; border: 1px solid #002060;">Tổng lớp</th>
+                <th style="padding: 12px; border: 1px solid #002060;">Tổng đăng ký</th>
+                <th style="padding: 12px; border: 1px solid #002060;">Đợt hiện tại</th>
+            </tr>
+            <tr style="text-align: center;">
+                <td style="padding: 14px; border: 1px solid #e2e8f0; font-size: 22px; color: #002060; font-weight: bold;">{overview.get('total_students', 0)}</td>
+                <td style="padding: 14px; border: 1px solid #e2e8f0; font-size: 22px; color: #166534; font-weight: bold;">{overview.get('total_classes', 0)}</td>
+                <td style="padding: 14px; border: 1px solid #e2e8f0; font-size: 22px; color: #c05621; font-weight: bold;">{overview.get('total_registrations', 0)}</td>
+                <td style="padding: 14px; border: 1px solid #e2e8f0; font-size: 16px; color: #1a4480;"><b>{cur_sem_name}</b></td>
+            </tr>
+        </table>
+
+        <h3 style="color: #002060; margin: 12px 0 6px 0;">🏆 Top {len(top_classes)} lớp đông học viên nhất</h3>
+        <table cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 16px;">
+            <thead><tr style="background: #002060; color: white;">
+                <th style="padding: 6px; border: 1px solid #002060; width: 5%;">#</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 14%;">Mã lớp</th>
+                <th style="padding: 6px; border: 1px solid #002060;">Khóa học</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 14%;">Sĩ số</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 12%;">Tỷ lệ</th>
+            </tr></thead>
+            <tbody>{''.join(top_rows) if top_rows else '<tr><td colspan="5" style="text-align:center; padding: 12px; color: #a0aec0;">(không có)</td></tr>'}</tbody>
+        </table>
+
+        <h3 style="color: #002060; margin: 12px 0 6px 0;">📚 Phân bổ theo khóa học</h3>
+        <table cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 16px;">
+            <thead><tr style="background: #002060; color: white;">
+                <th style="padding: 6px; border: 1px solid #002060; width: 5%;">#</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 12%;">Mã KH</th>
+                <th style="padding: 6px; border: 1px solid #002060;">Tên khóa học</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 10%;">Số lớp</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 12%;">Tổng HV</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 12%;">Đăng ký</th>
+            </tr></thead>
+            <tbody>{''.join(course_rows) if course_rows else '<tr><td colspan="6" style="text-align:center; padding: 12px; color: #a0aec0;">(không có)</td></tr>'}</tbody>
+        </table>
+
+        <h3 style="color: #002060; margin: 12px 0 6px 0;">📋 Hoạt động gần đây ({len(recent_acts)} dòng)</h3>
+        <table cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 10px;">
+            <thead><tr style="background: #002060; color: white;">
+                <th style="padding: 6px; border: 1px solid #002060; width: 5%;">#</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 18%;">Thời gian</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 14%;">Loại</th>
+                <th style="padding: 6px; border: 1px solid #002060;">Nội dung</th>
+            </tr></thead>
+            <tbody>{''.join(act_rows) if act_rows else '<tr><td colspan="4" style="text-align:center; padding: 12px; color: #a0aec0;">(không có)</td></tr>'}</tbody>
+        </table>
+
+        <div style="margin-top: 30px; display: flex; justify-content: flex-end;">
+            <div style="text-align: center; width: 40%;">
+                <p style="color: #4a5568; font-size: 11px;">Hà Nội, ngày {_dt.now().day}/{_dt.now().month}/{_dt.now().year}</p>
+                <p style="margin-top: 4px;"><b>Quản trị viên</b></p>
+                <p style="font-size: 10px; color: #718096; font-style: italic;">(ký, họ tên)</p>
+                <p style="margin-top: 50px;"><b>{admin_name}</b></p>
+            </div>
+        </div>
+        </body></html>
+        '''
+        try:
+            doc = QTextDocument()
+            doc.setHtml(html)
+            printer = QPrinter(QPrinter.HighResolution)
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(path)
+            printer.setPageSize(QPrinter.A4)
+            printer.setPageMargins(15, 15, 15, 15, QPrinter.Millimeter)
+            doc.print_(printer)
+            msg_info(self, 'Đã xuất PDF', f'Báo cáo tổng kết đã lưu:\n{path}')
+        except Exception as e:
+            print(f'[ADM_SUMMARY] loi: {e}')
+            msg_warn(self, 'Lỗi xuất PDF', f'Không xuất được:\n{e}')
 
     def _fill_admin_courses(self):
         page = self.page_widgets[1]
@@ -3605,6 +5626,25 @@ class AdminWindow(QtWidgets.QWidget):
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddStudent')
         if btn_add:
             safe_connect(btn_add.clicked, self._admin_add_student)
+        # Them nut Bulk import CSV (idempotent) - attach to page, place ben canh btn Add
+        if not page.findChild(QtWidgets.QPushButton, 'btnImportCSV'):
+            btn_import = QtWidgets.QPushButton('📥 Import CSV', page)
+            btn_import.setObjectName('btnImportCSV')
+            # Tinh vi tri ben canh btn_add (cung row)
+            if btn_add:
+                geo = btn_add.geometry()
+                btn_import.setGeometry(geo.x() - 145, geo.y(), 135, geo.height())
+            else:
+                btn_import.setGeometry(700, 18, 135, 32)
+            btn_import.setCursor(Qt.PointingHandCursor)
+            btn_import.setToolTip('Import nhiều HV cùng lúc từ file CSV (cột: username,password,full_name,msv,...)')
+            btn_import.setStyleSheet(
+                f'QPushButton {{ background: white; color: {COLORS["navy"]}; border: 1px solid {COLORS["navy"]}; '
+                f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                f'QPushButton:hover {{ background: {COLORS["navy"]}; color: white; }}'
+            )
+            btn_import.clicked.connect(self._admin_import_students_csv)
+            btn_import.show()
 
     def _adm_st_khoa_changed(self, idx):
         """Khi chon khoa -> populate lai cbo lop voi cac lop cua khoa do"""
@@ -3648,6 +5688,134 @@ class AdminWindow(QtWidgets.QWidget):
             if khoa_sel and it_khoa and khoa_sel not in it_khoa.text():
                 show = False
             tbl.setRowHidden(r, not show)
+
+    def _admin_import_students_csv(self):
+        """Dialog Admin import nhieu HV cung luc tu file CSV.
+
+        Format CSV (header bat buoc): username,password,full_name,msv,email,sdt,gioitinh,ngaysinh,diachi
+        Encoding: utf-8 hoac utf-8-sig (Excel save)
+        """
+        # Step 1: chon file
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, 'Chọn file CSV để import', os.path.expanduser('~/Desktop'),
+            'CSV Files (*.csv)'
+        )
+        if not path:
+            return
+
+        # Step 2: parse CSV
+        try:
+            import csv
+            with open(path, 'r', encoding='utf-8-sig', newline='') as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+        except Exception as e:
+            msg_warn(self, 'Lỗi đọc file', f'Không đọc được CSV:\n{e}')
+            return
+        if not rows:
+            msg_warn(self, 'Trống', 'File CSV không có dữ liệu.')
+            return
+        # Validate required cols
+        required = {'username', 'password', 'full_name', 'msv'}
+        missing = required - set(rows[0].keys())
+        if missing:
+            msg_warn(self, 'Thiếu cột',
+                     f'CSV thiếu cột bắt buộc: {", ".join(sorted(missing))}\n\n'
+                     'Header CSV chuẩn:\n'
+                     'username,password,full_name,msv,email,sdt,gioitinh,ngaysinh,diachi')
+            return
+
+        # Step 3: dialog preview + confirm
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle(f'Import CSV - {len(rows)} dòng')
+        dlg.setFixedSize(880, 540)
+        v = QtWidgets.QVBoxLayout(dlg)
+
+        head = QtWidgets.QLabel(
+            f'<b>File:</b> {os.path.basename(path)}<br>'
+            f'<b>Số dòng:</b> {len(rows)} học viên · Bấm <b>Import</b> để bắt đầu.<br>'
+            f'<i style="color:#718096; font-size:11px;">'
+            f'Hệ thống sẽ tạo từng tài khoản, dòng nào lỗi (vd MSV trùng) sẽ skip + báo cuối.'
+            f'</i>'
+        )
+        head.setWordWrap(True)
+        head.setStyleSheet('background:#edf2f7; padding:10px; border-radius:6px; font-size:12px;')
+        v.addWidget(head)
+
+        # Preview table
+        tbl = QtWidgets.QTableWidget()
+        cols = ['#', 'MSV', 'Họ tên', 'Username', 'Email', 'SĐT', 'Giới tính']
+        tbl.setColumnCount(len(cols))
+        tbl.setHorizontalHeaderLabels(cols)
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        tbl.setRowCount(min(len(rows), 100))  # cap preview 100 dong
+        for r, row in enumerate(rows[:100]):
+            items = [str(r + 1), row.get('msv', ''), row.get('full_name', ''),
+                     row.get('username', ''), row.get('email', '') or '—',
+                     row.get('sdt', '') or '—', row.get('gioitinh', '') or '—']
+            for c, val in enumerate(items):
+                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(str(val)))
+        for c, w in enumerate([35, 100, 200, 130, 180, 100, 80]):
+            tbl.setColumnWidth(c, w)
+        if len(rows) > 100:
+            head.setText(head.text() + f'<br><b style="color:#c05621;">⚠ Hiển thị 100/{len(rows)} dòng đầu (toàn bộ {len(rows)} sẽ được import)</b>')
+        v.addWidget(tbl)
+
+        btns = QtWidgets.QDialogButtonBox()
+        btn_import = btns.addButton(f'⬆ Import {len(rows)} HV', QtWidgets.QDialogButtonBox.AcceptRole)
+        btns.addButton('Huỷ', QtWidgets.QDialogButtonBox.RejectRole)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+
+        # Step 4: bulk import
+        if not (DB_AVAILABLE and StudentService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống.')
+            return
+        # Build payload (clean rows - strip whitespace + handle empty)
+        payload = []
+        for row in rows:
+            d = {
+                'username': (row.get('username') or '').strip(),
+                'password': (row.get('password') or '').strip() or 'pass1234',
+                'full_name': (row.get('full_name') or '').strip(),
+                'msv': (row.get('msv') or '').strip(),
+                'email': (row.get('email') or '').strip() or None,
+                'sdt': (row.get('sdt') or '').strip() or None,
+                'gioitinh': (row.get('gioitinh') or '').strip() or None,
+                'ngaysinh': (row.get('ngaysinh') or '').strip() or None,
+                'diachi': (row.get('diachi') or '').strip() or None,
+            }
+            payload.append(d)
+        try:
+            result = StudentService.bulk_create(payload) or {}
+        except Exception as e:
+            msg_warn(self, 'Lỗi import', api_error_msg(e))
+            return
+
+        success = result.get('success', 0)
+        failed = result.get('failed', [])
+        total = result.get('total', 0)
+
+        # Step 5: result dialog
+        if not failed:
+            msg_info(self, 'Thành công',
+                     f'✓ Đã import <b>{success}/{total}</b> học viên thành công!')
+        else:
+            err_lines = [f'• Dòng {f["row"]} (MSV {f["msv"]}): {f["error"]}' for f in failed[:15]]
+            extra = '' if len(failed) <= 15 else f'\n... và {len(failed)-15} lỗi nữa'
+            msg_warn(self, 'Hoàn tất với lỗi',
+                     f'Thành công: <b>{success}/{total}</b><br>'
+                     f'Lỗi: <b>{len(failed)}</b><br><br>'
+                     f'<pre style="font-size:10px;">' + '\n'.join(err_lines) + extra + '</pre>')
+        # Refresh
+        self.pages_filled[3] = False
+        self._fill_admin_students()
+        self.pages_filled[3] = True
 
     def _admin_add_student(self):
         dlg = QtWidgets.QDialog(self)
@@ -4272,8 +6440,478 @@ class AdminWindow(QtWidgets.QWidget):
                     show = False
             tbl.setRowHidden(r, not show)
 
-    def _fill_admin_audit(self):
+    # ===== ADMIN SCHEDULE PAGE =====
+
+    def _fill_admin_schedule(self):
+        """Trang 'Quan ly lich hoc' - Admin tao + xem + xoa schedule cho bat ky lop nao."""
         page = self.page_widgets[8]
+        if not getattr(page, '_built', False):
+            self._build_admin_schedule_ui(page)
+            page._built = True
+        self._reload_admin_schedule(page)
+
+    def _build_admin_schedule_ui(self, page):
+        """Build UI 1 lan: header + filter + table + nut tao."""
+        # Header bar
+        hb = QtWidgets.QFrame(page)
+        hb.setObjectName('headerBar')
+        hb.setGeometry(0, 0, 1020, 56)
+        hb.setStyleSheet('QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }')
+        title = QtWidgets.QLabel('Quản lý lịch học', hb)
+        title.setGeometry(25, 0, 400, 56)
+        title.setStyleSheet('color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;')
+
+        # Nut Tao theo lich tuan (batch)
+        btn_batch = QtWidgets.QPushButton('📅 Tạo theo tuần', hb)
+        btn_batch.setObjectName('btnAdmBatchSched')
+        btn_batch.setGeometry(700, 12, 150, 32)
+        btn_batch.setCursor(Qt.PointingHandCursor)
+        btn_batch.setStyleSheet(
+            f'QPushButton {{ background: white; color: {COLORS["navy"]}; border: 1px solid {COLORS["navy"]}; '
+            f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+            f'QPushButton:hover {{ background: {COLORS["navy"]}; color: white; }}'
+        )
+        btn_batch.clicked.connect(self._admin_dialog_batch_schedule)
+
+        btn_new = QtWidgets.QPushButton('+ Tạo buổi', hb)
+        btn_new.setObjectName('btnAdmNewSched')
+        btn_new.setGeometry(860, 12, 140, 32)
+        btn_new.setCursor(Qt.PointingHandCursor)
+        btn_new.setStyleSheet(
+            'QPushButton { background: #002060; color: white; border: none; '
+            'border-radius: 6px; font-size: 12px; font-weight: bold; } '
+            'QPushButton:hover { background: #001a50; }'
+        )
+        btn_new.clicked.connect(self._admin_dialog_new_schedule)
+
+        # Filter bar
+        fb = QtWidgets.QFrame(page)
+        fb.setObjectName('filterBar')
+        fb.setGeometry(15, 70, 990, 50)
+        fb.setStyleSheet('QFrame#filterBar { background: white; border: 1px solid #d2d6dc; border-radius: 8px; }')
+
+        lbl_lop = QtWidgets.QLabel('Lọc theo lớp:', fb)
+        lbl_lop.setGeometry(15, 14, 90, 22)
+        lbl_lop.setStyleSheet('color: #4a5568; font-size: 12px; background: transparent;')
+
+        cbo_lop = QtWidgets.QComboBox(fb)
+        cbo_lop.setObjectName('cboAdmSchedLop')
+        cbo_lop.setGeometry(110, 11, 200, 28)
+        cbo_lop.setStyleSheet('QComboBox { background: white; border: 1px solid #d2d6dc; border-radius: 4px; padding: 2px 6px; font-size: 12px; }')
+
+        lbl_count = QtWidgets.QLabel('', fb)
+        lbl_count.setObjectName('lblSchedCount')
+        lbl_count.setGeometry(330, 14, 400, 22)
+        lbl_count.setStyleSheet('color: #718096; font-size: 11px; background: transparent;')
+
+        # Table
+        tbl = QtWidgets.QTableWidget(page)
+        tbl.setObjectName('tblAdmSched')
+        tbl.setGeometry(15, 130, 990, 555)
+        tbl.setColumnCount(8)
+        tbl.setHorizontalHeaderLabels(['#', 'Lớp', 'Khóa học', 'Ngày', 'Thứ',
+                                       'Giờ học', 'Phòng', 'Thao tác'])
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        tbl.setStyleSheet(
+            'QTableWidget { background: white; border: 1px solid #d2d6dc; '
+            'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
+            'QHeaderView::section { background: #f7fafc; color: #4a5568; '
+            'padding: 8px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'font-weight: bold; font-size: 11px; }'
+        )
+        tbl.show()
+
+        # Wire combo filter
+        cbo_lop.currentIndexChanged.connect(lambda: self._reload_admin_schedule(page))
+
+    def _reload_admin_schedule(self, page):
+        """Load lai du lieu schedule (theo filter lop neu co)."""
+        cbo_lop = page.findChild(QtWidgets.QComboBox, 'cboAdmSchedLop')
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdmSched')
+        lbl_count = page.findChild(QtWidgets.QLabel, 'lblSchedCount')
+        # CHU Y: bool(empty QComboBox) = False trong PyQt5 -> phai dung `is None`
+        if cbo_lop is None or tbl is None:
+            return
+
+        # Refresh combo lop neu rong
+        if cbo_lop.count() == 0:
+            cbo_lop.blockSignals(True)
+            cbo_lop.addItem('-- Tất cả lớp --', None)
+            for cls in MOCK_CLASSES:
+                cbo_lop.addItem(f"{cls[0]} - {cls[2]}", cls[0])
+            cbo_lop.blockSignals(False)
+
+        sel_lop = cbo_lop.currentData()
+        rows = []
+        if DB_AVAILABLE and ScheduleService:
+            try:
+                if sel_lop:
+                    rows = ScheduleService.get_for_class(sel_lop) or []
+                else:
+                    # Lay 1 tuan rong: 12 tuan tu hom nay -> tat ca lich gan day
+                    from datetime import date as _date, timedelta as _td
+                    today = _date.today()
+                    monday_4w_back = today - _td(days=today.weekday() + 28)
+                    rows = ScheduleService.get_by_week(monday_4w_back.isoformat()) or []
+                    # Get more weeks
+                    for w in range(1, 12):
+                        more = ScheduleService.get_by_week(
+                            (monday_4w_back + _td(weeks=w)).isoformat()
+                        ) or []
+                        rows.extend(more)
+            except Exception as e:
+                print(f'[ADM_SCHED] loi: {e}')
+
+        if lbl_count:
+            lbl_count.setText(f'Tổng: {len(rows)} buổi học')
+
+        days_vn = {2: 'Thứ 2', 3: 'Thứ 3', 4: 'Thứ 4', 5: 'Thứ 5',
+                   6: 'Thứ 6', 7: 'Thứ 7', 8: 'CN', 1: 'CN'}
+
+        if not rows:
+            set_table_empty_state(tbl, 'Chưa có buổi học nào - bấm "Tạo buổi học" để bắt đầu', row_height=80)
+        else:
+            tbl.setRowCount(len(rows))
+            for r, row in enumerate(rows):
+                tbl.setRowHeight(r, 38)
+                ngay = fmt_date(row.get('ngay'))
+                gio_bd = str(row.get('gio_bat_dau', ''))[:5]
+                gio_kt = str(row.get('gio_ket_thuc', ''))[:5]
+                gio = f'{gio_bd}-{gio_kt}' if gio_bd and gio_kt else '—'
+                thu_n = row.get('thu')
+                thu_str = days_vn.get(thu_n, '—') if thu_n else '—'
+                items = [str(r + 1), row.get('lop_id', ''),
+                         row.get('ten_mon', '') or '—',
+                         ngay, thu_str, gio, row.get('phong', '') or '—']
+                for c, val in enumerate(items):
+                    item = QtWidgets.QTableWidgetItem(str(val))
+                    item.setTextAlignment(Qt.AlignCenter if c != 2 else Qt.AlignLeft | Qt.AlignVCenter)
+                    tbl.setItem(r, c, item)
+                # Action: Sua + Xoa
+                cell, (btn_edit, btn_del) = make_action_cell(
+                    [('Sửa', 'navy'), ('Xoá', 'red')], spacing=8
+                )
+                tbl.setCellWidget(r, 7, cell)
+                btn_edit.clicked.connect(lambda ch, sid=row.get('id'):
+                                         self._admin_dialog_schedule(sched_id=sid))
+                btn_del.clicked.connect(lambda ch, sid=row.get('id'),
+                                        lop=row.get('lop_id', ''), d=ngay:
+                                        self._admin_delete_schedule(sid, lop, d))
+        # Column widths total 990
+        for c, w in enumerate([35, 85, 200, 90, 70, 125, 115, 270]):
+            tbl.setColumnWidth(c, w)
+        tbl.horizontalHeader().setStretchLastSection(False)
+
+    def _admin_dialog_new_schedule(self):
+        """Wrapper: tao buoi hoc moi (sched_id=None)."""
+        self._admin_dialog_schedule(sched_id=None)
+
+    def _admin_dialog_batch_schedule(self):
+        """Dialog tao bulk buoi hoc theo pattern: cac thu trong tuan + N tuan."""
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle('Tạo lịch học theo tuần (Bulk)')
+        dlg.setFixedSize(540, 580)
+        v = QtWidgets.QVBoxLayout(dlg)
+
+        # Header info
+        info = QtWidgets.QLabel(
+            '<b>Tạo nhiều buổi học cùng lúc</b> - chọn lớp + các thứ trong tuần + số tuần.<br>'
+            '<i style="color:#718096; font-size:11px;">Ví dụ: T2 và T5, từ tuần 5/5/2026, 12 tuần → 24 buổi học.</i>'
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet('background: #edf2f7; padding: 10px; border-radius: 6px; font-size: 12px;')
+        v.addWidget(info)
+
+        form = QtWidgets.QFormLayout()
+        form.setSpacing(10)
+
+        # Lop combo
+        cbo_lop = QtWidgets.QComboBox()
+        cbo_lop.addItem('-- Chọn lớp --', None)
+        for cls in MOCK_CLASSES:
+            cbo_lop.addItem(f"{cls[0]} - {cls[2]}", cls[0])
+
+        # Days of week (checkboxes)
+        days_widget = QtWidgets.QWidget()
+        days_h = QtWidgets.QHBoxLayout(days_widget)
+        days_h.setContentsMargins(0, 0, 0, 0)
+        days_h.setSpacing(8)
+        cbx_days = []
+        for day_label, day_num in [('T2', 2), ('T3', 3), ('T4', 4), ('T5', 5),
+                                    ('T6', 6), ('T7', 7), ('CN', 8)]:
+            cbx = QtWidgets.QCheckBox(day_label)
+            cbx.setProperty('day_num', day_num)
+            cbx.setStyleSheet('QCheckBox { font-size: 12px; padding: 2px 4px; }')
+            cbx_days.append(cbx)
+            days_h.addWidget(cbx)
+        days_h.addStretch()
+
+        from PyQt5.QtCore import QDate, QTime
+        # Start date
+        dt_start = QtWidgets.QDateEdit()
+        dt_start.setCalendarPopup(True)
+        # Default Monday tuần này
+        today = QDate.currentDate()
+        monday = today.addDays(-(today.dayOfWeek() - 1))
+        dt_start.setDate(monday)
+        dt_start.setDisplayFormat('dd/MM/yyyy')
+
+        # Num weeks
+        spin_weeks = QtWidgets.QSpinBox()
+        spin_weeks.setRange(1, 52)
+        spin_weeks.setValue(12)
+        spin_weeks.setSuffix(' tuần')
+
+        # Times
+        time_bd = QtWidgets.QTimeEdit(QTime(7, 0))
+        time_bd.setDisplayFormat('HH:mm')
+        time_kt = QtWidgets.QTimeEdit(QTime(9, 30))
+        time_kt.setDisplayFormat('HH:mm')
+
+        # Phong
+        txt_phong = QtWidgets.QLineEdit()
+        txt_phong.setPlaceholderText('Để trống = phòng mặc định của lớp')
+
+        # Start buoi so
+        spin_buoi = QtWidgets.QSpinBox()
+        spin_buoi.setRange(1, 200)
+        spin_buoi.setValue(1)
+        spin_buoi.setPrefix('Bắt đầu từ buổi #')
+
+        # Preview label
+        lbl_preview = QtWidgets.QLabel('Chọn lớp + thứ + tuần để xem preview')
+        lbl_preview.setStyleSheet('color: #c05621; font-weight: bold; font-size: 12px; padding: 6px; background: #fff7ed; border-radius: 4px;')
+
+        def update_preview():
+            n_days = sum(1 for c in cbx_days if c.isChecked())
+            n_total = n_days * spin_weeks.value()
+            if n_days == 0 or cbo_lop.currentIndex() == 0:
+                lbl_preview.setText('Chưa đủ dữ liệu để preview')
+            else:
+                lop = cbo_lop.currentData()
+                day_names = [c.text() for c in cbx_days if c.isChecked()]
+                lbl_preview.setText(
+                    f'→ Sẽ tạo <b>{n_total}</b> buổi học cho lớp <b>{lop}</b> '
+                    f'({", ".join(day_names)} × {spin_weeks.value()} tuần)'
+                )
+        for c in cbx_days:
+            c.stateChanged.connect(update_preview)
+        spin_weeks.valueChanged.connect(update_preview)
+        cbo_lop.currentIndexChanged.connect(update_preview)
+
+        form.addRow('Lớp (*):', cbo_lop)
+        form.addRow('Thứ trong tuần (*):', days_widget)
+        form.addRow('Tuần bắt đầu:', dt_start)
+        form.addRow('Số tuần:', spin_weeks)
+        form.addRow('Giờ bắt đầu:', time_bd)
+        form.addRow('Giờ kết thúc:', time_kt)
+        form.addRow('Phòng:', txt_phong)
+        form.addRow('Buổi số:', spin_buoi)
+        v.addLayout(form)
+        v.addWidget(lbl_preview)
+
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+        cbo_lop.setFocus()
+        update_preview()
+
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if cbo_lop.currentIndex() == 0:
+            msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
+            return
+        days = [c.property('day_num') for c in cbx_days if c.isChecked()]
+        if not days:
+            msg_warn(self, 'Thiếu', 'Hãy chọn ít nhất 1 thứ trong tuần')
+            return
+        if time_kt.time() <= time_bd.time():
+            msg_warn(self, 'Sai giờ', 'Giờ kết thúc phải sau giờ bắt đầu')
+            return
+        if not (DB_AVAILABLE and ScheduleService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống')
+            return
+        try:
+            result = ScheduleService.create_batch(
+                lop_id=cbo_lop.currentData(),
+                days_of_week=days,
+                start_date=dt_start.date().toString('yyyy-MM-dd'),
+                num_weeks=spin_weeks.value(),
+                gio_bat_dau=time_bd.time().toString('HH:mm:ss'),
+                gio_ket_thuc=time_kt.time().toString('HH:mm:ss'),
+                phong=txt_phong.text().strip() or None,
+                start_buoi_so=spin_buoi.value(),
+            )
+            count = result.get('count', 0) if isinstance(result, dict) else 0
+        except Exception as e:
+            print(f'[ADM_BATCH] loi: {e}')
+            msg_warn(self, 'Lỗi', api_error_msg(e))
+            return
+        msg_info(self, 'Thành công',
+                 f'Đã tạo <b>{count}</b> buổi học cho lớp {cbo_lop.currentData()}!')
+        self._reload_admin_schedule(self.page_widgets[8])
+
+    def _admin_dialog_schedule(self, sched_id=None):
+        """Dialog Admin tao moi (sched_id=None) hoac sua (sched_id=N) buoi hoc."""
+        is_edit = sched_id is not None
+        existing = None
+        if is_edit:
+            try:
+                existing = ScheduleService.get(sched_id) or {}
+            except Exception as e:
+                msg_warn(self, 'Lỗi', f'Không load được buổi học: {api_error_msg(e)}')
+                return
+
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle(f'Sửa buổi học #{sched_id}' if is_edit else 'Tạo buổi học mới (Admin)')
+        dlg.setFixedSize(500, 480)
+        form = QtWidgets.QFormLayout(dlg)
+
+        cbo_lop = QtWidgets.QComboBox()
+        cbo_lop.addItem('-- Chọn lớp --', None)
+        for cls in MOCK_CLASSES:
+            cbo_lop.addItem(f"{cls[0]} - {cls[2]} ({cls[3] or 'chưa GV'})", cls[0])
+        if is_edit and existing.get('lop_id'):
+            for i in range(cbo_lop.count()):
+                if cbo_lop.itemData(i) == existing['lop_id']:
+                    cbo_lop.setCurrentIndex(i)
+                    break
+            cbo_lop.setEnabled(False)  # khong cho doi lop khi edit
+
+        from PyQt5.QtCore import QDate, QTime
+        dt_ngay = QtWidgets.QDateEdit()
+        dt_ngay.setCalendarPopup(True)
+        dt_ngay.setDisplayFormat('dd/MM/yyyy')
+        if is_edit and existing.get('ngay'):
+            ngay_v = existing['ngay']
+            if hasattr(ngay_v, 'year'):
+                dt_ngay.setDate(QDate(ngay_v.year, ngay_v.month, ngay_v.day))
+            elif isinstance(ngay_v, str):
+                dt_ngay.setDate(QDate.fromString(ngay_v[:10], 'yyyy-MM-dd'))
+        else:
+            dt_ngay.setDate(QDate.currentDate().addDays(1))
+
+        time_bd = QtWidgets.QTimeEdit(QTime(7, 0))
+        time_bd.setDisplayFormat('HH:mm')
+        time_kt = QtWidgets.QTimeEdit(QTime(9, 30))
+        time_kt.setDisplayFormat('HH:mm')
+        if is_edit:
+            for tw, key in [(time_bd, 'gio_bat_dau'), (time_kt, 'gio_ket_thuc')]:
+                v = existing.get(key)
+                if v:
+                    s = str(v)[:5]
+                    try:
+                        h, m = map(int, s.split(':'))
+                        tw.setTime(QTime(h, m))
+                    except Exception:
+                        pass
+
+        txt_phong = QtWidgets.QLineEdit()
+        txt_phong.setPlaceholderText('Để trống = dùng phòng mặc định của lớp')
+        if is_edit and existing.get('phong'):
+            txt_phong.setText(existing['phong'])
+
+        spin_buoi = QtWidgets.QSpinBox()
+        spin_buoi.setRange(1, 200)
+        spin_buoi.setValue(int(existing.get('buoi_so') or 1) if is_edit else 1)
+        spin_buoi.setPrefix('Buổi #')
+
+        txt_nd = QtWidgets.QTextEdit()
+        txt_nd.setPlaceholderText('Nội dung buổi học (chương/bài/chủ đề)')
+        txt_nd.setFixedHeight(80)
+        if is_edit and existing.get('noi_dung'):
+            txt_nd.setPlainText(existing['noi_dung'])
+
+        form.addRow('Lớp (*):', cbo_lop)
+        form.addRow('Ngày (*):', dt_ngay)
+        form.addRow('Giờ bắt đầu:', time_bd)
+        form.addRow('Giờ kết thúc:', time_kt)
+        form.addRow('Phòng:', txt_phong)
+        form.addRow('Buổi số:', spin_buoi)
+        form.addRow('Nội dung:', txt_nd)
+
+        btn_label = QtWidgets.QDialogButtonBox.Save if is_edit else QtWidgets.QDialogButtonBox.Ok
+        btns = QtWidgets.QDialogButtonBox(btn_label | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        if not is_edit:
+            cbo_lop.setFocus()
+        else:
+            txt_nd.setFocus()
+
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if cbo_lop.currentIndex() == 0:
+            msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
+            return
+        if time_kt.time() <= time_bd.time():
+            msg_warn(self, 'Sai giờ', 'Giờ kết thúc phải sau giờ bắt đầu')
+            return
+        if not (DB_AVAILABLE and ScheduleService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống')
+            return
+        # CHECK CONFLICT truoc khi save
+        ngay_str = dt_ngay.date().toString('yyyy-MM-dd')
+        gio_bd_str = time_bd.time().toString('HH:mm:ss')
+        gio_kt_str = time_kt.time().toString('HH:mm:ss')
+        phong_val = txt_phong.text().strip() or None
+        # Lay phong default cua lop neu user khong nhap
+        if not phong_val:
+            for cls in MOCK_CLASSES:
+                if cls[0] == cbo_lop.currentData():
+                    phong_val = cls[5] or None
+                    break
+        if not check_schedule_conflict_warn(
+            self, ngay_str, gio_bd_str, gio_kt_str,
+            phong=phong_val, lop_id=cbo_lop.currentData(),
+            exclude_id=sched_id if is_edit else None
+        ):
+            return  # User cancel
+        try:
+            kwargs = dict(
+                lop_id=cbo_lop.currentData(),
+                ngay=ngay_str,
+                gio_bat_dau=gio_bd_str,
+                gio_ket_thuc=gio_kt_str,
+                phong=txt_phong.text().strip() or None,
+                buoi_so=spin_buoi.value(),
+                noi_dung=txt_nd.toPlainText().strip() or None,
+            )
+            if is_edit:
+                kwargs.pop('lop_id', None)  # khong gui lop_id
+                ScheduleService.update(sched_id, **kwargs)
+            else:
+                ScheduleService.create(**kwargs)
+        except Exception as e:
+            print(f'[ADM_SCHED] save loi: {e}')
+            msg_warn(self, 'Lỗi lưu', api_error_msg(e))
+            return
+        action = 'cập nhật' if is_edit else 'tạo'
+        msg_info(self, 'Thành công',
+                 f'Đã {action} buổi học '
+                 f'ngày {dt_ngay.date().toString("dd/MM/yyyy")}')
+        self._reload_admin_schedule(self.page_widgets[8])
+
+    def _admin_delete_schedule(self, sched_id, lop, ngay):
+        if not msg_confirm_delete(self, 'buổi học', str(sched_id),
+                                  item_name=f'{lop} ngày {ngay}'):
+            return
+        if not (DB_AVAILABLE and ScheduleService):
+            return
+        try:
+            ScheduleService.delete(sched_id)
+        except Exception as e:
+            msg_warn(self, 'Lỗi xoá', api_error_msg(e))
+            return
+        msg_info(self, 'Đã xoá', f'Đã xoá buổi học #{sched_id}')
+        self._reload_admin_schedule(self.page_widgets[8])
+
+    def _fill_admin_audit(self):
+        page = self.page_widgets[9]  # shifted +1 sau khi insert btnAdminSchedule idx 8
         si = page.findChild(QtWidgets.QLabel, 'iconSearchAudit')
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -4395,7 +7033,7 @@ class AdminWindow(QtWidgets.QWidget):
             safe_connect(btn_exp.clicked, lambda: export_table_csv(self, tbl, 'nhat_ky_he_thong.csv', 'Xuất nhật ký hệ thống'))
 
     def _admin_filter_audit(self):
-        page = self.page_widgets[8]
+        page = self.page_widgets[9]  # audit shifted +1
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAudit')
         if not tbl:
             return
@@ -4449,7 +7087,7 @@ class AdminWindow(QtWidgets.QWidget):
 
     def _fill_admin_stats(self):
         # Populate cbo voi danh sach hoc ky tu API
-        page = self.page_widgets[9]
+        page = self.page_widgets[10]  # stats shifted +1 sau khi insert btnAdminSchedule idx 8
         cbo = page.findChild(QtWidgets.QComboBox, 'cboStatSemester')
         self._stats_sem_ids = []
         default_idx = 0
@@ -4483,7 +7121,7 @@ class AdminWindow(QtWidgets.QWidget):
         self._render_admin_stats(default_idx)
 
     def _render_admin_stats(self, idx):
-        page = self.page_widgets[9]
+        page = self.page_widgets[10]  # stats shifted +1
         # Lay sem_id tu cbo cache - default HK hien tai
         sem_id = None
         if hasattr(self, '_stats_sem_ids') and 0 <= idx < len(self._stats_sem_ids):
@@ -4597,7 +7235,7 @@ class AdminWindow(QtWidgets.QWidget):
             classes_src = []
         tbl.setRowCount(len(classes_src))
         for r, cls in enumerate(classes_src):
-            ma, mmon, tmon, gv, lich, phong, smax, siso, gia = cls
+            ma, mmon, tmon, gv, lich, phong, smax, siso, gia, *_ = cls
             for c, val in enumerate([ma, tmon, gv, lich, phong]):
                 item = QtWidgets.QTableWidgetItem(val)
                 item.setTextAlignment(Qt.AlignCenter if c == 0 else Qt.AlignLeft | Qt.AlignVCenter)
@@ -4714,7 +7352,7 @@ class AdminWindow(QtWidgets.QWidget):
             msg_warn(self, 'Không tìm thấy', f'Không tìm thấy lớp {ma_lop}')
             return
         cur = MOCK_CLASSES[idx]
-        _, mmon, tmon, gv, lich, phong, smax, siso, gia = cur
+        _, mmon, tmon, gv, lich, phong, smax, siso, gia, *_ = cur
 
         dlg = QtWidgets.QDialog(self)
 
@@ -5882,6 +8520,63 @@ class TeacherWindow(QtWidgets.QWidget):
         hb = page.findChild(QtWidgets.QFrame, 'headerBar')
         if hb:
             hb.setGeometry(0, 0, 870, 56)
+            # Combo loc lop - dat truoc cum nut
+            if not hb.findChild(QtWidgets.QComboBox, 'cboTeaSchedFilter'):
+                lbl_f = QtWidgets.QLabel('Lọc:', hb)
+                lbl_f.setObjectName('lblTeaSchedFilter')
+                lbl_f.setGeometry(170, 18, 38, 24)
+                lbl_f.setStyleSheet('color: #4a5568; font-size: 12px; font-weight: bold; background: transparent;')
+                lbl_f.show()
+                cbo = QtWidgets.QComboBox(hb)
+                cbo.setObjectName('cboTeaSchedFilter')
+                cbo.setGeometry(210, 12, 220, 32)
+                cbo.setCursor(Qt.PointingHandCursor)
+                cbo.setStyleSheet('QComboBox { background: white; border: 1px solid #d2d6dc; '
+                                   'border-radius: 6px; padding: 4px 10px; font-size: 12px; } '
+                                   'QComboBox:hover { border-color: #002060; } '
+                                   'QComboBox::drop-down { border: none; padding-right: 6px; }')
+                cbo.show()
+            # Them nut "In tuan PDF" - dat truoc cum nut export
+            if not hb.findChild(QtWidgets.QPushButton, 'btnTeaPrintSched'):
+                btn_pdf = QtWidgets.QPushButton('🖨 In tuần', hb)
+                btn_pdf.setObjectName('btnTeaPrintSched')
+                btn_pdf.setGeometry(440, 12, 110, 32)
+                btn_pdf.setCursor(Qt.PointingHandCursor)
+                btn_pdf.setToolTip('In lịch dạy tuần đang xem ra PDF')
+                btn_pdf.setStyleSheet(
+                    'QPushButton { background: #c05621; color: white; border: none; '
+                    'border-radius: 6px; font-size: 12px; font-weight: bold; } '
+                    'QPushButton:hover { background: #9c4419; }'
+                )
+                btn_pdf.clicked.connect(self._tea_export_schedule_week_pdf)
+                btn_pdf.show()
+            # Them nut "Xuat lich .ics" 1 lan
+            if not hb.findChild(QtWidgets.QPushButton, 'btnTeaExportICS'):
+                btn_ics = QtWidgets.QPushButton('📅 Xuất .ics', hb)
+                btn_ics.setObjectName('btnTeaExportICS')
+                btn_ics.setGeometry(560, 12, 130, 32)
+                btn_ics.setCursor(Qt.PointingHandCursor)
+                btn_ics.setToolTip('Xuất lịch dạy sang .ics để import vào Google/Apple Calendar')
+                btn_ics.setStyleSheet(
+                    f'QPushButton {{ background: {COLORS["green"]}; color: white; border: none; '
+                    f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                    f'QPushButton:hover {{ background: {COLORS["green_hover"]}; }}'
+                )
+                btn_ics.clicked.connect(self._tea_export_ics)
+                btn_ics.show()
+            # Them nut "+ Tao buoi hoc" o header (1 lan, tranh duplicate)
+            if not hb.findChild(QtWidgets.QPushButton, 'btnNewSched'):
+                btn_new = QtWidgets.QPushButton('+ Tạo buổi học', hb)
+                btn_new.setObjectName('btnNewSched')
+                btn_new.setGeometry(710, 12, 140, 32)
+                btn_new.setCursor(Qt.PointingHandCursor)
+                btn_new.setStyleSheet(
+                    'QPushButton { background: #002060; color: white; border: none; '
+                    'border-radius: 6px; font-size: 12px; font-weight: bold; } '
+                    'QPushButton:hover { background: #001a50; }'
+                )
+                btn_new.clicked.connect(self._tea_dialog_new_schedule)
+                btn_new.show()
         sf = page.findChild(QtWidgets.QFrame, 'scheduleFrame')
         if sf:
             sf.setGeometry(15, 68, 615, 618)
@@ -5932,10 +8627,19 @@ class TeacherWindow(QtWidgets.QWidget):
             btn_today.setCursor(Qt.PointingHandCursor)
             btn_today.show()
 
-            hint = QtWidgets.QLabel('Dùng nút trên để chuyển tuần', cf)
+            # Nut chon ngay tuy y -> jump tuan chua ngay do
+            btn_goto = QtWidgets.QPushButton('📅 Chọn ngày...', cf)
+            btn_goto.setObjectName('btnGotoWeek')
+            btn_goto.setGeometry(15, 170, 195, 30)
+            btn_goto.setStyleSheet('QPushButton { background: white; color: #c05621; border: 1px solid #c05621; border-radius: 6px; font-size: 11px; font-weight: bold; } QPushButton:hover { background: #fef5f0; }')
+            btn_goto.setCursor(Qt.PointingHandCursor)
+            btn_goto.setToolTip('Mở lịch để chọn 1 ngày bất kỳ - tự động nhảy đến tuần chứa ngày đó')
+            btn_goto.show()
+
+            hint = QtWidgets.QLabel('Click "Chọn ngày..." để xem tuần xa', cf)
             hint.setObjectName('lblNavHint')
-            hint.setGeometry(15, 175, 195, 40)
-            hint.setStyleSheet('color: #a0aec0; font-size: 10px; background: transparent;')
+            hint.setGeometry(15, 207, 195, 18)
+            hint.setStyleSheet('color: #a0aec0; font-size: 9px; background: transparent;')
             hint.setWordWrap(True)
             hint.setAlignment(Qt.AlignCenter)
             hint.show()
@@ -6012,6 +8716,42 @@ class TeacherWindow(QtWidgets.QWidget):
                 QDate.currentDate().addDays(-(QDate.currentDate().dayOfWeek() - 1))
             ))
 
+        # Wire nut "Chon ngay..." GV -> mo dialog -> jump
+        btn_goto = cf.findChild(QtWidgets.QPushButton, 'btnGotoWeek') if cf else None
+        if btn_goto:
+            def _on_tea_goto():
+                picked = pick_week_jumper_dialog(self, self._tea_current_monday)
+                if picked:
+                    new_mon = picked.addDays(-(picked.dayOfWeek() - 1))
+                    _reload_with_debounce(new_mon)
+            btn_goto.clicked.connect(_on_tea_goto)
+
+        # Populate combo loc lop GV
+        cbo_filter = hb.findChild(QtWidgets.QComboBox, 'cboTeaSchedFilter') if hb else None
+        if cbo_filter is not None and cbo_filter.count() == 0:
+            cbo_filter.blockSignals(True)
+            cbo_filter.addItem('Tất cả lớp', None)
+            if DB_AVAILABLE and gv_id and CourseService:
+                try:
+                    my_classes = CourseService.get_classes_by_teacher(gv_id) or []
+                    seen = set()
+                    for r in my_classes:
+                        ma = r.get('ma_lop')
+                        if ma and ma not in seen:
+                            seen.add(ma)
+                            ten = r.get('ten_mon', '') or ''
+                            label = f'{ma} · {ten}' if ten else ma
+                            cbo_filter.addItem(label, ma)
+                except Exception as e:
+                    print(f'[TEA_SCHED] populate filter loi: {e}')
+            cbo_filter.blockSignals(False)
+            cbo_filter.currentIndexChanged.connect(
+                lambda idx: (
+                    setattr(self, '_tea_sched_filter', cbo_filter.itemData(idx)),
+                    self._load_teacher_schedule_week(page, tbl, self._tea_current_monday, hours, days_vn),
+                )
+            )
+
     def _load_teacher_schedule_week(self, page, tbl, monday, hours, days_vn):
         """Reload lich day GV cho tuan bat dau bang `monday` (QDate)."""
         # Highlight cot HOM NAY (đồng nhất với HV schedule)
@@ -6046,9 +8786,27 @@ class TeacherWindow(QtWidgets.QWidget):
                     tbl.setSpan(r, c, 1, 1)
                 tbl.setItem(r, c, QtWidgets.QTableWidgetItem(''))
 
-        def mk(ma_lop, ten_mon, ts, phong, ss, color):
+        def mk(ma_lop, ten_mon, ts, phong, ss, color, ngay_str='', sched_row=None):
             f = QtWidgets.QFrame()
             f.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #d2d6dc; border-radius: 4px; border-top: 3px solid {color}; margin: 1px; }}')
+            f.setCursor(Qt.PointingHandCursor)
+            phong_disp = phong if phong.lower().startswith(('p.', 'p ', 'phòng', 'phong')) else f'P. {phong}'
+            tip = (
+                f'<b style="color:{color};">{ma_lop}</b><br>'
+                f'<b>{ten_mon}</b><br>'
+                f'<span style="color:#718096;">━━━━━━━━━━━━</span><br>'
+                f'🕒 <b>{ts}</b>{("<br>📅 " + ngay_str) if ngay_str else ""}<br>'
+                f'📍 {phong_disp}<br>'
+                f'👥 {ss}<br>'
+                f'<span style="color:#a0aec0; font-size:10px;">━━━ Click để xem chi tiết ━━━</span>'
+            )
+            f.setToolTip(tip)
+            # Click vao card -> popup chi tiet buoi day
+            if sched_row is not None:
+                def _click(ev, _r=sched_row):
+                    if ev.button() == Qt.LeftButton:
+                        self._tea_show_session_detail(_r)
+                f.mousePressEvent = _click
             vb = QtWidgets.QVBoxLayout(f)
             vb.setContentsMargins(4, 3, 4, 3)
             vb.setSpacing(1)
@@ -6063,7 +8821,6 @@ class TeacherWindow(QtWidgets.QWidget):
             l3 = QtWidgets.QLabel(ts)
             l3.setStyleSheet('color: #4a5568; font-size: 9px; font-weight: bold; border: none; background: transparent;')
             vb.addWidget(l3)
-            phong_disp = phong if phong.lower().startswith(('p.', 'p ', 'phòng', 'phong')) else f'P. {phong}'
             l4 = QtWidgets.QLabel(phong_disp)
             l4.setStyleSheet('color: #718096; font-size: 9px; border: none; background: transparent;')
             vb.addWidget(l4)
@@ -6078,6 +8835,10 @@ class TeacherWindow(QtWidgets.QWidget):
         if DB_AVAILABLE and gv_id and ScheduleService:
             try:
                 rows = ScheduleService.get_for_teacher_week(gv_id, monday.toPyDate()) or []
+                # Filter neu user da chon 1 lop trong combo cboTeaSchedFilter
+                sel_lop = getattr(self, '_tea_sched_filter', None)
+                if sel_lop:
+                    rows = [r for r in rows if r.get('lop_id') == sel_lop]
                 colors = ['#002060', '#c68a1e', '#276749', '#c53030', '#3182ce']
                 color_by_lop = {}
                 from datetime import date as _date
@@ -6111,6 +8872,8 @@ class TeacherWindow(QtWidgets.QWidget):
                             r.get('phong', '') or '—',
                             f'{siso} HV',
                             color_by_lop[ma_lop],
+                            d.strftime('%d/%m/%Y') if hasattr(d, 'strftime') else str(d),
+                            r,  # raw row de show detail dialog
                         ))
                     except Exception as e:
                         print(f'[TEA_SCHED] parse: {e}')
@@ -6134,8 +8897,8 @@ class TeacherWindow(QtWidgets.QWidget):
             tbl.setCellWidget(3, 1, ph)
             tbl.setSpan(3, 1, 4, 6)
         else:
-            for rs, span, col, ma_lop, ten_mon, ts, phong, ss, color in sched:
-                tbl.setCellWidget(rs, col, mk(ma_lop, ten_mon, ts, phong, ss, color))
+            for rs, span, col, ma_lop, ten_mon, ts, phong, ss, color, ngay_str, raw in sched:
+                tbl.setCellWidget(rs, col, mk(ma_lop, ten_mon, ts, phong, ss, color, ngay_str, raw))
                 tbl.setSpan(rs, col, span, 1)
 
     def _fill_tea_classes(self):
@@ -6167,7 +8930,7 @@ class TeacherWindow(QtWidgets.QWidget):
             my_classes = [c for c in MOCK_CLASSES if c[3] == gv_name]
         tbl.setRowCount(len(my_classes))
         for r, cls in enumerate(my_classes):
-            ma, mmon, tmon, gv, lich, phong, smax, siso, gia = cls
+            ma, mmon, tmon, gv, lich, phong, smax, siso, gia, *_ = cls
             for c, val in enumerate([ma, tmon]):
                 item = QtWidgets.QTableWidgetItem(val)
                 item.setTextAlignment(Qt.AlignCenter if c == 0 else Qt.AlignLeft | Qt.AlignVCenter)
@@ -6190,17 +8953,24 @@ class TeacherWindow(QtWidgets.QWidget):
             gia_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             gia_item.setForeground(QColor(COLORS['gold']))
             tbl.setItem(r, 5, gia_item)
-            # action: xem chi tiet - dung pattern chuan
-            cell, (btn,) = make_action_cell([('Chi tiết', 'navy')])
+            # action: 3 nut "Chi tiết" + "📅 Lịch" + "🖨 DS" (in danh sach HV PDF)
+            cell, (btn_detail, btn_sched, btn_print) = make_action_cell(
+                [('Chi tiết', 'navy'), ('📅 Lịch', 'green'), ('🖨 DS', 'gold')], spacing=4
+            )
             tbl.setCellWidget(r, 6, cell)
-            btn.clicked.connect(lambda ch, m=ma, n=tmon, s=siso, mx=smax, p=phong, l=lich, g=gia:
+            btn_detail.clicked.connect(lambda ch, m=ma, n=tmon, s=siso, mx=smax, p=phong, l=lich, g=gia:
                 show_detail_dialog(self, 'Chi tiết lớp', [
                     ('Mã lớp', m), ('Khóa học', n), ('Giảng viên', MOCK_TEACHER['name']),
                     ('Lịch học', l), ('Phòng', p),
                     ('Sĩ số', f'{s}/{mx}'),
                     ('Học phí', fmt_vnd(g)),
                 ], avatar_text=m, subtitle=n))
-        for c, cw in enumerate([80, 175, 75, 145, 65, 115, 130]):
+            btn_sched.setToolTip(f'Xem toàn bộ lịch của lớp {ma}')
+            btn_sched.clicked.connect(lambda ch, m=ma, n=tmon: self._tea_show_class_full_schedule(m, n))
+            btn_print.setToolTip(f'In danh sách học viên lớp {ma} ra PDF')
+            btn_print.clicked.connect(lambda ch, m=ma: self._tea_print_class_roster(m))
+        # Tang col 6 (Thao tac) cho fit 3 nut
+        for c, cw in enumerate([70, 145, 65, 115, 55, 95, 220]):
             tbl.setColumnWidth(c, cw)
         tbl.horizontalHeader().setStretchLastSection(False)
         tbl.verticalHeader().setVisible(False)
@@ -6298,25 +9068,45 @@ class TeacherWindow(QtWidgets.QWidget):
     def _fill_tea_notice(self):
         page = self.page_widgets[5]
         cbo = page.findChild(QtWidgets.QComboBox, 'cboTargetClass')
-        if cbo:
+        if cbo is not None:
             cbo.clear()
-            cbo.addItem('Tất cả lớp đang dạy')
+            cbo.addItem('📢 Tất cả lớp đang dạy', None)  # userData=None -> broadcast
             # Lay lop GV dang day - uu tien API, fallback theo ten
             gv_id = MOCK_TEACHER.get('user_id')
-            classes_loaded = False
+            classes_loaded = []
             if DB_AVAILABLE and gv_id:
                 try:
                     rows = CourseService.get_classes_by_teacher(gv_id)
                     for r in rows:
-                        cbo.addItem(r['ma_lop'])
-                    classes_loaded = True
+                        cbo.addItem(f"📚 Lớp {r['ma_lop']}", r['ma_lop'])  # userData=lop_id (str)
+                        classes_loaded.append(r['ma_lop'])
                 except Exception as e:
-                    print(f'[TEA_NOTICE] DB loi: {e}')
+                    print(f'[TEA_NOTICE] DB loi lop: {e}')
             if not classes_loaded:
                 gv_name = MOCK_TEACHER.get('name', '')
                 for cls in MOCK_CLASSES:
                     if cls[3] == gv_name:
-                        cbo.addItem(cls[0])
+                        cbo.addItem(f'📚 Lớp {cls[0]}', cls[0])
+                        classes_loaded.append(cls[0])
+
+            # Them tung HV cua tat ca lop GV day -> gui thong bao rieng
+            if DB_AVAILABLE and gv_id and classes_loaded:
+                try:
+                    students = CourseService.get_students_by_teacher(gv_id) or []
+                    if students:
+                        # Separator
+                        cbo.insertSeparator(cbo.count())
+                        # De-dup HV (1 HV co the o nhieu lop GV day)
+                        seen = set()
+                        for s in students:
+                            uid = s.get('user_id') or s.get('hv_id')
+                            if uid in seen:
+                                continue
+                            seen.add(uid)
+                            label = f"👤 {s.get('full_name', '?')} ({s.get('msv', '?')})"
+                            cbo.addItem(label, uid)  # userData=hv_user_id (int)
+                except Exception as e:
+                    print(f'[TEA_NOTICE] DB loi HV: {e}')
 
         # Populate sent list - lay tu API NotificationService.get_sent_by_teacher()
         sc = page.findChild(QtWidgets.QWidget, 'sentContent')
@@ -6402,16 +9192,24 @@ class TeacherWindow(QtWidgets.QWidget):
             msg_warn(self, 'Thiếu dữ liệu', 'Hãy nhập nội dung')
             return
         target = cbo.currentText()
+        target_data = cbo.currentData()  # None / str (lop_id) / int (hv_user_id)
         title = subj.text().strip()
         body = content.toPlainText().strip()
         gv_user_id = MOCK_TEACHER.get('user_id')
         if not (DB_AVAILABLE and gv_user_id):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
-        # Goi API truoc
-        den_lop = target if cbo.currentIndex() > 0 else None
+        # Route theo type cua target_data: int=HV cu the, str=lop, None=broadcast
+        den_lop = None
+        den_hv_id = None
+        if isinstance(target_data, int):
+            den_hv_id = target_data
+        elif isinstance(target_data, str):
+            den_lop = target_data
         try:
-            NotificationService.send(gv_user_id, title, body, den_lop=den_lop, loai='info')
+            NotificationService.send(gv_user_id, title, body,
+                                     den_lop=den_lop, den_hv_id=den_hv_id,
+                                     loai='info')
         except Exception as e:
             print(f'[NOTICE] loi: {e}')
             msg_warn(self, 'Không gửi được', api_error_msg(e))
@@ -6503,13 +9301,46 @@ class TeacherWindow(QtWidgets.QWidget):
         btn = page.findChild(QtWidgets.QPushButton, 'btnSaveGrades')
         if btn:
             btn.clicked.connect(self._save_tea_grades)
-        # them nut "Cap nhat tu diem danh" + "Xuat CSV" canh nut Luu (1 lan)
+        # them nut "Cap nhat tu diem danh" + "Xuat CSV" + "PDF lop" canh nut Luu (1 lan)
         header = page.findChild(QtWidgets.QFrame, 'headerBar')
         if header and not header.findChild(QtWidgets.QPushButton, 'btnSyncAttend'):
+            # nut Export PDF (in bang diem ca lop chinh quy)
+            btn_pdf = QtWidgets.QPushButton('🖨 PDF', header)
+            btn_pdf.setObjectName('btnExportGradesPDF')
+            btn_pdf.setGeometry(355, 12, 80, 32)
+            btn_pdf.setCursor(Qt.PointingHandCursor)
+            btn_pdf.setToolTip('Xuất bảng điểm lớp hiện tại ra PDF chính quy (cho phòng đào tạo)')
+            btn_pdf.setStyleSheet(
+                f'QPushButton {{ background: white; color: {COLORS["gold"]}; border: 1px solid {COLORS["gold"]}; '
+                f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                f'QPushButton:hover {{ background: {COLORS["gold"]}; color: white; }}'
+            )
+            def _do_export_grades_pdf():
+                ma_lop = cbo.currentText() if (cbo and cbo.currentIndex() > 0) else None
+                if not ma_lop:
+                    msg_warn(self, 'Chưa chọn', 'Hãy chọn 1 lớp cụ thể để in bảng điểm')
+                    return
+                if not (DB_AVAILABLE and CourseService and GradeService):
+                    msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+                    return
+                try:
+                    cls_info = CourseService.get_class(ma_lop) or {}
+                    grades = GradeService.get_grades_by_class(ma_lop) or []
+                except Exception as e:
+                    msg_warn(self, 'Lỗi tải', api_error_msg(e))
+                    return
+                if not cls_info.get('ten_gv'):
+                    cls_info['ten_gv'] = MOCK_TEACHER.get('name', '—')
+                export_class_grades_pdf(
+                    self, cls_info, grades,
+                    default_filename=f'BangDiemLop_{ma_lop}.pdf'
+                )
+            safe_connect(btn_pdf.clicked, _do_export_grades_pdf)
+            btn_pdf.show()
             # nut Export CSV
             btn_exp = QtWidgets.QPushButton('⬇ CSV', header)
             btn_exp.setObjectName('btnExportGrades')
-            btn_exp.setGeometry(440, 12, 90, 32)
+            btn_exp.setGeometry(440, 12, 80, 32)
             btn_exp.setCursor(Qt.PointingHandCursor)
             btn_exp.setToolTip('Xuất danh sách điểm lớp hiện tại ra file CSV')
             btn_exp.setStyleSheet(
@@ -7234,6 +10065,254 @@ class TeacherWindow(QtWidgets.QWidget):
         if after_save_callback:
             after_save_callback()
 
+    # ===== TEACHER SCHEDULE CREATE =====
+
+    def _tea_print_class_roster(self, ma_lop):
+        """In danh sach HV cua 1 lop ra PDF."""
+        if not (DB_AVAILABLE and CourseService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+            return
+        try:
+            # Get class info
+            cls_info = CourseService.get_class(ma_lop) or {}
+            students = CourseService.get_students_in_class(ma_lop) or []
+        except Exception as e:
+            msg_warn(self, 'Lỗi tải', api_error_msg(e))
+            return
+        # Ensure ten_gv is set
+        if not cls_info.get('ten_gv'):
+            cls_info['ten_gv'] = MOCK_TEACHER.get('name', '—')
+        export_class_roster_pdf(
+            self, cls_info, students,
+            default_filename=f'DanhSachLop_{ma_lop}.pdf'
+        )
+
+    def _tea_show_class_full_schedule(self, ma_lop, ten_mon=''):
+        """Mo dialog liet ke tat ca buoi cua 1 lop (24 buoi du kien)."""
+        if not (DB_AVAILABLE and ScheduleService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+            return
+        try:
+            schedules = ScheduleService.get_for_class(ma_lop) or []
+        except Exception as e:
+            msg_warn(self, 'Lỗi tải', api_error_msg(e))
+            return
+        gv_name = MOCK_TEACHER.get('name', '') or ''
+        show_class_full_schedule_dialog(self, ma_lop, ten_mon, schedules,
+                                          role='gv', ten_gv=gv_name)
+
+    def _tea_export_ics(self):
+        """Xuat tat ca lich day cua GV ra .ics."""
+        gv_id = MOCK_TEACHER.get('user_id')
+        if not gv_id:
+            msg_warn(self, 'Lỗi', 'Chưa có thông tin GV')
+            return
+        if not (DB_AVAILABLE and ScheduleService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+            return
+        try:
+            schedules = ScheduleService.get_all_for_teacher(gv_id) or []
+        except Exception as e:
+            msg_warn(self, 'Lỗi tải', api_error_msg(e))
+            return
+        gv_code = MOCK_TEACHER.get('id', 'GV')
+        export_schedule_ics(self, schedules,
+                            default_filename=f'LichDay_{gv_code}.ics',
+                            calendar_name=f'Lịch dạy EAUT - {MOCK_TEACHER.get("name", "")}')
+
+    def _tea_export_schedule_week_pdf(self):
+        """In lich day tuan dang xem ra PDF."""
+        gv_id = MOCK_TEACHER.get('user_id')
+        if not gv_id:
+            msg_warn(self, 'Lỗi', 'Chưa có thông tin GV')
+            return
+        monday = getattr(self, '_tea_current_monday', None)
+        if monday is None:
+            today = QDate.currentDate()
+            monday = today.addDays(-(today.dayOfWeek() - 1))
+        if not (DB_AVAILABLE and ScheduleService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+            return
+        try:
+            schedules = ScheduleService.get_for_teacher_week(gv_id, monday.toPyDate()) or []
+        except Exception as e:
+            msg_warn(self, 'Lỗi tải', api_error_msg(e))
+            return
+        gv_code = MOCK_TEACHER.get('id', 'GV')
+        name = MOCK_TEACHER.get('name', '') or ''
+        fname = f'LichDay_{gv_code}_{monday.toString("yyyyMMdd")}.pdf'
+        export_schedule_week_pdf(self, schedules, monday,
+                                  owner_role='gv', owner_name=name, owner_code=gv_code,
+                                  default_filename=fname)
+
+    def _tea_show_session_detail(self, sched_row):
+        """Popup chi tiet 1 buoi day khi GV click vao card lich tuan."""
+        from datetime import date as _date
+        ngay_v = sched_row.get('ngay', '')
+        if isinstance(ngay_v, _date):
+            ngay_str = ngay_v.strftime('%d/%m/%Y')
+            try:
+                wd = ngay_v.weekday()
+                thu_vn = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm',
+                          'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][wd]
+                ngay_str = f'{thu_vn}, {ngay_str}'
+            except Exception:
+                pass
+        else:
+            ngay_str = str(ngay_v)[:10] or '—'
+        gio_bd = str(sched_row.get('gio_bat_dau', ''))[:5]
+        gio_kt = str(sched_row.get('gio_ket_thuc', ''))[:5]
+        gio_str = f'{gio_bd} - {gio_kt}' if gio_bd and gio_kt else '—'
+        phong = sched_row.get('phong', '') or '—'
+        ma_lop = sched_row.get('lop_id', '?') or '?'
+        ten_mon = sched_row.get('ten_mon', '') or '—'
+        siso = sched_row.get('siso_hien_tai')
+        siso_max = sched_row.get('siso_max')
+        if siso is not None and siso_max is not None:
+            ss_str = f'{siso} / {siso_max} HV'
+        elif siso is not None:
+            ss_str = f'{siso} HV'
+        else:
+            ss_str = '—'
+        buoi_so = sched_row.get('buoi_so')
+        nd = sched_row.get('noi_dung', '') or ''
+        trang_thai = sched_row.get('trang_thai') or 'planned'
+        st_vn = {'planned': 'Đã lên lịch', 'done': 'Đã diễn ra',
+                 'cancelled': 'Đã huỷ', 'rescheduled': 'Đã dời lịch'}
+        st_label = st_vn.get(trang_thai, trang_thai)
+
+        fields = [
+            ('NGÀY DẠY', ngay_str),
+            ('THỜI GIAN', gio_str),
+            ('PHÒNG', phong),
+            ('LỚP', ma_lop),
+            ('KHÓA HỌC', ten_mon),
+            ('SĨ SỐ', ss_str),
+        ]
+        if buoi_so:
+            fields.append(('BUỔI SỐ', f'Buổi {buoi_so}'))
+        if nd:
+            fields.append(('NỘI DUNG BUỔI', nd))
+        fields.append(('TRẠNG THÁI', st_label))
+
+        show_detail_dialog(
+            self,
+            title=f'Chi tiết buổi dạy · {ma_lop}',
+            fields=fields,
+            avatar_text=ma_lop[:2],
+            subtitle=ten_mon,
+        )
+
+    def _tea_dialog_new_schedule(self):
+        """Dialog GV tao buoi hoc moi cho lop minh day."""
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle('Tạo buổi học mới')
+        dlg.setFixedSize(480, 460)
+        form = QtWidgets.QFormLayout(dlg)
+
+        # Lop combo
+        cbo_lop = QtWidgets.QComboBox()
+        cbo_lop.addItem('-- Chọn lớp --', None)
+        gv_id = MOCK_TEACHER.get('user_id')
+        if DB_AVAILABLE and gv_id:
+            try:
+                rows = CourseService.get_classes_by_teacher(gv_id) or []
+                for r in rows:
+                    cbo_lop.addItem(f"{r['ma_lop']} - {r.get('ten_mon', '')}", r['ma_lop'])
+            except Exception as e:
+                print(f'[TEA_SCHED] loi load lop: {e}')
+
+        # Ngay
+        from PyQt5.QtCore import QDate, QTime
+        dt_ngay = QtWidgets.QDateEdit()
+        dt_ngay.setCalendarPopup(True)
+        dt_ngay.setDate(QDate.currentDate().addDays(1))
+        dt_ngay.setDisplayFormat('dd/MM/yyyy')
+
+        # Gio bat dau / ket thuc
+        time_bd = QtWidgets.QTimeEdit(QTime(7, 0))
+        time_bd.setDisplayFormat('HH:mm')
+        time_kt = QtWidgets.QTimeEdit(QTime(9, 30))
+        time_kt.setDisplayFormat('HH:mm')
+
+        # Phong (default lay tu lop)
+        txt_phong = QtWidgets.QLineEdit()
+        txt_phong.setPlaceholderText('Để trống = dùng phòng mặc định của lớp')
+
+        # Buoi so
+        spin_buoi = QtWidgets.QSpinBox()
+        spin_buoi.setRange(1, 200)
+        spin_buoi.setValue(1)
+        spin_buoi.setPrefix('Buổi #')
+
+        # Noi dung
+        txt_nd = QtWidgets.QTextEdit()
+        txt_nd.setPlaceholderText('Nội dung buổi học (chương/bài/chủ đề)')
+        txt_nd.setFixedHeight(80)
+
+        form.addRow('Lớp (*):', cbo_lop)
+        form.addRow('Ngày (*):', dt_ngay)
+        form.addRow('Giờ bắt đầu:', time_bd)
+        form.addRow('Giờ kết thúc:', time_kt)
+        form.addRow('Phòng:', txt_phong)
+        form.addRow('Buổi số:', spin_buoi)
+        form.addRow('Nội dung:', txt_nd)
+
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        cbo_lop.setFocus()
+
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if cbo_lop.currentIndex() == 0:
+            msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
+            return
+        if time_kt.time() <= time_bd.time():
+            msg_warn(self, 'Sai giờ', 'Giờ kết thúc phải sau giờ bắt đầu')
+            return
+        if not (DB_AVAILABLE and ScheduleService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống')
+            return
+        # CHECK CONFLICT (cung phong/lop/GV + overlap gio)
+        ngay_str = dt_ngay.date().toString('yyyy-MM-dd')
+        gio_bd_str = time_bd.time().toString('HH:mm:ss')
+        gio_kt_str = time_kt.time().toString('HH:mm:ss')
+        phong_val = txt_phong.text().strip() or None
+        if not phong_val:
+            for cls in MOCK_CLASSES:
+                if cls[0] == cbo_lop.currentData():
+                    phong_val = cls[5] or None
+                    break
+        if not check_schedule_conflict_warn(
+            self, ngay_str, gio_bd_str, gio_kt_str,
+            phong=phong_val, lop_id=cbo_lop.currentData(),
+            gv_id=MOCK_TEACHER.get('user_id')
+        ):
+            return
+        try:
+            ScheduleService.create(
+                lop_id=cbo_lop.currentData(),
+                ngay=ngay_str,
+                gio_bat_dau=gio_bd_str,
+                gio_ket_thuc=gio_kt_str,
+                phong=txt_phong.text().strip() or None,
+                buoi_so=spin_buoi.value(),
+                noi_dung=txt_nd.toPlainText().strip() or None,
+            )
+        except Exception as e:
+            print(f'[TEA_SCHED] create loi: {e}')
+            msg_warn(self, 'Lỗi tạo', api_error_msg(e))
+            return
+        msg_info(self, 'Thành công',
+                 f'Đã tạo buổi học cho {cbo_lop.currentData()} '
+                 f'ngày {dt_ngay.date().toString("dd/MM/yyyy")}')
+        # Reload tuan hien tai de thay buoi moi
+        self.pages_filled[1] = False
+        self._fill_tea_schedule()
+        self.pages_filled[1] = True
+
     # ===== TEACHER EXAMS PAGE =====
 
     def _fill_tea_exams(self):
@@ -7252,6 +10331,19 @@ class TeacherWindow(QtWidgets.QWidget):
         title = QtWidgets.QLabel('Lịch thi', hb)
         title.setGeometry(25, 0, 400, 56)
         title.setStyleSheet('color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;')
+
+        # Nut "In PDF" - de truoc nut Tao lich thi
+        btn_pdf = QtWidgets.QPushButton('🖨 In PDF', hb)
+        btn_pdf.setObjectName('btnTeaPrintExam')
+        btn_pdf.setGeometry(560, 12, 140, 32)
+        btn_pdf.setCursor(Qt.PointingHandCursor)
+        btn_pdf.setToolTip('In danh sách lịch thi của GV ra PDF')
+        btn_pdf.setStyleSheet(
+            'QPushButton { background: #c05621; color: white; border: none; '
+            'border-radius: 6px; font-size: 12px; font-weight: bold; } '
+            'QPushButton:hover { background: #9c4419; }'
+        )
+        btn_pdf.clicked.connect(self._tea_export_exam_pdf)
 
         btn_new = QtWidgets.QPushButton('+ Tạo lịch thi', hb)
         btn_new.setObjectName('btnNewExam')
@@ -7456,6 +10548,30 @@ class TeacherWindow(QtWidgets.QWidget):
             return
         msg_info(self, 'Đã xoá', f'Đã xoá lịch thi #{exam_id}')
         self._reload_tea_exams(self.page_widgets[8])
+
+    def _tea_export_exam_pdf(self):
+        """In lich thi cua GV ra PDF."""
+        gv_id = MOCK_TEACHER.get('user_id')
+        if not gv_id:
+            msg_warn(self, 'Lỗi', 'Chưa có thông tin GV')
+            return
+        if not (DB_AVAILABLE and ExamService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+            return
+        try:
+            rows = ExamService.get_for_teacher(gv_id) or []
+        except Exception as e:
+            msg_warn(self, 'Lỗi tải', api_error_msg(e))
+            return
+        if not rows:
+            msg_warn(self, 'Trống', 'Chưa có lịch thi nào để in.')
+            return
+        gv_code = MOCK_TEACHER.get('id', 'GV')
+        name = MOCK_TEACHER.get('name', '') or ''
+        fname = f'LichThi_GV_{gv_code}.pdf'
+        export_exam_schedule_pdf(self, rows, owner_role='gv',
+                                  owner_name=name, owner_code=gv_code,
+                                  default_filename=fname)
 
     def _fill_tea_profile(self):
         page = self.page_widgets[9]  # btnTeaProfile shifted to idx 9 sau khi insert btnTeaExam
@@ -7706,6 +10822,21 @@ class EmployeeWindow(QtWidgets.QWidget):
             greet = time_greeting()
             lbl_today.setText(f'{greet} · Hôm nay: {_date.today().strftime("%d/%m/%Y")}')
 
+        # Them nut "Bao cao doanh thu PDF" o header (1 lan, idempotent)
+        header = page.findChild(QtWidgets.QFrame, 'headerBar')
+        if header is not None and not header.findChild(QtWidgets.QPushButton, 'btnEmpReport'):
+            btn_rpt = QtWidgets.QPushButton('🖨 Báo cáo doanh thu', header)
+            btn_rpt.setObjectName('btnEmpReport')
+            btn_rpt.setGeometry(720, 12, 170, 32)
+            btn_rpt.setCursor(Qt.PointingHandCursor)
+            btn_rpt.setStyleSheet(
+                f'QPushButton {{ background: {COLORS["gold"]}; color: white; border: none; '
+                f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                f'QPushButton:hover {{ background: {COLORS["gold_hover"]}; }}'
+            )
+            btn_rpt.clicked.connect(self._emp_dialog_revenue_report)
+            btn_rpt.show()
+
         # Stat cards: today reg / paid / revenue / pending - tu API
         if DB_AVAILABLE and emp_id:
             try:
@@ -7886,7 +11017,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         if not cls:
             lbl.setText(f'Không tìm thấy thông tin lớp {ma_lop}')
             return
-        _, _, ten_mon, gv, lich, phong, smax, scur, gia = cls
+        _, _, ten_mon, gv, lich, phong, smax, scur, gia, *_ = cls
         cho_trong = max(0, smax - scur)
         info = (
             f'<b>Khóa:</b> {ten_mon}<br>'
@@ -8354,12 +11485,18 @@ class EmployeeWindow(QtWidgets.QWidget):
         def _do_copy():
             content = self._emp_build_receipt_content(receipt_no, ma, ten, lop, gia, method, ghi_chu, now)
             QtWidgets.QApplication.clipboard().setText(content)
-            # Visual feedback: doi text 1s -> revert
             btn_copy.setText('✓ Đã sao chép')
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(1500, lambda: btn_copy.setText('📋 Sao chép'))
 
         btn_copy.clicked.connect(_do_copy)
+
+        # PDF export - dung QPrinter + QTextDocument (built-in PyQt5, khong dep moi)
+        btn_pdf = QtWidgets.QPushButton('🖨 Xuất PDF')
+        btn_pdf.setCursor(Qt.PointingHandCursor)
+        btn_pdf.setStyleSheet(f'QPushButton {{ background: {COLORS["gold"]}; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-weight: bold; }}')
+        btn_pdf.clicked.connect(lambda: self._emp_export_receipt_pdf(
+            receipt_no, ma, ten, lop, gia, method, ghi_chu, now))
 
         btn_close = QtWidgets.QPushButton('Đóng')
         btn_close.setCursor(Qt.PointingHandCursor)
@@ -8367,6 +11504,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         btn_close.clicked.connect(dlg.accept)
         btns.addWidget(btn_save)
         btns.addWidget(btn_copy)
+        btns.addWidget(btn_pdf)
         btns.addWidget(btn_close)
         lay.addLayout(btns)
 
@@ -8409,6 +11547,380 @@ class EmployeeWindow(QtWidgets.QWidget):
             msg_info(self, 'Đã lưu', f'Biên lai đã được lưu:\n{path}')
         except Exception as e:
             msg_warn(self, 'Lỗi', f'Không lưu được:\n{e}')
+
+    def _emp_build_receipt_html(self, receipt_no, ma, ten, lop, gia, method, ghi_chu, dt) -> str:
+        """Build noi dung HTML bien lai - dung cho PDF export (formatted dep)."""
+        nv_name = MOCK_EMPLOYEE.get('name', '—')
+        return f'''
+        <html><head><meta charset="utf-8"></head>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e;">
+        <div style="text-align: center; border-bottom: 3px solid #002060; padding-bottom: 12px; margin-bottom: 20px;">
+            <h1 style="color: #002060; margin: 0; font-size: 22px;">TRUNG TÂM NGOẠI KHÓA EAUT</h1>
+            <p style="margin: 4px 0; color: #4a5568; font-size: 11px;">
+                Km 23, QL5, Trưng Trắc, Văn Lâm, Hưng Yên<br>
+                Hotline: 024.3999.1111 · Email: info@eaut.edu.vn
+            </p>
+        </div>
+
+        <h2 style="text-align: center; color: #c05621; margin: 0 0 4px 0; letter-spacing: 2px;">BIÊN LAI THU TIỀN</h2>
+        <p style="text-align: center; color: #718096; font-size: 11px; margin: 0 0 20px 0;">
+            Số biên lai: <b>{receipt_no}</b> · Ngày: <b>{dt.strftime('%d/%m/%Y %H:%M')}</b>
+        </p>
+
+        <table cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <tr style="background: #f7fafc;">
+                <td style="width: 35%; color: #4a5568; border-bottom: 1px solid #e2e8f0;">Mã đăng ký</td>
+                <td style="border-bottom: 1px solid #e2e8f0;"><b>{ma}</b></td>
+            </tr>
+            <tr>
+                <td style="color: #4a5568; border-bottom: 1px solid #e2e8f0;">Học viên</td>
+                <td style="border-bottom: 1px solid #e2e8f0;"><b>{ten}</b></td>
+            </tr>
+            <tr style="background: #f7fafc;">
+                <td style="color: #4a5568; border-bottom: 1px solid #e2e8f0;">Lớp đăng ký</td>
+                <td style="border-bottom: 1px solid #e2e8f0;"><b>{lop}</b></td>
+            </tr>
+            <tr>
+                <td style="color: #4a5568; border-bottom: 1px solid #e2e8f0;">Số tiền</td>
+                <td style="border-bottom: 1px solid #e2e8f0; color: #c05621;"><b style="font-size: 16px;">{gia} đ</b></td>
+            </tr>
+            <tr style="background: #f7fafc;">
+                <td style="color: #4a5568; border-bottom: 1px solid #e2e8f0;">Hình thức</td>
+                <td style="border-bottom: 1px solid #e2e8f0;">{method}</td>
+            </tr>
+            <tr>
+                <td style="color: #4a5568; border-bottom: 1px solid #e2e8f0;">Ghi chú</td>
+                <td style="border-bottom: 1px solid #e2e8f0;">{ghi_chu or '<i style="color:#a0aec0;">(không có)</i>'}</td>
+            </tr>
+            <tr style="background: #f7fafc;">
+                <td style="color: #4a5568;">Nhân viên thu</td>
+                <td><b>{nv_name}</b></td>
+            </tr>
+        </table>
+
+        <div style="margin-top: 40px; display: flex; justify-content: space-between;">
+            <div style="text-align: center; width: 45%;">
+                <p style="border-top: 1px solid #4a5568; padding-top: 8px; color: #4a5568;">Người nộp tiền</p>
+            </div>
+            <div style="text-align: center; width: 45%;">
+                <p style="border-top: 1px solid #4a5568; padding-top: 8px; color: #4a5568;">
+                    Người thu tiền<br><i style="font-size: 10px;">(ký, họ tên)</i>
+                </p>
+            </div>
+        </div>
+
+        <p style="text-align: center; color: #718096; font-size: 10px; margin-top: 30px; font-style: italic;">
+            Cảm ơn quý học viên đã tin tưởng EAUT! · Biên lai có giá trị xác nhận thanh toán.
+        </p>
+        </body></html>
+        '''
+
+    def _emp_export_receipt_pdf(self, receipt_no, ma, ten, lop, gia, method, ghi_chu, dt):
+        """Xuat bien lai sang PDF dung QPrinter + QTextDocument (built-in PyQt5)."""
+        try:
+            from PyQt5.QtPrintSupport import QPrinter
+            from PyQt5.QtGui import QTextDocument
+        except ImportError:
+            msg_warn(self, 'Lỗi', 'PyQt5.QtPrintSupport không có sẵn. Cần cài thêm: pip install PyQt5-tools')
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, 'Xuất biên lai PDF',
+            os.path.join(os.path.expanduser('~'), 'Desktop', f'{receipt_no}.pdf'),
+            'PDF Files (*.pdf)'
+        )
+        if not path:
+            return
+        if not path.lower().endswith('.pdf'):
+            path += '.pdf'
+        try:
+            html = self._emp_build_receipt_html(receipt_no, ma, ten, lop, gia, method, ghi_chu, dt)
+            doc = QTextDocument()
+            doc.setHtml(html)
+            printer = QPrinter(QPrinter.HighResolution)
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(path)
+            printer.setPageSize(QPrinter.A5)  # bien lai nho gon
+            printer.setPageMargins(15, 15, 15, 15, QPrinter.Millimeter)
+            doc.print_(printer)
+            msg_info(self, 'Đã xuất PDF', f'Biên lai đã lưu:\n{path}')
+        except Exception as e:
+            print(f'[EMP_PDF] loi: {e}')
+            msg_warn(self, 'Lỗi xuất PDF', f'Không xuất được:\n{e}')
+
+    def _emp_dialog_revenue_report(self):
+        """Dialog NV chon date range -> xem preview + xuat PDF bao cao doanh thu."""
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle('Báo cáo doanh thu')
+        dlg.setFixedSize(580, 540)
+        v = QtWidgets.QVBoxLayout(dlg)
+
+        head = QtWidgets.QLabel(
+            '<b>Chọn khoảng thời gian</b> - hệ thống sẽ tổng hợp tất cả thanh toán '
+            'bạn đã thu trong khoảng đó.'
+        )
+        head.setStyleSheet('background: #edf2f7; padding: 10px; border-radius: 6px; font-size: 12px;')
+        head.setWordWrap(True)
+        v.addWidget(head)
+
+        # Quick range buttons
+        h_quick = QtWidgets.QHBoxLayout()
+        from PyQt5.QtCore import QDate
+        today = QDate.currentDate()
+        dt_from = QtWidgets.QDateEdit(today)
+        dt_to = QtWidgets.QDateEdit(today)
+        for d in (dt_from, dt_to):
+            d.setCalendarPopup(True)
+            d.setDisplayFormat('dd/MM/yyyy')
+
+        def set_range(start_date, end_date):
+            dt_from.setDate(start_date)
+            dt_to.setDate(end_date)
+            update_preview()
+
+        for label, days_back in [('Hôm nay', 0), ('7 ngày', 7),
+                                  ('30 ngày', 30), ('Tháng này', -1)]:
+            btn = QtWidgets.QPushButton(label)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet('QPushButton { background: white; color: #002060; border: 1px solid #002060; border-radius: 4px; padding: 4px 12px; font-size: 11px; } QPushButton:hover { background: #002060; color: white; }')
+            if days_back == -1:  # Thang nay
+                btn.clicked.connect(lambda _,
+                                    s=QDate(today.year(), today.month(), 1),
+                                    e=today: set_range(s, e))
+            else:
+                btn.clicked.connect(lambda _, db_=days_back:
+                                     set_range(today.addDays(-db_), today))
+            h_quick.addWidget(btn)
+        h_quick.addStretch()
+        v.addLayout(h_quick)
+
+        # Date range form
+        form = QtWidgets.QFormLayout()
+        form.addRow('Từ ngày:', dt_from)
+        form.addRow('Đến ngày:', dt_to)
+        v.addLayout(form)
+
+        # Preview area
+        preview = QtWidgets.QTextEdit()
+        preview.setReadOnly(True)
+        preview.setStyleSheet('background: white; border: 1px solid #d2d6dc; border-radius: 6px; font-family: "Segoe UI";')
+        preview.setMinimumHeight(280)
+        v.addWidget(preview)
+
+        report_data = [None]  # mutable container
+
+        def update_preview():
+            if dt_to.date() < dt_from.date():
+                preview.setHtml('<p style="color: #c53030;">⚠ Đến ngày phải sau từ ngày</p>')
+                report_data[0] = None
+                return
+            emp_id = MOCK_EMPLOYEE.get('user_id')
+            if not (DB_AVAILABLE and emp_id):
+                preview.setHtml('<p style="color:#c53030;">Chưa kết nối hệ thống</p>')
+                return
+            try:
+                data = StatsService.employee_revenue_report(
+                    emp_id,
+                    dt_from.date().toString('yyyy-MM-dd'),
+                    dt_to.date().toString('yyyy-MM-dd')
+                ) or {}
+            except Exception as e:
+                preview.setHtml(f'<p style="color:#c53030;">Lỗi tải: {e}</p>')
+                report_data[0] = None
+                return
+            report_data[0] = data
+            so_lan = data.get('so_lan', 0)
+            tong = data.get('tong_tien', 0)
+            payments = data.get('payments', [])
+            bd = data.get('breakdown_by_method', [])
+            html_parts = [
+                f'<h3 style="color:#002060; margin: 4px 0;">Tổng kết</h3>',
+                f'<p>Số lần thu: <b>{so_lan}</b> · Tổng tiền: <b style="color:#c05621;">{fmt_vnd(tong)}</b></p>',
+            ]
+            if bd:
+                html_parts.append('<p><b>Phân bổ theo hình thức:</b></p><ul>')
+                for b in bd:
+                    html_parts.append(f'<li>{b["hinh_thuc"]}: <b>{b["so_lan"]}</b> lần · {fmt_vnd(int(b["tong"] or 0))}</li>')
+                html_parts.append('</ul>')
+            if payments:
+                html_parts.append(f'<p><b>Chi tiết {len(payments)} thanh toán:</b></p>')
+                html_parts.append('<table cellpadding="4" cellspacing="0" border="1" bordercolor="#e2e8f0" style="border-collapse: collapse; font-size: 11px; width: 100%;">')
+                html_parts.append('<tr style="background: #f7fafc;"><th>Ngày</th><th>HV</th><th>Lớp</th><th>Tiền</th><th>HT</th></tr>')
+                for p in payments[:50]:  # cap 50 dong preview
+                    ngay = fmt_date(p.get('ngay_thu'), fmt='%d/%m %H:%M')
+                    html_parts.append(
+                        f'<tr><td>{ngay}</td><td>{p.get("ten_hv","")}</td>'
+                        f'<td>{p.get("lop_id","")}</td>'
+                        f'<td style="text-align:right;">{fmt_vnd(int(p.get("so_tien", 0) or 0))}</td>'
+                        f'<td>{p.get("hinh_thuc","")}</td></tr>'
+                    )
+                html_parts.append('</table>')
+                if len(payments) > 50:
+                    html_parts.append(f'<p style="color:#718096; font-style:italic;">(... còn {len(payments)-50} dòng nữa, sẽ có đủ trong PDF)</p>')
+            else:
+                html_parts.append('<p style="color:#718096; font-style:italic;">Không có thanh toán nào trong khoảng này.</p>')
+            preview.setHtml(''.join(html_parts))
+
+        dt_from.dateChanged.connect(update_preview)
+        dt_to.dateChanged.connect(update_preview)
+        update_preview()
+
+        # Buttons
+        btns = QtWidgets.QDialogButtonBox()
+        btn_pdf = btns.addButton('🖨 Xuất PDF', QtWidgets.QDialogButtonBox.AcceptRole)
+        btn_close = btns.addButton('Đóng', QtWidgets.QDialogButtonBox.RejectRole)
+        btn_close.clicked.connect(dlg.reject)
+        v.addWidget(btns)
+
+        def do_export():
+            if not report_data[0]:
+                msg_warn(dlg, 'Lỗi', 'Không có dữ liệu để xuất')
+                return
+            self._emp_export_revenue_pdf(
+                report_data[0],
+                dt_from.date().toString('dd/MM/yyyy'),
+                dt_to.date().toString('dd/MM/yyyy')
+            )
+            dlg.accept()
+        btn_pdf.clicked.connect(do_export)
+
+        dlg.exec_()
+
+    def _emp_export_revenue_pdf(self, data, from_str, to_str):
+        """Xuat bao cao doanh thu PDF day du chi tiet."""
+        try:
+            from PyQt5.QtPrintSupport import QPrinter
+            from PyQt5.QtGui import QTextDocument
+        except ImportError:
+            msg_warn(self, 'Lỗi', 'PyQt5.QtPrintSupport không có sẵn')
+            return
+        nv_name = MOCK_EMPLOYEE.get('name', '—')
+        nv_id_disp = MOCK_EMPLOYEE.get('id', '—')
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, 'Xuất báo cáo PDF',
+            os.path.join(os.path.expanduser('~'), 'Desktop',
+                         f'BaoCaoDoanhThu_{nv_id_disp}_{from_str.replace("/", "")}-{to_str.replace("/", "")}.pdf'),
+            'PDF Files (*.pdf)'
+        )
+        if not path:
+            return
+        if not path.lower().endswith('.pdf'):
+            path += '.pdf'
+
+        from datetime import datetime
+        so_lan = data.get('so_lan', 0)
+        tong = data.get('tong_tien', 0)
+        payments = data.get('payments', [])
+        bd = data.get('breakdown_by_method', [])
+
+        # Build payment rows
+        pay_rows = []
+        for i, p in enumerate(payments, 1):
+            ngay = fmt_date(p.get('ngay_thu'), fmt='%d/%m/%Y %H:%M')
+            zebra = '#f7fafc' if i % 2 == 0 else 'white'
+            pay_rows.append(f'''
+                <tr style="background: {zebra};">
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: center;">{i}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0;">{ngay}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0;">{p.get("ten_hv", "")}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0;">{p.get("msv", "")}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0;">{p.get("lop_id", "")}</td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0; text-align: right; color: #c05621;"><b>{fmt_vnd(int(p.get("so_tien", 0) or 0))}</b></td>
+                    <td style="padding: 5px; border: 1px solid #e2e8f0;">{p.get("hinh_thuc", "")}</td>
+                </tr>
+            ''')
+
+        bd_rows = []
+        for b in bd:
+            bd_rows.append(f'''
+                <tr>
+                    <td style="padding: 6px; border: 1px solid #e2e8f0;">{b["hinh_thuc"]}</td>
+                    <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: center;">{b["so_lan"]}</td>
+                    <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: right; color: #c05621;"><b>{fmt_vnd(int(b["tong"] or 0))}</b></td>
+                </tr>
+            ''')
+
+        html = f'''
+        <html><head><meta charset="utf-8"></head>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e;">
+        <div style="text-align: center; border-bottom: 3px solid #002060; padding-bottom: 12px; margin-bottom: 16px;">
+            <h1 style="color: #002060; margin: 0; font-size: 22px;">TRUNG TÂM NGOẠI KHÓA EAUT</h1>
+            <p style="margin: 4px 0; color: #4a5568; font-size: 11px;">
+                Km 23, QL5, Trưng Trắc, Văn Lâm, Hưng Yên · Hotline: 024.3999.1111
+            </p>
+        </div>
+
+        <h2 style="text-align: center; color: #c05621; margin: 0 0 4px 0;">BÁO CÁO DOANH THU</h2>
+        <p style="text-align: center; color: #4a5568; font-size: 12px; margin: 0 0 16px 0;">
+            Từ ngày <b>{from_str}</b> đến <b>{to_str}</b>
+        </p>
+
+        <table cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px;">
+            <tr style="background: #edf2f7;">
+                <td style="width: 30%; padding: 8px;">Nhân viên thu:</td>
+                <td style="padding: 8px;"><b>{nv_name}</b> ({nv_id_disp})</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px;">Số lần thu:</td>
+                <td style="padding: 8px;"><b>{so_lan}</b></td>
+            </tr>
+            <tr style="background: #edf2f7;">
+                <td style="padding: 8px;">Tổng doanh thu:</td>
+                <td style="padding: 8px; color: #c05621; font-size: 16px;"><b>{fmt_vnd(tong)}</b></td>
+            </tr>
+        </table>
+
+        <h3 style="color: #002060; margin: 12px 0 6px 0;">Phân bổ theo hình thức</h3>
+        <table cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 16px;">
+            <thead><tr style="background: #002060; color: white;">
+                <th style="padding: 6px; border: 1px solid #002060;">Hình thức</th>
+                <th style="padding: 6px; border: 1px solid #002060;">Số lần</th>
+                <th style="padding: 6px; border: 1px solid #002060;">Tổng tiền</th>
+            </tr></thead>
+            <tbody>
+                {''.join(bd_rows) if bd_rows else '<tr><td colspan="3" style="text-align: center; padding: 12px; color: #a0aec0;">(không có)</td></tr>'}
+            </tbody>
+        </table>
+
+        <h3 style="color: #002060; margin: 12px 0 6px 0;">Chi tiết thanh toán ({len(payments)} dòng)</h3>
+        <table cellpadding="4" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 10px;">
+            <thead><tr style="background: #002060; color: white;">
+                <th style="padding: 6px; border: 1px solid #002060; width: 4%;">#</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 14%;">Ngày giờ</th>
+                <th style="padding: 6px; border: 1px solid #002060;">Học viên</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 11%;">MSV</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 12%;">Lớp</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 13%;">Số tiền</th>
+                <th style="padding: 6px; border: 1px solid #002060; width: 12%;">HT</th>
+            </tr></thead>
+            <tbody>
+                {''.join(pay_rows) if pay_rows else '<tr><td colspan="7" style="text-align: center; padding: 12px; color: #a0aec0;">(không có thanh toán)</td></tr>'}
+            </tbody>
+        </table>
+
+        <div style="margin-top: 30px; display: flex; justify-content: flex-end;">
+            <div style="text-align: center; width: 40%;">
+                <p style="color: #4a5568; font-size: 11px;">Hà Nội, ngày {datetime.now().day}/{datetime.now().month}/{datetime.now().year}</p>
+                <p style="margin-top: 4px;"><b>Người lập báo cáo</b></p>
+                <p style="font-size: 10px; color: #718096; font-style: italic;">(ký, họ tên)</p>
+                <p style="margin-top: 50px;"><b>{nv_name}</b></p>
+            </div>
+        </div>
+        </body></html>
+        '''
+        try:
+            doc = QTextDocument()
+            doc.setHtml(html)
+            printer = QPrinter(QPrinter.HighResolution)
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(path)
+            printer.setPageSize(QPrinter.A4)
+            printer.setPageMargins(15, 15, 15, 15, QPrinter.Millimeter)
+            doc.print_(printer)
+            msg_info(self, 'Đã xuất PDF', f'Báo cáo đã lưu:\n{path}')
+        except Exception as e:
+            print(f'[EMP_REPORT] loi: {e}')
+            msg_warn(self, 'Lỗi xuất PDF', f'Không xuất được:\n{e}')
 
     def _emp_print_receipt(self, tbl):
         rows = tbl.selectionModel().selectedRows() if tbl else []
@@ -8457,7 +11969,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         else:
             tbl.setRowCount(len(cls_list))
             for r, cls in enumerate(cls_list):
-                ma, mmon, tmon, gv, lich, phong, smax, siso, gia = cls
+                ma, mmon, tmon, gv, lich, phong, smax, siso, gia, *_ = cls
                 for c, val in enumerate([ma, tmon, gv, lich]):
                     item = QtWidgets.QTableWidgetItem(val)
                     item.setTextAlignment(Qt.AlignCenter if c == 0 else Qt.AlignLeft | Qt.AlignVCenter)

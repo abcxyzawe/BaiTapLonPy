@@ -1,4 +1,6 @@
-"""Stats router - 9 endpoint dashboard."""
+"""Stats router - dashboard endpoints."""
+from datetime import date as Date
+
 from fastapi import APIRouter
 
 from backend.services.stats_service import StatsService
@@ -39,6 +41,12 @@ def class_enrollment():
 @router.get('/employee/{emp_id}/today')
 def employee_today(emp_id: int):
     return StatsService.employee_today(emp_id)
+
+
+@router.get('/employee/{emp_id}/revenue-report')
+def employee_revenue_report(emp_id: int, from_date: Date, to_date: Date):
+    """Bao cao doanh thu chi tiet trong khoang ngay cho NV."""
+    return StatsService.employee_revenue_report(emp_id, from_date, to_date)
 
 
 @router.get('/pending-registrations')

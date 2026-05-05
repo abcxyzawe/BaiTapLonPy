@@ -284,10 +284,15 @@ class NotificationService:
         return _get(f'/notifications/teacher/{gv_id}', limit=limit)
 
     @staticmethod
-    def send(tu_id, tieu_de, noi_dung, den_lop=None, loai='info'):
+    def send(tu_id, tieu_de, noi_dung, den_lop=None, den_hv_id=None, loai='info'):
+        """Gui notification:
+        - den_lop=X: tat ca HV cua lop X
+        - den_hv_id=N: 1 HV cu the (qua user_id)
+        - Khong truyen 2: broadcast tat ca
+        """
         return _post('/notifications', {
             'tu_id': tu_id, 'tieu_de': tieu_de, 'noi_dung': noi_dung,
-            'den_lop': den_lop, 'loai': loai
+            'den_lop': den_lop, 'den_hv_id': den_hv_id, 'loai': loai
         })
 
     @staticmethod
@@ -313,6 +318,12 @@ class StudentService:
             'gioitinh': gioitinh, 'diachi': diachi
         })
         return r.get('user_id')
+
+    @staticmethod
+    def bulk_create(students_list):
+        """Bulk import. students_list = list of dict {username,password,full_name,msv,...}.
+        Tra ve {success, failed, total}."""
+        return _post('/students/bulk', students_list)
 
     @staticmethod
     def update(user_id, **fields):
@@ -403,6 +414,12 @@ class StatsService:
 
     @staticmethod
     def employee_today(emp_id): return _get(f'/stats/employee/{emp_id}/today')
+
+    @staticmethod
+    def employee_revenue_report(emp_id, from_date, to_date):
+        """Bao cao doanh thu chi tiet cho NV trong khoang [from_date, to_date]."""
+        return _get(f'/stats/employee/{emp_id}/revenue-report',
+                    from_date=from_date, to_date=to_date)
 
     @staticmethod
     def recent_pending_registrations(limit=5):
@@ -511,6 +528,63 @@ class ScheduleService:
             'gio_ket_thuc': gio_ket_thuc, 'phong': phong, 'buoi_so': buoi_so,
             'noi_dung': noi_dung, 'thu': thu, 'trang_thai': trang_thai
         })
+
+    @staticmethod
+    def delete(sched_id): return _delete(f'/schedules/{sched_id}')
+
+    @staticmethod
+    def get(sched_id): return _get(f'/schedules/{sched_id}')
+
+    @staticmethod
+    def create_batch(lop_id, days_of_week, start_date, num_weeks,
+                     gio_bat_dau, gio_ket_thuc, phong=None,
+                     start_buoi_so=1, noi_dung=None):
+        """Bulk tao buoi hoc theo pattern T2/T5 cho N tuan."""
+        return _post('/schedules/batch', {
+            'lop_id': lop_id, 'days_of_week': days_of_week,
+            'start_date': start_date, 'num_weeks': num_weeks,
+            'gio_bat_dau': gio_bat_dau, 'gio_ket_thuc': gio_ket_thuc,
+            'phong': phong, 'start_buoi_so': start_buoi_so,
+            'noi_dung': noi_dung,
+        })
+
+    @staticmethod
+    def get_all_for_student(hv_id, from_date=None, to_date=None):
+        """Tat ca buoi hoc cua HV (dung cho ICS export). Default 6 thang truoc + sau."""
+        params = {}
+        if from_date: params['from_date'] = from_date
+        if to_date: params['to_date'] = to_date
+        return _get(f'/schedules/student/{hv_id}/all', **params)
+
+    @staticmethod
+    def get_all_for_teacher(gv_id, from_date=None, to_date=None):
+        """Tat ca buoi day cua GV."""
+        params = {}
+        if from_date: params['from_date'] = from_date
+        if to_date: params['to_date'] = to_date
+        return _get(f'/schedules/teacher/{gv_id}/all', **params)
+
+    @staticmethod
+    def check_conflict(ngay, gio_bat_dau, gio_ket_thuc, phong=None,
+                       lop_id=None, gv_id=None, exclude_id=None):
+        """Check trung lich: cung phong hoac cung lop hoac cung GV + overlap gio.
+        Tra ve {'conflicts': list, 'count': int}."""
+        payload = {
+            'ngay': ngay, 'gio_bat_dau': gio_bat_dau, 'gio_ket_thuc': gio_ket_thuc,
+            'phong': phong, 'lop_id': lop_id, 'gv_id': gv_id,
+            'exclude_id': exclude_id,
+        }
+        # Strip None values
+        payload = {k: v for k, v in payload.items() if v is not None}
+        return _post('/schedules/check-conflict', payload)
+
+    @staticmethod
+    def update(sched_id, **fields):
+        # Backend yeu cau lop_id (Pydantic schema) - dummy de pass validation, server ignore
+        if 'lop_id' not in fields:
+            fields['lop_id'] = '_'
+        # ngay/gio fields can be ISO string
+        return _put(f'/schedules/{sched_id}', fields)
 
 
 class ExamService:

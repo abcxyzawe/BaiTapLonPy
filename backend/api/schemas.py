@@ -103,6 +103,7 @@ class NotificationSend(BaseModel):
     tieu_de: str = Field(..., min_length=1, max_length=200)
     noi_dung: str = Field(..., min_length=1, max_length=5000)
     den_lop: Optional[str] = Field(None, max_length=30)
+    den_hv_id: Optional[int] = Field(None, gt=0)  # Gui rieng 1 HV
     loai: NotificationType = 'info'
 
 
@@ -223,6 +224,19 @@ class ScheduleCreate(BaseModel):
     noi_dung: Optional[str] = Field(None, max_length=500)
     thu: Optional[int] = Field(None, ge=2, le=8)
     trang_thai: str = Field('scheduled', max_length=20)
+
+
+class ScheduleBatchCreate(BaseModel):
+    """Tao nhieu buoi hoc theo pattern (vd T2/T5 cho 12 tuan)."""
+    lop_id: str = Field(..., min_length=1, max_length=30)
+    days_of_week: list[int] = Field(..., min_length=1, max_length=7)  # 2=T2..8=CN
+    start_date: date  # Tuan dau tien (lay Monday cua tuan nay)
+    num_weeks: int = Field(..., ge=1, le=52)
+    gio_bat_dau: time
+    gio_ket_thuc: time
+    phong: Optional[str] = Field(None, max_length=20)
+    start_buoi_so: int = Field(1, ge=1, le=200)
+    noi_dung: Optional[str] = Field(None, max_length=500)
 
 
 # ===== Exams =====

@@ -33,6 +33,31 @@ def create_student(req: StudentCreate):
     return {'user_id': uid}
 
 
+@router.post('/students/bulk')
+def bulk_create_students(req: list[StudentCreate]):
+    """Bulk import students. Tra ve {success, failed: [{row, msv, error}]}.
+    Skip rows fail (vd MSV trung) - tiep tuc voi rows con lai."""
+    success = 0
+    failed = []
+    for idx, item in enumerate(req, 1):
+        try:
+            StudentService.create(
+                item.username, item.password, item.full_name, item.msv,
+                email=item.email, sdt=item.sdt, ngaysinh=item.ngaysinh,
+                gioitinh=item.gioitinh, diachi=item.diachi
+            )
+            success += 1
+        except Exception as e:
+            err_msg = str(e)
+            if '\n' in err_msg:
+                err_msg = err_msg.split('\n')[-1].strip() or err_msg[:200]
+            failed.append({
+                'row': idx, 'msv': item.msv, 'username': item.username,
+                'error': err_msg[:200]
+            })
+    return {'success': success, 'failed': failed, 'total': len(req)}
+
+
 @router.put('/students/{user_id}')
 def update_student(user_id: int, req: StudentUpdate):
     fields = req.model_dump(exclude_none=True)

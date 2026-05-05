@@ -45,9 +45,11 @@ class CourseService:
 
     @staticmethod
     def get_students_in_class(ma_lop: str):
-        """danh sach HV trong 1 lop"""
+        """danh sach HV trong 1 lop - kem email, ngay sinh, ngay_dk cho class roster"""
         sql = """
-            SELECT s.user_id, u.full_name, s.msv, u.sdt, r.trang_thai AS reg_status
+            SELECT s.user_id, u.full_name, s.msv, u.sdt, u.email,
+                   s.ngaysinh, s.gioitinh,
+                   r.trang_thai AS reg_status, r.ngay_dk
               FROM students s
               JOIN users u ON u.id = s.user_id
               JOIN registrations r ON r.hv_id = s.user_id

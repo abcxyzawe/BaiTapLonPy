@@ -16,17 +16,26 @@ class NotificationService:
 
     @staticmethod
     def get_for_student(hv_id: int):
-        """thong bao danh cho 1 HV: tat ca (den_lop null) + cac lop HV dang ky"""
+        """thong bao danh cho 1 HV:
+        - Broadcast all (den_lop=NULL AND den_hv_id=NULL)
+        - Lop HV dang ky (den_lop in HV's classes)
+        - Direct message gui rieng (den_hv_id = hv_id)
+        """
         sql = """
-            SELECT DISTINCT n.id, n.tieu_de, n.noi_dung, n.loai, n.ngay_tao, n.den_lop,
-                   u.full_name AS ten_nguoi_gui, u.role AS vai_tro_gui
+            SELECT DISTINCT n.id, n.tieu_de, n.noi_dung, n.loai, n.ngay_tao,
+                   n.den_lop, n.den_hv_id,
+                   u.full_name AS ten_nguoi_gui, u.role AS vai_tro_gui,
+                   CASE WHEN n.den_hv_id = %s THEN 'rieng'
+                        WHEN n.den_lop IS NOT NULL THEN 'lop'
+                        ELSE 'all' END AS muc_tieu
               FROM notifications n
          LEFT JOIN users u ON u.id = n.tu_id
-             WHERE n.den_lop IS NULL
+             WHERE (n.den_lop IS NULL AND n.den_hv_id IS NULL)
                 OR n.den_lop IN (SELECT lop_id FROM registrations WHERE hv_id = %s)
+                OR n.den_hv_id = %s
              ORDER BY n.ngay_tao DESC
         """
-        return db.fetch_all(sql, (hv_id,))
+        return db.fetch_all(sql, (hv_id, hv_id, hv_id))
 
     @staticmethod
     def get_sent_by_teacher(gv_id: int, limit: int = 10):
@@ -40,11 +49,16 @@ class NotificationService:
 
     @staticmethod
     def send(tu_id: int, tieu_de: str, noi_dung: str,
-             den_lop: str = None, loai: str = 'info'):
+             den_lop: str = None, den_hv_id: int = None, loai: str = 'info'):
+        """Gui notification:
+        - den_lop=None + den_hv_id=None -> broadcast tat ca HV
+        - den_lop=X -> tat ca HV cua lop X
+        - den_hv_id=N -> 1 HV cu the (uu tien hon den_lop)
+        """
         db.execute(
-            """INSERT INTO notifications (tu_id, den_lop, tieu_de, noi_dung, loai)
-                    VALUES (%s, %s, %s, %s, %s)""",
-            (tu_id, den_lop, tieu_de, noi_dung, loai)
+            """INSERT INTO notifications (tu_id, den_lop, den_hv_id, tieu_de, noi_dung, loai)
+                    VALUES (%s, %s, %s, %s, %s, %s)""",
+            (tu_id, den_lop, den_hv_id, tieu_de, noi_dung, loai)
         )
 
     @staticmethod

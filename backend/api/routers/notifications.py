@@ -30,7 +30,8 @@ def sent_by_teacher(gv_id: int, limit: int = 10):
 @router.post('')
 def send(req: NotificationSend):
     NotificationService.send(req.tu_id, req.tieu_de, req.noi_dung,
-                             den_lop=req.den_lop, loai=req.loai)
+                             den_lop=req.den_lop, den_hv_id=req.den_hv_id,
+                             loai=req.loai)
     return {'status': 'sent'}
 
 

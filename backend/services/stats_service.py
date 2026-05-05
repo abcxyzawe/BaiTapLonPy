@@ -163,6 +163,50 @@ class StatsService:
         )
 
     @staticmethod
+    def employee_revenue_report(emp_id: int, from_date, to_date):
+        """Bao cao doanh thu chi tiet cua NV trong khoang ngay [from_date, to_date].
+        Tra ve dict: total, count, payments=[{ngay, ten_hv, lop, so_tien, hinh_thuc, ghi_chu}]
+        """
+        # Aggregated total
+        agg = db.fetch_one("""
+            SELECT COUNT(*) AS so_lan,
+                   COALESCE(SUM(so_tien), 0) AS tong_tien
+              FROM payments
+             WHERE nv_thu = %s
+               AND DATE(ngay_thu) BETWEEN %s AND %s
+        """, (emp_id, from_date, to_date)) or {}
+        # Detail list
+        details = db.fetch_all("""
+            SELECT p.id, p.ngay_thu, p.so_tien, p.hinh_thuc, p.ghi_chu,
+                   r.lop_id, u.full_name AS ten_hv, s.msv,
+                   co.ten_mon
+              FROM payments p
+              JOIN registrations r ON r.id = p.reg_id
+              JOIN students s ON s.user_id = r.hv_id
+              JOIN users u ON u.id = s.user_id
+              JOIN classes c ON c.ma_lop = r.lop_id
+              JOIN courses co ON co.ma_mon = c.ma_mon
+             WHERE p.nv_thu = %s
+               AND DATE(p.ngay_thu) BETWEEN %s AND %s
+             ORDER BY p.ngay_thu DESC
+        """, (emp_id, from_date, to_date)) or []
+        # Group by hinh_thuc for breakdown
+        bd = db.fetch_all("""
+            SELECT hinh_thuc, COUNT(*) AS so_lan, SUM(so_tien) AS tong
+              FROM payments
+             WHERE nv_thu = %s
+               AND DATE(ngay_thu) BETWEEN %s AND %s
+             GROUP BY hinh_thuc
+             ORDER BY tong DESC
+        """, (emp_id, from_date, to_date)) or []
+        return {
+            'so_lan': int(agg.get('so_lan', 0) or 0),
+            'tong_tien': int(agg.get('tong_tien', 0) or 0),
+            'payments': details,
+            'breakdown_by_method': bd,
+        }
+
+    @staticmethod
     def recent_pending_registrations(limit: int = 5):
         """cho dashboard NV - cac DK dang cho xu ly"""
         sql = """

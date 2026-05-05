@@ -201,6 +201,7 @@ CREATE TABLE notifications (
     id          SERIAL PRIMARY KEY,
     tu_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
     den_lop     VARCHAR(30) REFERENCES classes(ma_lop) ON DELETE CASCADE,
+    den_hv_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,  -- gui rieng 1 HV
     tieu_de     VARCHAR(200) NOT NULL,
     noi_dung    TEXT NOT NULL,
     loai        VARCHAR(20) DEFAULT 'info'
@@ -209,6 +210,7 @@ CREATE TABLE notifications (
 );
 
 CREATE INDEX idx_notif_lop ON notifications(den_lop);
+CREATE INDEX idx_notif_den_hv ON notifications(den_hv_id);
 CREATE INDEX idx_notif_ngay ON notifications(ngay_tao DESC);
 
 
