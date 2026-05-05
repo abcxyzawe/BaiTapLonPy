@@ -1,0 +1,22 @@
+[
+  {
+    "role": "HV",
+    "page": "p5",
+    "issue": "Mock data leak: label hien \"Thông báo lịch đăng ký khóa học HK2 2025-2026\" (chua \"HK2 2025-2026\")"
+  },
+  {
+    "role": "HV",
+    "page": "p5",
+    "issue": "Mock data leak: label hien \"Học viên thực hiện tự đánh giá rèn luyện HK1 2025-2026 trên \" (chua \"HK1 2025\")"
+  },
+  {
+    "role": "Adm",
+    "page": "p1",
+    "issue": "Table tblAdminCourses col 2 header \"TC\" - khoa ngoai khoa nen la \"So buoi\""
+  },
+  {
+    "role": "Adm",
+    "page": "p7",
+    "issue": "Table tblCurriculum col 3 header \"TC\" - khoa ngoai khoa nen la \"So buoi\""
+  }
+]

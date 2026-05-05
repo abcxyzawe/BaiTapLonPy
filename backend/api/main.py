@@ -11,8 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.api.routers import (
-    attendance, audit, auth, courses, curriculum, exams, grades,
-    notifications, registrations, schedules, semesters, stats, users
+    assignments, attendance, audit, auth, courses, curriculum, exams, grades,
+    notifications, registrations, schedules, semesters, stats, submissions, users
 )
 
 
@@ -59,6 +59,8 @@ app.include_router(schedules.router, prefix='/schedules', tags=['Schedules'])
 app.include_router(exams.router, prefix='/exams', tags=['Exams'])
 app.include_router(attendance.router, prefix='/attendance', tags=['Attendance'])
 app.include_router(audit.router, prefix='/audit', tags=['Audit'])
+app.include_router(assignments.router, prefix='/assignments', tags=['Assignments'])
+app.include_router(submissions.router, prefix='/submissions', tags=['Submissions'])
 
 
 # ===== Global exception handlers =====

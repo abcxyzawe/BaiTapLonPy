@@ -342,6 +342,46 @@ CREATE INDEX idx_att_status ON attendance(trang_thai);
 
 
 -- ==========================================================
+-- 19. ASSIGNMENTS (bai tap GV giao cho lop) - MOI
+-- ==========================================================
+CREATE TABLE assignments (
+    id          SERIAL PRIMARY KEY,
+    lop_id      VARCHAR(30) NOT NULL REFERENCES classes(ma_lop) ON DELETE CASCADE,
+    gv_id       INTEGER NOT NULL REFERENCES teachers(user_id) ON DELETE CASCADE,
+    tieu_de     VARCHAR(200) NOT NULL,
+    mo_ta       TEXT,
+    han_nop     TIMESTAMP,
+    diem_toi_da NUMERIC(4, 2) DEFAULT 10 CHECK (diem_toi_da > 0 AND diem_toi_da <= 100),
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_asg_lop ON assignments(lop_id);
+CREATE INDEX idx_asg_gv ON assignments(gv_id);
+CREATE INDEX idx_asg_han ON assignments(han_nop);
+
+
+-- ==========================================================
+-- 20. SUBMISSIONS (HV nop bai + GV cham) - MOI
+-- ==========================================================
+CREATE TABLE submissions (
+    id              SERIAL PRIMARY KEY,
+    assignment_id   INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    hv_id           INTEGER NOT NULL REFERENCES students(user_id) ON DELETE CASCADE,
+    noi_dung        TEXT,        -- text bai lam HV nhap
+    file_url        VARCHAR(500),  -- placeholder cho upload file sau
+    nop_luc         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    diem            NUMERIC(4, 2),  -- GV cham
+    nhan_xet        TEXT,        -- GV gop y
+    cham_luc        TIMESTAMP,
+    UNIQUE (assignment_id, hv_id)  -- moi HV nop 1 lan / bai (re-nop = update)
+);
+
+CREATE INDEX idx_sub_asg ON submissions(assignment_id);
+CREATE INDEX idx_sub_hv ON submissions(hv_id);
+CREATE INDEX idx_sub_diem ON submissions(diem);
+
+
+-- ==========================================================
 -- VIEWS
 -- ==========================================================
 

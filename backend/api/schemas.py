@@ -259,3 +259,35 @@ class AuditLog(BaseModel):
     target_id: Optional[str] = None
     description: Optional[str] = None
     ip_address: Optional[str] = None
+
+
+# ===== Assignments =====
+from datetime import datetime as _dt
+
+
+class AssignmentCreate(BaseModel):
+    lop_id: str = Field(..., min_length=1, max_length=30)
+    gv_id: int = Field(..., gt=0)
+    tieu_de: str = Field(..., min_length=1, max_length=200)
+    mo_ta: Optional[str] = Field(None, max_length=5000)
+    han_nop: Optional[_dt] = None
+    diem_toi_da: float = Field(10, gt=0, le=100)
+
+
+class AssignmentUpdate(BaseModel):
+    tieu_de: Optional[str] = Field(None, min_length=1, max_length=200)
+    mo_ta: Optional[str] = Field(None, max_length=5000)
+    han_nop: Optional[_dt] = None
+    diem_toi_da: Optional[float] = Field(None, gt=0, le=100)
+
+
+class SubmissionCreate(BaseModel):
+    assignment_id: int = Field(..., gt=0)
+    hv_id: int = Field(..., gt=0)
+    noi_dung: str = Field('', max_length=10000)
+    file_url: Optional[str] = Field(None, max_length=500)
+
+
+class SubmissionGrade(BaseModel):
+    diem: float = Field(..., ge=0, le=100)
+    nhan_xet: Optional[str] = Field('', max_length=2000)

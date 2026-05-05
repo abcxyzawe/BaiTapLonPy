@@ -18,7 +18,8 @@ try:
                             NotificationService, StudentService, TeacherService,
                             EmployeeService, ReviewService, StatsService,
                             SemesterService, CurriculumService, ScheduleService,
-                            ExamService, AttendanceService, AuditService, is_alive)
+                            ExamService, AttendanceService, AuditService,
+                            AssignmentService, is_alive)
     # Class shim cho code cu - frontend doi khi dung db.fetch_one truc tiep
     # (deprecated path - cac call nay da duoc thay bang API tuong ung)
     class _ApiDb:
@@ -1251,12 +1252,13 @@ def _refresh_cache():
     _load_sem_status()  # Refresh sem status cung de NV thay ngay khi admin toggle dot
 
 
-# STUDENT pages
+# STUDENT pages - ui_file=None nghia la build pure Python (cho Bai tap)
 PAGES = [
     ('btnHome', 'dashboard_student.ui'),
     ('btnSchedule', 'schedule.ui'),
     ('btnExam', 'exam_schedule.ui'),
     ('btnGrades', 'grades.ui'),
+    ('btnAssign', None),  # Bai tap - build Python
     ('btnReview', 'teacher_review.ui'),
     ('btnNotice', 'notifications.ui'),
     ('btnProfile', 'profile.ui'),
@@ -1267,12 +1269,13 @@ MENU_ITEMS = [
     ('btnSchedule', 'iconSchedule', 'calendar', 'Lịch học'),
     ('btnExam', 'iconExam', 'clipboard', 'Lịch kiểm tra'),
     ('btnGrades', 'iconGrades', 'bar-chart', 'Xem điểm'),
+    ('btnAssign', 'iconAssign', 'file-text', 'Bài tập'),
     ('btnReview', 'iconReview', 'star', 'Đánh giá giảng viên'),
     ('btnNotice', 'iconNotice', 'bell', 'Thông báo'),
     ('btnProfile', 'iconProfile', 'user', 'Thông tin cá nhân'),
 ]
 
-# TEACHER pages
+# TEACHER pages - ui_file=None nghia la build pure Python (khong load .ui)
 TEACHER_PAGES = [
     ('btnTeaDash', 'teacher_dashboard.ui'),
     ('btnTeaSchedule', 'schedule.ui'),
@@ -1281,6 +1284,8 @@ TEACHER_PAGES = [
     ('btnTeaAttend', 'teacher_attendance.ui'),
     ('btnTeaNotice', 'teacher_notice.ui'),
     ('btnTeaGrades', 'teacher_grades.ui'),
+    ('btnTeaAssign', None),  # Bai tap - build pure Python
+    ('btnTeaExam', None),    # Lich thi - build pure Python
     ('btnTeaProfile', 'profile.ui'),
 ]
 
@@ -1292,6 +1297,8 @@ TEACHER_MENU = [
     ('btnTeaAttend', 'iconTeaAttend', 'check-circle', 'Điểm danh'),
     ('btnTeaNotice', 'iconTeaNotice', 'bell', 'Gửi thông báo'),
     ('btnTeaGrades', 'iconTeaGrades', 'edit', 'Nhập điểm'),
+    ('btnTeaAssign', 'iconTeaAssign', 'file-text', 'Giao bài tập'),
+    ('btnTeaExam', 'iconTeaExam', 'clipboard', 'Lịch thi'),
     ('btnTeaProfile', 'iconTeaProfile', 'user', 'Thông tin cá nhân'),
 ]
 
@@ -1513,15 +1520,19 @@ class MainWindow(QtWidgets.QWidget):
         return sidebar
 
     def _load_page(self, ui_file):
-        """load .ui, tach contentArea ra"""
+        """load .ui, tach contentArea ra. ui_file=None -> tao QFrame trong (cho Bai tap)"""
+        if ui_file is None:
+            content = QtWidgets.QFrame()
+            content.setObjectName('contentArea')
+            content.setFixedSize(870, 700)
+            content.setStyleSheet('QFrame#contentArea { background: #edf2f7; }')
+            return content
         temp = uic.loadUi(os.path.join(UI, ui_file))
         content = temp.findChild(QtWidgets.QFrame, 'contentArea')
         if content:
             content.setParent(None)
-            # chuan hoa kich thuoc
             content.setFixedSize(870, 700)
             return content
-        # fallback neu khong co contentArea
         return temp
 
     def _on_nav(self, index):
@@ -1529,7 +1540,7 @@ class MainWindow(QtWidgets.QWidget):
         if not self.pages_filled[index]:
             fill_methods = [
                 self._fill_dashboard, self._fill_schedule, self._fill_exam,
-                self._fill_grades, self._fill_review,
+                self._fill_grades, self._fill_assignments, self._fill_review,
                 self._fill_notifications, self._fill_profile,
             ]
             if fill_methods[index]:
@@ -2276,8 +2287,218 @@ class MainWindow(QtWidgets.QWidget):
         tbl.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
         tbl.verticalHeader().setVisible(False)
 
-    def _fill_review(self):
+    # ===== STUDENT ASSIGNMENTS PAGE =====
+
+    def _fill_assignments(self):
+        """Trang Bai tap cua HV - xem ds bai cho lop minh, nop bai, xem feedback."""
         page = self.page_widgets[4]
+        if not getattr(page, '_built', False):
+            self._build_stu_assignments_ui(page)
+            page._built = True
+        self._reload_stu_assignments(page)
+
+    def _build_stu_assignments_ui(self, page):
+        """Build UI 1 lan: header + bang ds bai tap can lam."""
+        hb = QtWidgets.QFrame(page)
+        hb.setObjectName('headerBar')
+        hb.setGeometry(0, 0, 870, 56)
+        hb.setStyleSheet('QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }')
+        title = QtWidgets.QLabel('Bài tập', hb)
+        title.setGeometry(25, 0, 400, 56)
+        title.setStyleSheet('color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;')
+        sub = QtWidgets.QLabel('Bài tập từ giảng viên - bấm "Nộp" để gửi bài, "Xem góp ý" để xem feedback.', hb)
+        sub.setGeometry(25, 32, 700, 18)
+        sub.setStyleSheet('color: #718096; font-size: 11px; background: transparent;')
+
+        tbl = QtWidgets.QTableWidget(page)
+        tbl.setObjectName('tblStuAssignments')
+        tbl.setGeometry(15, 70, 840, 615)
+        tbl.setColumnCount(7)
+        tbl.setHorizontalHeaderLabels(['#', 'Tiêu đề', 'Khóa học', 'Hạn nộp',
+                                        'Trạng thái', 'Điểm', 'Thao tác'])
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        tbl.setStyleSheet(
+            'QTableWidget { background: white; border: 1px solid #d2d6dc; '
+            'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
+            'QHeaderView::section { background: #f7fafc; color: #4a5568; '
+            'padding: 8px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'font-weight: bold; font-size: 11px; }'
+        )
+        tbl.show()
+
+    def _reload_stu_assignments(self, page):
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblStuAssignments')
+        if not tbl:
+            return
+        hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        rows = []
+        if DB_AVAILABLE and hv_id:
+            try:
+                rows = AssignmentService.get_pending(hv_id) or []
+            except Exception as e:
+                print(f'[STU_ASG] loi: {e}')
+
+        if not rows:
+            set_table_empty_state(tbl, 'Chưa có bài tập nào - GV chưa giao bài, hoặc bạn chưa đăng ký lớp.', row_height=80)
+        else:
+            from datetime import datetime
+            now = datetime.now()
+            tbl.setRowCount(len(rows))
+            for r, row in enumerate(rows):
+                tbl.setRowHeight(r, 44)
+                han_str = '—'
+                han_overdue = False
+                if row.get('han_nop'):
+                    try:
+                        han_dt = row['han_nop']
+                        if isinstance(han_dt, str):
+                            han_dt = datetime.fromisoformat(han_dt)
+                        han_str = han_dt.strftime('%d/%m/%Y %H:%M')
+                        han_overdue = han_dt < now
+                    except Exception:
+                        han_str = str(row['han_nop'])
+
+                has_sub = row.get('submission_id') is not None
+                graded = row.get('diem') is not None
+                if graded:
+                    status = 'Đã chấm'
+                elif has_sub:
+                    status = 'Đã nộp'
+                elif han_overdue:
+                    status = 'Quá hạn'
+                else:
+                    status = 'Chưa nộp'
+                diem_disp = f"{float(row['diem']):.1f}/{row.get('diem_toi_da', 10)}" if graded else '—'
+
+                items = [str(r + 1), row.get('tieu_de', ''),
+                         f"{row.get('lop_id', '')} ({row.get('ten_mon', '')})",
+                         han_str, status, diem_disp]
+                for c, val in enumerate(items):
+                    item = QtWidgets.QTableWidgetItem(str(val))
+                    item.setTextAlignment(Qt.AlignCenter if c in (0, 3, 5) else Qt.AlignLeft | Qt.AlignVCenter)
+                    if c == 4:  # status badge
+                        style_status_item(item, status)
+                    if c == 3 and han_overdue and not graded:
+                        item.setForeground(QColor(COLORS['red']))
+                    tbl.setItem(r, c, item)
+                # Action: Nop / Sua / Xem gop y
+                if graded:
+                    btns_spec = [('Xem góp ý', 'navy')]
+                elif has_sub:
+                    btns_spec = [('Sửa nộp', 'orange')]
+                else:
+                    btns_spec = [('Nộp bài', 'green')]
+                cell, (btn,) = make_action_cell(btns_spec)
+                tbl.setCellWidget(r, 6, cell)
+                btn.clicked.connect(lambda ch, asg=dict(row): self._stu_dialog_submit(asg))
+        # Tong width 35+220+180+130+100+75+100 = 840 (vua khit table 840px)
+        for c, w in enumerate([35, 220, 180, 130, 100, 75, 100]):
+            tbl.setColumnWidth(c, w)
+        tbl.horizontalHeader().setStretchLastSection(False)
+
+    def _stu_dialog_submit(self, asg):
+        """Dialog HV nop bai (hoac xem feedback neu da cham)."""
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle(f'Bài tập: {asg.get("tieu_de", "")}')
+        dlg.setFixedSize(640, 620)
+        v = QtWidgets.QVBoxLayout(dlg)
+
+        hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        # Load chi tiet bai + bai HV da nop (neu co)
+        full_asg = None
+        my_sub = None
+        try:
+            full_asg = AssignmentService.get(asg['id']) or {}
+            my_sub = AssignmentService.get_my_submission(asg['id'], hv_id)
+        except Exception as e:
+            print(f'[STU_ASG] load loi: {e}')
+            full_asg = asg
+            my_sub = None
+
+        # Header info
+        han_str = fmt_date(full_asg.get('han_nop'), fmt='%d/%m/%Y %H:%M', default='Không hạn')
+        head = QtWidgets.QLabel(
+            f'<b style="font-size:14px;">{full_asg.get("tieu_de", "")}</b><br>'
+            f'<span style="color:#718096;">Lớp {full_asg.get("lop_id", "")} · '
+            f'GV: {full_asg.get("ten_gv", "")} · Hạn: {han_str} · '
+            f'Tối đa {full_asg.get("diem_toi_da", 10)} điểm</span>'
+        )
+        head.setStyleSheet('color: #2d3748; padding: 8px; background: #f7fafc; '
+                           'border: 1px solid #e2e8f0; border-radius: 6px;')
+        head.setWordWrap(True)
+        v.addWidget(head)
+
+        # Mo ta bai
+        v.addWidget(QtWidgets.QLabel('<b>Đề bài:</b>'))
+        desc = QtWidgets.QTextEdit()
+        desc.setPlainText(full_asg.get('mo_ta', '') or '(GV chưa thêm mô tả)')
+        desc.setReadOnly(True)
+        desc.setFixedHeight(120)
+        desc.setStyleSheet('background: #f7fafc;')
+        v.addWidget(desc)
+
+        # Bai cua HV
+        v.addWidget(QtWidgets.QLabel('<b>Bài làm của bạn:</b>'))
+        my_text = QtWidgets.QTextEdit()
+        my_text.setPlaceholderText('Nhập bài làm vào đây (text). Sau này có thể upload file.')
+        my_text.setFixedHeight(150)
+        if my_sub and my_sub.get('noi_dung'):
+            my_text.setPlainText(my_sub['noi_dung'])
+        v.addWidget(my_text)
+
+        # Feedback GV (neu co)
+        graded = my_sub and my_sub.get('diem') is not None
+        if graded:
+            fb_box = QtWidgets.QFrame()
+            fb_box.setStyleSheet('QFrame { background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 6px; }')
+            fbv = QtWidgets.QVBoxLayout(fb_box)
+            fbv.setContentsMargins(8, 6, 8, 6)
+            diem_lbl = QtWidgets.QLabel(
+                f'<b style="color:#166534;">✓ Điểm: {float(my_sub["diem"]):.1f} / {full_asg.get("diem_toi_da", 10)}</b>'
+            )
+            diem_lbl.setStyleSheet('background: transparent; border: none;')
+            fbv.addWidget(diem_lbl)
+            nx = my_sub.get('nhan_xet', '') or '(GV chưa ghi nhận xét)'
+            nx_lbl = QtWidgets.QLabel(f'<b>Nhận xét:</b> {nx}')
+            nx_lbl.setStyleSheet('color: #166534; background: transparent; border: none;')
+            nx_lbl.setWordWrap(True)
+            fbv.addWidget(nx_lbl)
+            v.addWidget(fb_box)
+
+        # Buttons
+        btns = QtWidgets.QDialogButtonBox()
+        if graded:
+            btn_close = btns.addButton('Đóng', QtWidgets.QDialogButtonBox.RejectRole)
+            btn_close.clicked.connect(dlg.reject)
+            my_text.setReadOnly(True)
+        else:
+            btn_save = btns.addButton('Nộp bài', QtWidgets.QDialogButtonBox.AcceptRole)
+            btn_cancel = btns.addButton('Huỷ', QtWidgets.QDialogButtonBox.RejectRole)
+            btns.accepted.connect(dlg.accept)
+            btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        # Submit
+        noi_dung = my_text.toPlainText().strip()
+        if not noi_dung:
+            msg_warn(self, 'Trống', 'Bài làm không được để trống.')
+            return
+        try:
+            AssignmentService.submit(asg['id'], hv_id, noi_dung)
+        except Exception as e:
+            msg_warn(self, 'Lỗi nộp', api_error_msg(e))
+            return
+        msg_info(self, 'Thành công', f'Đã nộp bài "{full_asg.get("tieu_de", "")}". GV sẽ chấm sớm.')
+        self._reload_stu_assignments(self.page_widgets[4])
+
+    def _fill_review(self):
+        # Sau khi them btnAssign vao PAGES idx 4, btnReview chuyen sang idx 5
+        page = self.page_widgets[5]
         si = page.findChild(QtWidgets.QLabel, 'iconSearchReview')
         if si:
             si.setPixmap(QPixmap(os.path.join(ICONS, 'search.png')).scaled(18, 18, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -2351,7 +2572,7 @@ class MainWindow(QtWidgets.QWidget):
             cbo_s.currentIndexChanged.connect(lambda: self._apply_review_filter())
 
     def _apply_review_filter(self):
-        page = self.page_widgets[4]
+        page = self.page_widgets[5]  # btnReview moved to idx 5 sau khi insert btnAssign
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblReview')
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboDept')
         if not tbl or not cbo_d:
@@ -2423,7 +2644,7 @@ class MainWindow(QtWidgets.QWidget):
 
     def _fill_notifications(self):
         """Generate cards dong theo so notif tu API, giu design cua .ui (border-left mau theo loai)."""
-        page = self.page_widgets[5]
+        page = self.page_widgets[6]  # btnNotice moved to idx 6 sau khi insert btnAssign
         sc = page.findChild(QtWidgets.QWidget, 'scrollContent')
         if not sc:
             return
@@ -2515,7 +2736,7 @@ class MainWindow(QtWidgets.QWidget):
         sc.setMinimumHeight(y + 20)
 
     def _fill_profile(self):
-        page = self.page_widgets[6]
+        page = self.page_widgets[7]  # btnProfile moved to idx 7 sau khi insert btnAssign
         u = MOCK_USER
         # Dung .get() de tranh KeyError sau clear_session_state() (logout xoa het keys)
         # Bo cac field 'lop'/'khoa'/'nienkhoa'/'hedt' - khong relevant cho khoa ngoai khoa
@@ -2549,7 +2770,7 @@ class MainWindow(QtWidgets.QWidget):
             safe_connect(btn_cp.clicked, self._change_pass)
 
     def _save_profile(self):
-        page = self.page_widgets[6]
+        page = self.page_widgets[7]  # btnProfile idx 7
         # Doc truoc tu form, khong update MOCK_USER cho den khi API success
         updates = {}
         for attr, key in [('txtEmail', 'email'), ('txtPhone', 'sdt'), ('txtAddress', 'diachi')]:
@@ -5110,6 +5331,13 @@ class TeacherWindow(QtWidgets.QWidget):
         return sidebar
 
     def _load_page(self, ui_file):
+        # ui_file=None -> tao QFrame trong de fill bang code (cho trang Bai tap)
+        if ui_file is None:
+            content = QtWidgets.QFrame()
+            content.setObjectName('contentArea')
+            content.setFixedSize(870, 700)
+            content.setStyleSheet('QFrame#contentArea { background: #edf2f7; }')
+            return content
         temp = uic.loadUi(os.path.join(UI, ui_file))
         content = temp.findChild(QtWidgets.QFrame, 'contentArea')
         if content:
@@ -5125,6 +5353,7 @@ class TeacherWindow(QtWidgets.QWidget):
                     self._fill_tea_classes, self._fill_tea_students,
                     self._fill_tea_attendance,
                     self._fill_tea_notice, self._fill_tea_grades,
+                    self._fill_tea_assignments, self._fill_tea_exams,
                     self._fill_tea_profile]
             fill[index]()
             self.pages_filled[index] = True
@@ -6672,17 +6901,577 @@ class TeacherWindow(QtWidgets.QWidget):
             tail = '\n• '.join([f'{m}: {ly}' for m, ly in skipped[:5]])
             msg_warn(self, 'Không lưu được', f'Tất cả {n_total} HV đều fail:\n• {tail}')
 
-    def _fill_tea_profile(self):
+    # ===== TEACHER ASSIGNMENTS PAGE =====
+
+    def _fill_tea_assignments(self):
+        """Trang 'Giao bài tập' - GV xem ds bai da giao + tao moi + xem bai HV nop."""
         page = self.page_widgets[7]
+        # Build UI 1 lan (cache vao page._built)
+        if not getattr(page, '_built', False):
+            self._build_tea_assignments_ui(page)
+            page._built = True
+        self._reload_tea_assignments(page)
+
+    def _build_tea_assignments_ui(self, page):
+        """Build UI 1 lan: header + bang ds bai tap + nut tao."""
+        # Header bar
+        hb = QtWidgets.QFrame(page)
+        hb.setObjectName('headerBar')
+        hb.setGeometry(0, 0, 870, 56)
+        hb.setStyleSheet('QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }')
+        title = QtWidgets.QLabel('Giao bài tập', hb)
+        title.setGeometry(25, 0, 400, 56)
+        title.setStyleSheet('color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;')
+
+        btn_new = QtWidgets.QPushButton('+ Giao bài mới', hb)
+        btn_new.setObjectName('btnNewAssign')
+        btn_new.setGeometry(710, 12, 140, 32)
+        btn_new.setCursor(Qt.PointingHandCursor)
+        btn_new.setStyleSheet(
+            'QPushButton { background: #002060; color: white; border: none; '
+            'border-radius: 6px; font-size: 12px; font-weight: bold; } '
+            'QPushButton:hover { background: #001a50; }'
+        )
+        btn_new.clicked.connect(self._tea_dialog_new_assignment)
+
+        # Bang ds bai tap
+        tbl = QtWidgets.QTableWidget(page)
+        tbl.setObjectName('tblAssignments')
+        tbl.setGeometry(15, 70, 840, 615)
+        tbl.setColumnCount(7)
+        tbl.setHorizontalHeaderLabels(['#', 'Tiêu đề', 'Lớp', 'Khóa học',
+                                       'Hạn nộp', 'Đã nộp / Đã chấm', 'Thao tác'])
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        tbl.setStyleSheet(
+            'QTableWidget { background: white; border: 1px solid #d2d6dc; '
+            'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
+            'QHeaderView::section { background: #f7fafc; color: #4a5568; '
+            'padding: 8px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'font-weight: bold; font-size: 11px; }'
+        )
+        tbl.show()
+
+    def _reload_tea_assignments(self, page):
+        """Load lai du lieu bai tap (goi sau khi them/sua/xoa)."""
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblAssignments')
+        if not tbl:
+            return
+        gv_id = MOCK_TEACHER.get('user_id')
+        rows = []
+        if DB_AVAILABLE and gv_id:
+            try:
+                rows = AssignmentService.get_by_teacher(gv_id) or []
+            except Exception as e:
+                print(f'[TEA_ASG] loi load: {e}')
+
+        if not rows:
+            set_table_empty_state(tbl, 'Chưa có bài tập nào - bấm "Giao bài mới" để bắt đầu', row_height=80)
+        else:
+            tbl.setRowCount(len(rows))
+            for r, row in enumerate(rows):
+                tbl.setRowHeight(r, 44)
+                han = fmt_date(row.get('han_nop'), fmt='%d/%m/%Y %H:%M', default='Không hạn')
+                so_nop = int(row.get('so_nop', 0) or 0)
+                so_cham = int(row.get('so_cham', 0) or 0)
+                items = [
+                    str(r + 1),
+                    row.get('tieu_de', ''),
+                    row.get('lop_id', ''),
+                    row.get('ten_mon', ''),
+                    han,
+                    f'{so_nop} nộp / {so_cham} chấm',
+                ]
+                for c, val in enumerate(items):
+                    item = QtWidgets.QTableWidgetItem(str(val))
+                    item.setTextAlignment(Qt.AlignCenter if c in (0, 2, 4, 5) else Qt.AlignLeft | Qt.AlignVCenter)
+                    tbl.setItem(r, c, item)
+                # Action: Xem bai nop / Xoa - spacing 10 + col rong 165px de fit 2 nut
+                cell, (btn_view, btn_del) = make_action_cell(
+                    [('Xem nộp', 'navy'), ('Xoá', 'red')], spacing=10
+                )
+                tbl.setCellWidget(r, 6, cell)
+                btn_view.clicked.connect(lambda ch, asg_id=row['id']: self._tea_dialog_submissions(asg_id))
+                btn_del.clicked.connect(lambda ch, asg_id=row['id'], td=row.get('tieu_de', ''):
+                                        self._tea_delete_assignment(asg_id, td))
+        # Tong width 35+220+75+125+130+90+165 = 840 (vua khit table 840px)
+        for c, w in enumerate([35, 220, 75, 125, 130, 90, 165]):
+            tbl.setColumnWidth(c, w)
+        tbl.horizontalHeader().setStretchLastSection(False)
+
+    def _tea_dialog_new_assignment(self):
+        """Dialog tao bai tap moi - chon lop + nhap tieu de/mo ta/han nop."""
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle('Giao bài tập mới')
+        dlg.setFixedSize(500, 480)
+        form = QtWidgets.QFormLayout(dlg)
+
+        cbo_lop = QtWidgets.QComboBox()
+        cbo_lop.addItem('-- Chọn lớp --', None)
+        gv_id = MOCK_TEACHER.get('user_id')
+        if DB_AVAILABLE and gv_id:
+            try:
+                rows = CourseService.get_classes_by_teacher(gv_id) or []
+                for r in rows:
+                    cbo_lop.addItem(f"{r['ma_lop']} - {r.get('ten_mon', '')}", r['ma_lop'])
+            except Exception as e:
+                print(f'[TEA_ASG] loi load lop: {e}')
+
+        txt_title = QtWidgets.QLineEdit()
+        txt_title.setPlaceholderText('VD: Bài tập tuần 3 - Vòng lặp')
+        txt_desc = QtWidgets.QTextEdit()
+        txt_desc.setPlaceholderText('Mô tả yêu cầu bài tập (có thể dán link tài liệu, ví dụ...)')
+        txt_desc.setFixedHeight(140)
+
+        dt_han = QtWidgets.QDateTimeEdit()
+        dt_han.setCalendarPopup(True)
+        from PyQt5.QtCore import QDateTime
+        dt_han.setDateTime(QDateTime.currentDateTime().addDays(7))
+        dt_han.setDisplayFormat('dd/MM/yyyy HH:mm')
+
+        spin_diem = QtWidgets.QDoubleSpinBox()
+        spin_diem.setRange(1, 100)
+        spin_diem.setValue(10)
+        spin_diem.setSingleStep(0.5)
+        spin_diem.setSuffix(' điểm')
+
+        form.addRow('Lớp (*):', cbo_lop)
+        form.addRow('Tiêu đề (*):', txt_title)
+        form.addRow('Mô tả:', txt_desc)
+        form.addRow('Hạn nộp:', dt_han)
+        form.addRow('Điểm tối đa:', spin_diem)
+
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        cbo_lop.setFocus()
+
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if cbo_lop.currentIndex() == 0:
+            msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
+            return
+        title = txt_title.text().strip()
+        if not title:
+            msg_warn(self, 'Thiếu', 'Tiêu đề không được trống')
+            return
+        if not (DB_AVAILABLE and AssignmentService and gv_id):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống')
+            return
+        try:
+            han_dt = dt_han.dateTime().toPyDateTime()
+            AssignmentService.create(
+                lop_id=cbo_lop.currentData(),
+                gv_id=gv_id,
+                tieu_de=title,
+                mo_ta=txt_desc.toPlainText(),
+                han_nop=han_dt,
+                diem_toi_da=float(spin_diem.value()),
+            )
+        except Exception as e:
+            print(f'[TEA_ASG] create loi: {e}')
+            msg_warn(self, 'Lỗi', f'Không tạo được:\n{api_error_msg(e)}')
+            return
+        msg_info(self, 'Thành công', f'Đã giao bài "{title}" cho lớp {cbo_lop.currentData()}')
+        self._reload_tea_assignments(self.page_widgets[7])
+
+    def _tea_delete_assignment(self, asg_id, tieu_de):
+        """Xoa 1 bai tap (cascade xoa luon submissions)."""
+        if not msg_confirm_delete(self, 'bài tập', str(asg_id), item_name=tieu_de,
+                                  related='Tất cả bài HV đã nộp cho bài này sẽ bị xoá.'):
+            return
+        if not (DB_AVAILABLE and AssignmentService):
+            return
+        try:
+            AssignmentService.delete(asg_id)
+        except Exception as e:
+            msg_warn(self, 'Lỗi xoá', api_error_msg(e))
+            return
+        msg_info(self, 'Đã xoá', f'Đã xoá bài tập "{tieu_de}"')
+        self._reload_tea_assignments(self.page_widgets[7])
+
+    def _tea_dialog_submissions(self, asg_id):
+        """Dialog xem ds bai HV nop cho 1 assignment + GV cham."""
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle(f'Bài nộp - Bài tập #{asg_id}')
+        dlg.setFixedSize(820, 560)
+        v = QtWidgets.QVBoxLayout(dlg)
+
+        # Header info
+        info_lbl = QtWidgets.QLabel('Đang tải...')
+        info_lbl.setStyleSheet('color: #2d3748; font-size: 12px; padding: 4px;')
+        info_lbl.setWordWrap(True)
+        v.addWidget(info_lbl)
+
+        # Bang ds nop
+        tbl = QtWidgets.QTableWidget()
+        tbl.setColumnCount(6)
+        tbl.setHorizontalHeaderLabels(['MSV', 'Họ tên', 'Trạng thái', 'Nộp lúc', 'Điểm', 'Thao tác'])
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        v.addWidget(tbl)
+
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+
+        def reload_subs():
+            try:
+                asg = AssignmentService.get(asg_id) or {}
+                subs = AssignmentService.get_submissions(asg_id) or []
+            except Exception as e:
+                msg_warn(dlg, 'Lỗi', api_error_msg(e))
+                return
+            han = fmt_date(asg.get('han_nop'), fmt='%d/%m/%Y %H:%M', default='Không hạn')
+            info_lbl.setText(
+                f'<b>{asg.get("tieu_de", "")}</b> · Lớp {asg.get("lop_id", "")} '
+                f'({asg.get("ten_mon", "")}) · Hạn: {han} · '
+                f'Tối đa {asg.get("diem_toi_da", 10)} điểm<br>'
+                f'<span style="color:#718096;">{asg.get("mo_ta", "") or "(không có mô tả)"}</span>'
+            )
+            tbl.setRowCount(len(subs))
+            for r, s in enumerate(subs):
+                tbl.setRowHeight(r, 40)
+                has_sub = s.get('submission_id') is not None
+                graded = s.get('diem') is not None
+                status = 'Đã chấm' if graded else ('Đã nộp' if has_sub else 'Chưa nộp')
+                nop_at = fmt_date(s.get('nop_luc'), fmt='%d/%m/%Y %H:%M', default='—') if has_sub else '—'
+                diem_disp = f"{float(s['diem']):.1f}" if graded else '—'
+                items = [s.get('msv', ''), s.get('full_name', ''),
+                         status, nop_at, diem_disp]
+                for c, val in enumerate(items):
+                    item = QtWidgets.QTableWidgetItem(val)
+                    item.setTextAlignment(Qt.AlignCenter if c != 1 else Qt.AlignLeft | Qt.AlignVCenter)
+                    if c == 2:  # status
+                        style_status_item(item, status)
+                    tbl.setItem(r, c, item)
+                # Action button - dung make_action_cell de dong nhat style
+                if has_sub:
+                    btn_text = 'Sửa điểm' if graded else 'Chấm bài'
+                    cell, (btn,) = make_action_cell([(btn_text, 'navy')])
+                    tbl.setCellWidget(r, 5, cell)
+                    btn.clicked.connect(lambda ch, sub=dict(s), a=dict(asg):
+                                        self._tea_dialog_grade(sub, a, reload_subs))
+                else:
+                    no_lbl = QtWidgets.QLabel('—')
+                    no_lbl.setAlignment(Qt.AlignCenter)
+                    no_lbl.setStyleSheet('color: #a0aec0; font-size: 13px;')
+                    tbl.setCellWidget(r, 5, no_lbl)
+            # Tong width: 90+180+90+130+60+250 = 800 (dialog 820 - margins)
+            for c, w in enumerate([90, 180, 90, 130, 60, 250]):
+                tbl.setColumnWidth(c, w)
+            tbl.horizontalHeader().setStretchLastSection(False)
+
+        reload_subs()
+        dlg.exec_()
+        # Reload bang chinh sau khi dong dialog (so cham co the doi)
+        self._reload_tea_assignments(self.page_widgets[7])
+
+    def _tea_dialog_grade(self, sub, asg, after_save_callback):
+        """Dialog cham diem 1 bai nop + nhan xet."""
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle(f'Chấm bài - {sub.get("full_name", "")}')
+        dlg.setFixedSize(560, 540)
+        v = QtWidgets.QVBoxLayout(dlg)
+
+        # Info HV + bai
+        head = QtWidgets.QLabel(
+            f'<b>{sub.get("full_name", "")}</b> ({sub.get("msv", "")})<br>'
+            f'Bài: <b>{asg.get("tieu_de", "")}</b> · Tối đa {asg.get("diem_toi_da", 10)} điểm'
+        )
+        head.setStyleSheet('color: #2d3748; font-size: 12px; padding: 6px; '
+                           'background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px;')
+        head.setWordWrap(True)
+        v.addWidget(head)
+
+        # Bai nop
+        v.addWidget(QtWidgets.QLabel('<b>Bài nộp:</b>'))
+        sub_view = QtWidgets.QTextEdit()
+        sub_view.setPlainText(sub.get('noi_dung', '') or '(HV nộp file - chưa có nội dung text)')
+        sub_view.setReadOnly(True)
+        sub_view.setFixedHeight(180)
+        sub_view.setStyleSheet('background: #f7fafc; color: #2d3748;')
+        v.addWidget(sub_view)
+
+        # Diem + nhan xet
+        form = QtWidgets.QFormLayout()
+        spin = QtWidgets.QDoubleSpinBox()
+        spin.setRange(0, float(asg.get('diem_toi_da', 10)))
+        spin.setSingleStep(0.5)
+        spin.setSuffix(' điểm')
+        if sub.get('diem') is not None:
+            spin.setValue(float(sub['diem']))
+
+        txt_nx = QtWidgets.QTextEdit()
+        txt_nx.setPlaceholderText('Nhận xét / góp ý cho học viên...')
+        txt_nx.setFixedHeight(100)
+        if sub.get('nhan_xet'):
+            txt_nx.setPlainText(sub['nhan_xet'])
+
+        form.addRow('Điểm:', spin)
+        form.addRow('Nhận xét:', txt_nx)
+        v.addLayout(form)
+
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        sub_id = sub.get('submission_id')
+        if not sub_id:
+            return
+        try:
+            AssignmentService.grade(sub_id, float(spin.value()), txt_nx.toPlainText())
+        except Exception as e:
+            msg_warn(self, 'Lỗi chấm', api_error_msg(e))
+            return
+        msg_info(self, 'Đã chấm', f'Đã lưu điểm {spin.value():.1f} cho {sub.get("full_name", "")}')
+        if after_save_callback:
+            after_save_callback()
+
+    # ===== TEACHER EXAMS PAGE =====
+
+    def _fill_tea_exams(self):
+        """Trang 'Lich thi' - GV tao + xem lich thi cho cac lop minh day."""
+        page = self.page_widgets[8]
+        if not getattr(page, '_built', False):
+            self._build_tea_exams_ui(page)
+            page._built = True
+        self._reload_tea_exams(page)
+
+    def _build_tea_exams_ui(self, page):
+        hb = QtWidgets.QFrame(page)
+        hb.setObjectName('headerBar')
+        hb.setGeometry(0, 0, 870, 56)
+        hb.setStyleSheet('QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }')
+        title = QtWidgets.QLabel('Lịch thi', hb)
+        title.setGeometry(25, 0, 400, 56)
+        title.setStyleSheet('color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;')
+
+        btn_new = QtWidgets.QPushButton('+ Tạo lịch thi', hb)
+        btn_new.setObjectName('btnNewExam')
+        btn_new.setGeometry(710, 12, 140, 32)
+        btn_new.setCursor(Qt.PointingHandCursor)
+        btn_new.setStyleSheet(
+            'QPushButton { background: #002060; color: white; border: none; '
+            'border-radius: 6px; font-size: 12px; font-weight: bold; } '
+            'QPushButton:hover { background: #001a50; }'
+        )
+        btn_new.clicked.connect(self._tea_dialog_new_exam)
+
+        tbl = QtWidgets.QTableWidget(page)
+        tbl.setObjectName('tblTeaExams')
+        tbl.setGeometry(15, 70, 840, 615)
+        tbl.setColumnCount(8)
+        tbl.setHorizontalHeaderLabels(['#', 'Lớp', 'Khóa học', 'Ngày thi',
+                                       'Ca', 'Phòng', 'Hình thức', 'Thao tác'])
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        tbl.setStyleSheet(
+            'QTableWidget { background: white; border: 1px solid #d2d6dc; '
+            'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
+            'QHeaderView::section { background: #f7fafc; color: #4a5568; '
+            'padding: 8px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'font-weight: bold; font-size: 11px; }'
+        )
+        tbl.show()
+
+    def _reload_tea_exams(self, page):
+        tbl = page.findChild(QtWidgets.QTableWidget, 'tblTeaExams')
+        if not tbl:
+            return
+        gv_id = MOCK_TEACHER.get('user_id')
+        rows = []
+        if DB_AVAILABLE and gv_id:
+            try:
+                rows = ExamService.get_for_teacher(gv_id) or []
+            except Exception as e:
+                print(f'[TEA_EXAM] loi: {e}')
+
+        if not rows:
+            set_table_empty_state(tbl, 'Chưa có lịch thi nào - bấm "Tạo lịch thi" để bắt đầu', row_height=80)
+        else:
+            tbl.setRowCount(len(rows))
+            for r, row in enumerate(rows):
+                tbl.setRowHeight(r, 44)
+                ngay = fmt_date(row.get('ngay_thi'))
+                gio_bd = str(row.get('gio_bat_dau', ''))[:5]
+                gio_kt = str(row.get('gio_ket_thuc', ''))[:5]
+                ca_full = row.get('ca_thi', '')
+                if gio_bd and gio_kt:
+                    ca_full = f'{ca_full}\n{gio_bd}-{gio_kt}'
+                items = [str(r + 1), row.get('lop_id', ''), row.get('ten_mon', ''),
+                         ngay, ca_full, row.get('phong', '') or '—',
+                         row.get('hinh_thuc', '') or '']
+                for c, val in enumerate(items):
+                    item = QtWidgets.QTableWidgetItem(str(val))
+                    item.setTextAlignment(Qt.AlignCenter if c != 2 else Qt.AlignLeft | Qt.AlignVCenter)
+                    tbl.setItem(r, c, item)
+                # Action: Xoa
+                cell, (btn_del,) = make_action_cell([('Xoá', 'red')])
+                tbl.setCellWidget(r, 7, cell)
+                btn_del.clicked.connect(lambda ch, eid=row['id'], lop=row.get('lop_id', ''),
+                                        d=fmt_date(row.get('ngay_thi')):
+                                        self._tea_delete_exam(eid, lop, d))
+        # Tong width 35+85+170+90+130+85+105+140 = 840
+        for c, w in enumerate([35, 85, 170, 90, 130, 85, 105, 140]):
+            tbl.setColumnWidth(c, w)
+        tbl.horizontalHeader().setStretchLastSection(False)
+
+    def _tea_dialog_new_exam(self):
+        """Dialog GV tao lich thi moi cho lop minh day."""
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle('Tạo lịch thi mới')
+        dlg.setFixedSize(500, 540)
+        form = QtWidgets.QFormLayout(dlg)
+
+        # Lop combo
+        cbo_lop = QtWidgets.QComboBox()
+        cbo_lop.addItem('-- Chọn lớp --', None)
+        gv_id = MOCK_TEACHER.get('user_id')
+        if DB_AVAILABLE and gv_id:
+            try:
+                rows = CourseService.get_classes_by_teacher(gv_id) or []
+                for r in rows:
+                    cbo_lop.addItem(f"{r['ma_lop']} - {r.get('ten_mon', '')}", r['ma_lop'])
+            except Exception as e:
+                print(f'[TEA_EXAM] loi load lop: {e}')
+
+        # Ngay thi
+        from PyQt5.QtCore import QDate, QTime
+        dt_ngay = QtWidgets.QDateEdit()
+        dt_ngay.setCalendarPopup(True)
+        dt_ngay.setDate(QDate.currentDate().addDays(14))
+        dt_ngay.setDisplayFormat('dd/MM/yyyy')
+
+        # Ca thi (combo)
+        cbo_ca = QtWidgets.QComboBox()
+        cbo_ca.addItems(['Ca 1 (07:30-09:00)', 'Ca 2 (09:30-11:00)',
+                         'Ca 3 (13:30-15:00)', 'Ca 4 (15:30-17:00)'])
+        # Auto-update gio bat dau / gio ket thuc theo ca
+        ca_times = {
+            0: ('07:30', '09:00'),
+            1: ('09:30', '11:00'),
+            2: ('13:30', '15:00'),
+            3: ('15:30', '17:00'),
+        }
+        time_bd = QtWidgets.QTimeEdit(QTime(7, 30))
+        time_bd.setDisplayFormat('HH:mm')
+        time_kt = QtWidgets.QTimeEdit(QTime(9, 0))
+        time_kt.setDisplayFormat('HH:mm')
+
+        def on_ca_changed(idx):
+            t = ca_times.get(idx, ('07:30', '09:00'))
+            h_bd, m_bd = map(int, t[0].split(':'))
+            h_kt, m_kt = map(int, t[1].split(':'))
+            time_bd.setTime(QTime(h_bd, m_bd))
+            time_kt.setTime(QTime(h_kt, m_kt))
+        cbo_ca.currentIndexChanged.connect(on_ca_changed)
+
+        # Phong
+        txt_phong = QtWidgets.QLineEdit('P.A301')
+        txt_phong.setPlaceholderText('VD: P.A301')
+
+        # Hinh thuc
+        cbo_ht = QtWidgets.QComboBox()
+        cbo_ht.addItems(['Trắc nghiệm', 'Tự luận', 'Vấn đáp', 'Thực hành'])
+
+        # So cau (chi cho TN)
+        spin_socau = QtWidgets.QSpinBox()
+        spin_socau.setRange(0, 200)
+        spin_socau.setValue(40)
+        spin_socau.setSpecialValueText('—')  # 0 = N/A
+
+        # Thoi gian phut
+        spin_tg = QtWidgets.QSpinBox()
+        spin_tg.setRange(15, 300)
+        spin_tg.setValue(90)
+        spin_tg.setSuffix(' phút')
+        spin_tg.setSingleStep(15)
+
+        form.addRow('Lớp (*):', cbo_lop)
+        form.addRow('Ngày thi (*):', dt_ngay)
+        form.addRow('Ca thi:', cbo_ca)
+        form.addRow('Giờ bắt đầu:', time_bd)
+        form.addRow('Giờ kết thúc:', time_kt)
+        form.addRow('Phòng thi:', txt_phong)
+        form.addRow('Hình thức:', cbo_ht)
+        form.addRow('Số câu (TN):', spin_socau)
+        form.addRow('Thời gian:', spin_tg)
+
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        cbo_lop.setFocus()
+
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if cbo_lop.currentIndex() == 0:
+            msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
+            return
+        # Map hinh thuc VN -> ASCII (DB schema dung Tu luan/Trac nghiem)
+        ht_map = {'Trắc nghiệm': 'Trac nghiem', 'Tự luận': 'Tu luan',
+                  'Vấn đáp': 'Van dap', 'Thực hành': 'Thuc hanh'}
+        if not (DB_AVAILABLE and ExamService):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống')
+            return
+        try:
+            ExamService.create(
+                lop_id=cbo_lop.currentData(),
+                ngay_thi=dt_ngay.date().toString('yyyy-MM-dd'),
+                ca_thi=cbo_ca.currentText().split(' (')[0],  # 'Ca 1'
+                phong=txt_phong.text().strip() or None,
+                hinh_thuc=ht_map.get(cbo_ht.currentText(), 'Tu luan'),
+                gio_bat_dau=time_bd.time().toString('HH:mm:ss'),
+                gio_ket_thuc=time_kt.time().toString('HH:mm:ss'),
+                so_cau=spin_socau.value() or None,
+                thoi_gian_phut=spin_tg.value(),
+            )
+        except Exception as e:
+            print(f'[TEA_EXAM] create loi: {e}')
+            msg_warn(self, 'Lỗi tạo', api_error_msg(e))
+            return
+        msg_info(self, 'Thành công',
+                 f'Đã tạo lịch thi cho {cbo_lop.currentData()} '
+                 f'ngày {dt_ngay.date().toString("dd/MM/yyyy")}')
+        self._reload_tea_exams(self.page_widgets[8])
+
+    def _tea_delete_exam(self, exam_id, lop, ngay):
+        if not msg_confirm_delete(self, 'lịch thi', str(exam_id),
+                                  item_name=f'{lop} ngày {ngay}'):
+            return
+        if not (DB_AVAILABLE and ExamService):
+            return
+        try:
+            ExamService.delete(exam_id)
+        except Exception as e:
+            msg_warn(self, 'Lỗi xoá', api_error_msg(e))
+            return
+        msg_info(self, 'Đã xoá', f'Đã xoá lịch thi #{exam_id}')
+        self._reload_tea_exams(self.page_widgets[8])
+
+    def _fill_tea_profile(self):
+        page = self.page_widgets[9]  # btnTeaProfile shifted to idx 9 sau khi insert btnTeaExam
         u = MOCK_TEACHER
-        # Cast moi value sang str de tranh crash khi gap int/None (vd id la int khi chua sync)
-        for attr, val in [('lblProfileName', u['name']), ('lblProfileRole', f"Giảng viên - Khoa {u['khoa']}"),
-                          ('lblProfileAvatar', u['initials']), ('valMaSV', u['id']), ('valHoTen', u['name']),
-                          ('valLop', u['hocvi']), ('valKhoa', u['khoa'])]:
+        # Dung .get() de tranh KeyError sau clear_session_state()
+        for attr, val in [('lblProfileName', u.get('name', '')),
+                          ('lblProfileRole', f"Giảng viên - {u.get('khoa', '') or '—'}"),
+                          ('lblProfileAvatar', u.get('initials', '?')),
+                          ('valMaSV', u.get('id', '')),
+                          ('valHoTen', u.get('name', '')),
+                          ('valLop', u.get('hocvi', '')),
+                          ('valKhoa', u.get('khoa', ''))]:
             w = page.findChild(QtWidgets.QLabel, attr)
             if w:
                 w.setText('' if val is None else str(val))
-        for attr, val in [('txtEmail', u['email']), ('txtPhone', u['sdt'])]:
+        for attr, val in [('txtEmail', u.get('email', '')), ('txtPhone', u.get('sdt', ''))]:
             w = page.findChild(QtWidgets.QLineEdit, attr)
             if w:
                 w.setText('' if val is None else str(val))
@@ -6695,7 +7484,7 @@ class TeacherWindow(QtWidgets.QWidget):
             safe_connect(btn_cp.clicked, lambda: self._tea_change_pass())
 
     def _save_tea_profile(self):
-        page = self.page_widgets[7]
+        page = self.page_widgets[9]  # btnTeaProfile idx 9
         email = page.findChild(QtWidgets.QLineEdit, 'txtEmail')
         phone = page.findChild(QtWidgets.QLineEdit, 'txtPhone')
         updates = {}

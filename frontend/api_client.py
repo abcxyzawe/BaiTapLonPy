@@ -525,6 +525,10 @@ class ExamService:
     def get_for_class(lop_id): return _get(f'/exams/class/{lop_id}')
 
     @staticmethod
+    def get_for_teacher(gv_id):
+        return _get(f'/exams/teacher/{gv_id}')
+
+    @staticmethod
     def create(lop_id, ngay_thi, ca_thi, phong=None, hinh_thuc='Tu luan', semester_id=None,
                gio_bat_dau=None, gio_ket_thuc=None, so_cau=None, thoi_gian_phut=90):
         return _post('/exams', {
@@ -533,6 +537,9 @@ class ExamService:
             'gio_bat_dau': gio_bat_dau, 'gio_ket_thuc': gio_ket_thuc,
             'so_cau': so_cau, 'thoi_gian_phut': thoi_gian_phut
         })
+
+    @staticmethod
+    def delete(exam_id): return _delete(f'/exams/{exam_id}')
 
 
 class AttendanceService:
@@ -577,3 +584,73 @@ class AuditService:
 
     @staticmethod
     def purge_old(days=90): return _delete('/audit/purge', days=days)
+
+
+class AssignmentService:
+    """Bai tap GV giao + HV nop + GV cham."""
+
+    # GV
+    @staticmethod
+    def create(lop_id, gv_id, tieu_de, mo_ta='', han_nop=None, diem_toi_da=10):
+        return _post('/assignments', {
+            'lop_id': lop_id, 'gv_id': gv_id,
+            'tieu_de': tieu_de, 'mo_ta': mo_ta,
+            'han_nop': han_nop.isoformat() if han_nop else None,
+            'diem_toi_da': diem_toi_da,
+        })
+
+    @staticmethod
+    def update(asg_id, **fields):
+        # han_nop -> isoformat string for API
+        if 'han_nop' in fields and fields['han_nop'] is not None:
+            try:
+                fields['han_nop'] = fields['han_nop'].isoformat()
+            except AttributeError:
+                pass
+        return _put(f'/assignments/{asg_id}', {k: v for k, v in fields.items() if v is not None})
+
+    @staticmethod
+    def delete(asg_id):
+        return _delete(f'/assignments/{asg_id}')
+
+    @staticmethod
+    def get(asg_id):
+        return _get(f'/assignments/{asg_id}')
+
+    @staticmethod
+    def get_by_teacher(gv_id):
+        return _get(f'/assignments/teacher/{gv_id}')
+
+    @staticmethod
+    def get_submissions(asg_id):
+        return _get(f'/assignments/{asg_id}/submissions')
+
+    # HV
+    @staticmethod
+    def get_by_class(lop_id):
+        return _get(f'/assignments/class/{lop_id}')
+
+    @staticmethod
+    def get_my_submission(asg_id, hv_id):
+        return _get(f'/assignments/{asg_id}/submission/{hv_id}')
+
+    @staticmethod
+    def get_pending(hv_id):
+        return _get(f'/assignments/student/{hv_id}/pending')
+
+    @staticmethod
+    def submit(assignment_id, hv_id, noi_dung, file_url=None):
+        return _post('/submissions', {
+            'assignment_id': assignment_id, 'hv_id': hv_id,
+            'noi_dung': noi_dung, 'file_url': file_url,
+        })
+
+    @staticmethod
+    def get_history(hv_id):
+        return _get(f'/submissions/student/{hv_id}')
+
+    @staticmethod
+    def grade(sub_id, diem, nhan_xet=''):
+        return _post(f'/submissions/{sub_id}/grade', {
+            'diem': diem, 'nhan_xet': nhan_xet
+        })

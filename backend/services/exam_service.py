@@ -47,15 +47,41 @@ class ExamService:
         )
 
     @staticmethod
+    def get_for_teacher(gv_id: int):
+        """Lich thi cua GV (cac lop GV day) - tat ca semester."""
+        sql = """
+            SELECT es.*, c.ma_mon, co.ten_mon
+              FROM exam_schedules es
+              JOIN classes c ON c.ma_lop = es.lop_id
+         LEFT JOIN courses co ON co.ma_mon = c.ma_mon
+             WHERE c.gv_id = %s
+             ORDER BY es.ngay_thi DESC, es.ca_thi
+        """
+        return db.fetch_all(sql, (gv_id,))
+
+    @staticmethod
     def create(lop_id: str, ngay_thi, ca_thi: str, phong: str = None,
                hinh_thuc: str = 'Tu luan', semester_id: str = None,
                gio_bat_dau=None, gio_ket_thuc=None,
                so_cau: int = None, thoi_gian_phut: int = 90):
-        db.execute(
+        # Auto fill semester_id from class if not provided
+        if not semester_id:
+            row = db.fetch_one(
+                'SELECT semester_id FROM classes WHERE ma_lop = %s', (lop_id,)
+            )
+            if row:
+                semester_id = row.get('semester_id')
+        row = db.execute_returning(
             """INSERT INTO exam_schedules
                (lop_id, semester_id, ngay_thi, ca_thi, gio_bat_dau, gio_ket_thuc,
                 phong, hinh_thuc, so_cau, thoi_gian_phut)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               RETURNING id""",
             (lop_id, semester_id, ngay_thi, ca_thi, gio_bat_dau, gio_ket_thuc,
              phong, hinh_thuc, so_cau, thoi_gian_phut)
         )
+        return row['id'] if row else None
+
+    @staticmethod
+    def delete(exam_id: int) -> bool:
+        return db.execute('DELETE FROM exam_schedules WHERE id = %s', (exam_id,)) > 0
