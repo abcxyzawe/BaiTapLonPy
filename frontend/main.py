@@ -1829,6 +1829,219 @@ def show_detail_dialog(parent, title, fields, avatar_text=None, subtitle=None):
     dlg.exec_()
 
 
+def show_today_sessions_dialog(parent, sessions, role='hv'):
+    """Popup hien tat ca buoi hoc/day cua HOM NAY voi gio + lop + phong + GV/siso.
+    Sap xep theo gio_bat_dau."""
+    from datetime import date as _date, datetime as _dt
+    navy = '#002060'
+    border = '#d2d6dc'
+
+    # Sort theo gio bat dau
+    rows = sorted(sessions or [], key=lambda s: str(s.get('gio_bat_dau', '')))
+
+    dlg = QtWidgets.QDialog(parent)
+    title_role = 'Lịch học hôm nay' if role == 'hv' else 'Lịch dạy hôm nay'
+    dlg.setWindowTitle(title_role)
+    dlg.setFixedSize(540, min(180 + len(rows) * 90, 600))
+    dlg.setFont(QFont('Segoe UI', 10))
+    dlg.setStyleSheet('QDialog { background: white; font-family: "Segoe UI"; }')
+
+    lay = QtWidgets.QVBoxLayout(dlg)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(0)
+
+    # Header navy
+    header = QtWidgets.QFrame()
+    header.setFixedHeight(72)
+    header.setStyleSheet(f'QFrame {{ background: {navy}; border: none; }}')
+    hv = QtWidgets.QVBoxLayout(header)
+    hv.setContentsMargins(20, 12, 20, 10)
+    hv.setSpacing(2)
+    today_str = _dt.now().strftime('%A, %d/%m/%Y')
+    # Translate weekday EN -> VN
+    en_to_vn = {'Monday': 'Thứ Hai', 'Tuesday': 'Thứ Ba', 'Wednesday': 'Thứ Tư',
+                'Thursday': 'Thứ Năm', 'Friday': 'Thứ Sáu', 'Saturday': 'Thứ Bảy',
+                'Sunday': 'Chủ Nhật'}
+    for en, vn in en_to_vn.items():
+        if today_str.startswith(en):
+            today_str = today_str.replace(en, vn, 1)
+            break
+    lbl_title = QtWidgets.QLabel(f'🕐  {title_role}')
+    lbl_title.setStyleSheet('color: white; font-size: 15px; font-weight: bold; background: transparent;')
+    hv.addWidget(lbl_title)
+    lbl_sub = QtWidgets.QLabel(f'{today_str}  ·  {len(rows)} buổi')
+    lbl_sub.setStyleSheet('color: rgba(255,255,255,0.78); font-size: 11px; background: transparent;')
+    hv.addWidget(lbl_sub)
+    lay.addWidget(header)
+
+    # Body: scrollable list of session cards
+    body = QtWidgets.QScrollArea()
+    body.setWidgetResizable(True)
+    body.setStyleSheet('QScrollArea { border: none; background: white; } '
+                        'QScrollBar:vertical { width: 8px; background: transparent; } '
+                        'QScrollBar::handle:vertical { background: #c4c7cc; border-radius: 4px; min-height: 30px; }')
+    inner = QtWidgets.QWidget()
+    inner.setStyleSheet('background: white;')
+    iv = QtWidgets.QVBoxLayout(inner)
+    iv.setContentsMargins(18, 14, 18, 14)
+    iv.setSpacing(10)
+
+    if not rows:
+        empty = QtWidgets.QLabel('✓ Không có buổi nào hôm nay')
+        empty.setStyleSheet('color: #718096; font-size: 13px; padding: 30px; '
+                             'background: #f7fafc; border: 1px dashed #cbd5e0; border-radius: 8px;')
+        empty.setAlignment(Qt.AlignCenter)
+        iv.addWidget(empty)
+    else:
+        # Color palette per lop
+        palette = ['#002060', '#c68a1e', '#276749', '#c53030', '#3182ce']
+        color_by_lop = {}
+        for sc in rows:
+            ma_lop = sc.get('lop_id', '?') or '?'
+            if ma_lop not in color_by_lop:
+                color_by_lop[ma_lop] = palette[len(color_by_lop) % len(palette)]
+            color = color_by_lop[ma_lop]
+            ten_mon = sc.get('ten_mon', '') or '—'
+            gio_bd = str(sc.get('gio_bat_dau', ''))[:5]
+            gio_kt = str(sc.get('gio_ket_thuc', ''))[:5]
+            phong = sc.get('phong', '') or '—'
+            buoi_so = sc.get('buoi_so')
+
+            card = QtWidgets.QFrame()
+            card.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #e2e8f0; '
+                                f'border-radius: 8px; border-left: 4px solid {color}; }}')
+            cv = QtWidgets.QVBoxLayout(card)
+            cv.setContentsMargins(14, 10, 14, 10)
+            cv.setSpacing(4)
+
+            # Dong 1: Gio + Lop
+            l1 = QtWidgets.QLabel(f'<b style="color:{color}; font-size:14px;">{gio_bd} - {gio_kt}</b>'
+                                    f'  <span style="color:#4a5568; font-size:13px;">·  {ma_lop}</span>')
+            l1.setStyleSheet('background: transparent; border: none;')
+            cv.addWidget(l1)
+
+            # Dong 2: Ten mon
+            l2 = QtWidgets.QLabel(ten_mon)
+            l2.setStyleSheet('color: #1a1a2e; font-size: 12px; font-weight: bold; '
+                              'background: transparent; border: none;')
+            l2.setWordWrap(True)
+            cv.addWidget(l2)
+
+            # Dong 3: Info phu
+            extra_parts = [f'📍 Phòng {phong}']
+            if buoi_so:
+                extra_parts.append(f'📖 Buổi {buoi_so}')
+            if role == 'hv':
+                gv = sc.get('ten_gv', '') or ''
+                if gv:
+                    extra_parts.append(f'👨‍🏫 {gv}')
+            else:
+                siso = sc.get('siso_hien_tai')
+                if siso is not None:
+                    extra_parts.append(f'👥 {siso} HV')
+            l3 = QtWidgets.QLabel('  ·  '.join(extra_parts))
+            l3.setStyleSheet('color: #718096; font-size: 11px; background: transparent; border: none;')
+            cv.addWidget(l3)
+
+            iv.addWidget(card)
+
+    iv.addStretch()
+    body.setWidget(inner)
+    lay.addWidget(body, 1)
+
+    # Footer
+    footer = QtWidgets.QFrame()
+    footer.setFixedHeight(54)
+    footer.setStyleSheet(f'QFrame {{ background: #f7fafc; border-top: 1px solid {border}; }}')
+    fl = QtWidgets.QHBoxLayout(footer)
+    fl.setContentsMargins(20, 10, 20, 10)
+    fl.setAlignment(Qt.AlignRight)
+    btn_close = QtWidgets.QPushButton('Đóng')
+    btn_close.setFixedSize(110, 34)
+    btn_close.setCursor(Qt.PointingHandCursor)
+    btn_close.setStyleSheet(f'QPushButton {{ background: {navy}; color: white; border: none; '
+                              f'border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                              f'QPushButton:hover {{ background: #1a3a6c; }}')
+    btn_close.clicked.connect(dlg.accept)
+    fl.addWidget(btn_close)
+    lay.addWidget(footer)
+
+    dlg.exec_()
+
+
+def show_exam_detail_dialog(parent, exam_row, role='hv'):
+    """Popup chi tiet 1 ca thi khi click vao row tbl. role: 'hv' | 'gv'.
+    exam_row: dict {ma_mon, ten_mon, lop_id, ngay_thi, ca_thi, gio_bat_dau, gio_ket_thuc,
+                    phong, hinh_thuc, ten_gv, semester_id, ...}
+    """
+    from datetime import date as _date
+    ngay_v = exam_row.get('ngay_thi') or exam_row.get('ngay', '')
+    ngay_d = None
+    if isinstance(ngay_v, _date):
+        ngay_d = ngay_v
+        ngay_str = ngay_v.strftime('%d/%m/%Y')
+    else:
+        try:
+            ngay_d = _date.fromisoformat(str(ngay_v)[:10])
+            ngay_str = ngay_d.strftime('%d/%m/%Y')
+        except Exception:
+            ngay_str = str(ngay_v)[:10] or '—'
+    if ngay_d:
+        thu_vn = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm',
+                   'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][ngay_d.weekday()]
+        ngay_str = f'{thu_vn}, {ngay_str}'
+        # Days_left countdown
+        today = _date.today()
+        dl = (ngay_d - today).days
+        if dl > 0:
+            ngay_str += f'  ·  Còn {dl} ngày'
+        elif dl == 0:
+            ngay_str += '  ·  HÔM NAY'
+        else:
+            ngay_str += f'  ·  Đã thi {-dl} ngày trước'
+
+    gio_bd = str(exam_row.get('gio_bat_dau', ''))[:5]
+    gio_kt = str(exam_row.get('gio_ket_thuc', ''))[:5]
+    gio_str = f'{gio_bd} - {gio_kt}' if gio_bd and gio_kt else '—'
+    ca_thi = exam_row.get('ca_thi', '') or ''
+    if gio_str != '—' and ca_thi:
+        ca_full = f'{ca_thi}  ({gio_str})'
+    elif ca_thi:
+        ca_full = ca_thi
+    else:
+        ca_full = gio_str
+
+    ma_lop = exam_row.get('lop_id', '') or '—'
+    ten_mon = exam_row.get('ten_mon', '') or '—'
+    ma_mon = exam_row.get('ma_mon', '') or ma_lop
+    phong = exam_row.get('phong', '') or '—'
+    hinh_thuc = exam_row.get('hinh_thuc', '') or '—'
+    sem_id = exam_row.get('semester_id', '') or '—'
+
+    fields = [
+        ('NGÀY THI', ngay_str),
+        ('CA THI / GIỜ', ca_full),
+        ('PHÒNG THI', phong),
+        ('LỚP', ma_lop),
+        ('KHÓA HỌC', ten_mon),
+        ('HÌNH THỨC', hinh_thuc),
+    ]
+    if role == 'hv':
+        gv_name = exam_row.get('ten_gv', '') or ''
+        if gv_name:
+            fields.append(('GIẢNG VIÊN', gv_name))
+    if sem_id and sem_id != '—':
+        fields.append(('ĐỢT', sem_id))
+
+    show_detail_dialog(
+        parent,
+        title=f'Chi tiết ca thi · {ma_lop}',
+        fields=fields,
+        avatar_text=ma_mon[:2] if ma_mon != '—' else '?',
+        subtitle=ten_mon,
+    )
+
+
 def pick_week_jumper_dialog(parent, current_qdate=None, title='Chọn ngày để xem tuần'):
     """Dialog cho user chon 1 ngay tuy y -> tra ve QDate cua ngay duoc chon
     (caller tu lay Monday cua tuan chua ngay do).
@@ -2218,6 +2431,75 @@ def add_maximize_button(sidebar, win):
     )
     btn.clicked.connect(lambda: toggle_max_window(win))
     return btn
+
+
+def add_sidebar_context_widget(sidebar, show_semester=True):
+    """Hop 'Hom nay + Dot' o duoi sidebar - dat truoc sep2 (y=610).
+
+    Hien:
+        Hom nay
+        Thu X · dd/MM/yyyy
+        ──────────────
+        Đợt: HK2 · 2025-2026   (neu show_semester va co data)
+    """
+    from datetime import date as _date
+    today = _date.today()
+    thu_vn = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm',
+               'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][today.weekday()]
+    date_str = today.strftime('%d/%m/%Y')
+
+    # Lay current semester (best-effort, khong block UI)
+    sem_text = ''
+    if show_semester:
+        try:
+            if 'SemesterService' in globals() and SemesterService and DB_AVAILABLE:
+                cur = SemesterService.get_current()
+                if cur:
+                    nm = cur.get('ten') or cur.get('id', '')
+                    nh = cur.get('nam_hoc', '')
+                    sem_text = f'{nm} · {nh}' if nh else nm
+        except Exception:
+            sem_text = ''
+
+    # Frame chua + chieu cao linh hoat tuy theo co semester hay khong
+    h = 70 if sem_text else 48
+    y = 610 - h - 8  # cach sep2 8px
+    frame = QtWidgets.QFrame(sidebar)
+    frame.setObjectName('sidebarContextBox')
+    frame.setGeometry(15, y, 200, h)
+    frame.setStyleSheet(
+        'QFrame#sidebarContextBox { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; }'
+    )
+
+    cap = QtWidgets.QLabel('📅 Hôm nay', frame)
+    cap.setGeometry(10, 6, 180, 14)
+    cap.setStyleSheet('color: #718096; font-size: 9px; font-weight: bold; '
+                      'background: transparent; border: none; letter-spacing: 0.5px;')
+
+    val = QtWidgets.QLabel(f'{thu_vn} · {date_str}', frame)
+    val.setGeometry(10, 22, 180, 18)
+    val.setStyleSheet('color: #002060; font-size: 11px; font-weight: bold; '
+                      'background: transparent; border: none;')
+
+    if sem_text:
+        # Mini sep
+        mini = QtWidgets.QFrame(frame)
+        mini.setGeometry(10, 42, 180, 1)
+        mini.setStyleSheet('background: #e2e8f0; border: none;')
+
+        cap2 = QtWidgets.QLabel('🎓 Đợt hiện tại', frame)
+        cap2.setGeometry(10, 46, 180, 14)
+        cap2.setStyleSheet('color: #718096; font-size: 9px; font-weight: bold; '
+                           'background: transparent; border: none; letter-spacing: 0.5px;')
+
+        val2 = QtWidgets.QLabel(sem_text, frame)
+        val2.setGeometry(10, 56, 180, 12)
+        val2.setStyleSheet('color: #c05621; font-size: 10px; font-weight: bold; '
+                           'background: transparent; border: none;')
+
+    frame.setToolTip(f'Hôm nay: {thu_vn}, {date_str}'
+                     + (f'\nĐợt: {sem_text}' if sem_text else ''))
+    return frame
 
 
 def widen_search(page, txt_name, new_width, shift_after=None):
@@ -2823,6 +3105,9 @@ class MainWindow(QtWidgets.QWidget):
             btn = getattr(self, btn_name)
             btn.clicked.connect(lambda checked, idx=i: self._on_nav(idx))
 
+        # Hop "Hom nay + Dot" - context-aware UX
+        add_sidebar_context_widget(sidebar)
+
         # duong ke duoi
         sep2 = QtWidgets.QFrame(sidebar)
         sep2.setGeometry(15, 610, 200, 1)
@@ -3248,6 +3533,7 @@ class MainWindow(QtWidgets.QWidget):
         banner.setGeometry(25, 248, 820, 38)
         if sched_today:
             banner.setStyleSheet('QFrame#todayBanner { background: #f0f7ff; border: 1px solid #c0d4eb; border-left: 4px solid #002060; border-radius: 8px; }')
+            banner.setCursor(Qt.PointingHandCursor)
             # Lay buoi som nhat
             sched_today.sort(key=lambda s: str(s.get('gio_bat_dau', '')))
             first = sched_today[0]
@@ -3258,6 +3544,12 @@ class MainWindow(QtWidgets.QWidget):
             extra = f' (và {len(sched_today) - 1} buổi nữa)' if len(sched_today) > 1 else ''
             text = f'🕐  Hôm nay: {gio_bd} - {gio_kt}  •  {ten_mon}  •  Phòng {phong}{extra}'
             color = '#1a1a2e'
+            banner.setToolTip('Click để xem chi tiết tất cả buổi học hôm nay')
+            # Click banner -> popup show all sessions today
+            def _click(ev, _list=sched_today):
+                if ev.button() == Qt.LeftButton:
+                    show_today_sessions_dialog(self, _list, role='hv')
+            banner.mousePressEvent = _click
         else:
             banner.setStyleSheet('QFrame#todayBanner { background: #f7fafc; border: 1px dashed #cbd5e0; border-radius: 8px; }')
             text = '✓  Hôm nay không có lịch học'
@@ -3267,6 +3559,10 @@ class MainWindow(QtWidgets.QWidget):
         lbl.setGeometry(15, 0, 800, 38)
         lbl.setStyleSheet(f'color: {color}; font-size: 12px; background: transparent; border: none;')
         lbl.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        # Forward click tu label sang banner (label co the chan event)
+        if sched_today:
+            lbl.setCursor(Qt.PointingHandCursor)
+            lbl.mousePressEvent = banner.mousePressEvent
         banner.show()
 
         # Day tableFrame xuong de chua banner
@@ -3732,19 +4028,197 @@ class MainWindow(QtWidgets.QWidget):
             except Exception as e:
                 print(f'[STU_EXAM] API loi: {e}')
 
+        # Summary banner: dem so mon thi <=7 ngay
+        n_today = n_soon_3 = n_soon_7 = 0
+        first_upcoming_row = None  # de scroll khi click banner
+
         if not data:
             set_table_empty_state(tbl, 'Chưa có lịch thi nào')
         else:
             tbl.setRowCount(len(data))
+            from datetime import date as _date
+            today = _date.today()
             for r, row in enumerate(data):
+                # Tinh days_left tu raw row (cache)
+                days_left = None
+                ngay_d = None
+                if r < len(self._stu_exam_rows_cache):
+                    raw = self._stu_exam_rows_cache[r]
+                    ngay_v = raw.get('ngay_thi') or raw.get('ngay', '')
+                    if isinstance(ngay_v, _date):
+                        ngay_d = ngay_v
+                    else:
+                        try:
+                            ngay_d = _date.fromisoformat(str(ngay_v)[:10])
+                        except Exception:
+                            ngay_d = None
+                    if ngay_d:
+                        days_left = (ngay_d - today).days
+
+                # Color row theo days_left
+                #  HOM NAY     -> nen vang dam, text do
+                #  1-3 ngay    -> nen do nhat, text do, bold
+                #  4-7 ngay    -> nen vang nhat, text cam
+                #  da thi      -> nen xam nhat, text gray italic
+                #  binh thuong -> default
+                bg_color = None
+                fg_color = None
+                bold = False
+                italic = False
+                if days_left is None:
+                    pass
+                elif days_left == 0:
+                    bg_color = '#fef3c7'   # yellow 100
+                    fg_color = '#9a3412'   # orange 800
+                    bold = True
+                    n_today += 1
+                    if first_upcoming_row is None:
+                        first_upcoming_row = r
+                elif 1 <= days_left <= 3:
+                    bg_color = '#fee2e2'   # red 100
+                    fg_color = '#991b1b'   # red 800
+                    bold = True
+                    n_soon_3 += 1
+                    if first_upcoming_row is None:
+                        first_upcoming_row = r
+                elif 4 <= days_left <= 7:
+                    bg_color = '#fef9e7'   # yellow 50
+                    fg_color = '#92400e'   # amber 800
+                    n_soon_7 += 1
+                    if first_upcoming_row is None:
+                        first_upcoming_row = r
+                elif days_left < 0:
+                    bg_color = '#f7fafc'
+                    fg_color = '#9ca3af'
+                    italic = True
+
                 for c, val in enumerate(row):
-                    tbl.setItem(r, c, QtWidgets.QTableWidgetItem(val))
+                    item = QtWidgets.QTableWidgetItem(val)
+                    if bg_color:
+                        item.setBackground(QColor(bg_color))
+                    if fg_color:
+                        item.setForeground(QColor(fg_color))
+                    if bold or italic:
+                        f = item.font()
+                        if bold: f.setBold(True)
+                        if italic: f.setItalic(True)
+                        item.setFont(f)
+                    tbl.setItem(r, c, item)
+
+                # Append countdown text vao cell Phong (cot 5) hoac Ngay (cot 3)
+                # Show "HÔM NAY!" hoac "Còn N ngày" o cell Ca thi (cot 4)
+                if days_left is not None and days_left >= 0 and days_left <= 7:
+                    ca_item = tbl.item(r, 4)
+                    if ca_item:
+                        old_txt = ca_item.text()
+                        if days_left == 0:
+                            badge = '\n⚠ HÔM NAY!'
+                        else:
+                            badge = f'\nCòn {days_left} ngày'
+                        ca_item.setText(old_txt + badge)
+                # Tooltip cho ca row
+                if days_left is not None and tbl.item(r, 0):
+                    if days_left > 0:
+                        tip = f'Còn {days_left} ngày nữa thi'
+                    elif days_left == 0:
+                        tip = 'Thi hôm nay - chuẩn bị sẵn!'
+                    else:
+                        tip = f'Đã thi cách đây {-days_left} ngày'
+                    for c in range(7):
+                        if tbl.item(r, c):
+                            tbl.item(r, c).setToolTip(tip)
+
+            # Row height: 52 cho row co badge "Hom nay/Con N ngay", 40 cho row binh thuong
             for r in range(len(data)):
-                tbl.setRowHeight(r, 40)
+                ca_item = tbl.item(r, 4)
+                has_badge = ca_item and ('\n' in ca_item.text())
+                tbl.setRowHeight(r, 52 if has_badge else 40)
+            # Tooltip nhac user double-click
+            for r in range(len(data)):
+                for c in range(min(7, tbl.columnCount())):
+                    it = tbl.item(r, c)
+                    if it and not it.toolTip():
+                        it.setToolTip('Double-click để xem chi tiết ca thi')
         tbl.horizontalHeader().setStretchLastSection(True)
         for c, w in enumerate([30, 65, 140, 85, 135, 80]):
             tbl.setColumnWidth(c, w)
         tbl.verticalHeader().setVisible(False)
+
+        # Wire double-click row -> popup detail (1 lan)
+        if not getattr(self, '_stu_exam_dblclick_wired', False):
+            tbl.cellDoubleClicked.connect(self._stu_on_exam_dblclick)
+            self._stu_exam_dblclick_wired = True
+
+        # === Banner summary mon thi sap toi (≤7 ngay) ===
+        # Cleanup banner cu (truoc khi tao moi)
+        for old in page.findChildren(QtWidgets.QFrame):
+            if old.objectName() == 'examTodayBanner':
+                old.setParent(None); old.deleteLater()
+
+        n_total_soon = n_today + n_soon_3 + n_soon_7
+        if n_total_soon > 0:
+            banner = QtWidgets.QFrame(page)
+            banner.setObjectName('examTodayBanner')
+            banner.setGeometry(25, 60, 820, 38)
+            # Mau theo do gan
+            if n_today > 0:
+                bg = '#fef3c7'; left = '#c05621'; text_clr = '#9a3412'
+            elif n_soon_3 > 0:
+                bg = '#fee2e2'; left = '#dc2626'; text_clr = '#991b1b'
+            else:
+                bg = '#fef9e7'; left = '#d97706'; text_clr = '#92400e'
+            banner.setStyleSheet(
+                f'QFrame#examTodayBanner {{ background: {bg}; border: 1px solid {left}; '
+                f'border-left: 4px solid {left}; border-radius: 8px; }}'
+            )
+            banner.setCursor(Qt.PointingHandCursor)
+
+            # Build text
+            parts = []
+            if n_today > 0:
+                parts.append(f'<b>{n_today}</b> môn thi <b style="color:#9a3412;">HÔM NAY</b>')
+            if n_soon_3 > 0:
+                parts.append(f'<b>{n_soon_3}</b> môn trong 3 ngày')
+            if n_soon_7 > 0:
+                parts.append(f'<b>{n_soon_7}</b> môn trong 4-7 ngày')
+            text_html = f'🔔 Bạn có {" · ".join(parts)} — <span style="color:#1e3a8a;">click để xem ngay</span>'
+
+            lbl = QtWidgets.QLabel(text_html, banner)
+            lbl.setGeometry(15, 0, 800, 38)
+            lbl.setStyleSheet(f'color: {text_clr}; font-size: 12px; background: transparent; border: none;')
+            lbl.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+            lbl.setTextFormat(Qt.RichText)
+            banner.setToolTip(f'{n_total_soon} môn thi sắp tới — click để jump tới mục đầu tiên')
+            # Click banner -> scroll to first upcoming row
+            target_row = first_upcoming_row
+            def _click(ev, _r=target_row):
+                if ev.button() == Qt.LeftButton and _r is not None:
+                    tbl.selectRow(_r)
+                    tbl.scrollToItem(tbl.item(_r, 0), QtWidgets.QAbstractItemView.PositionAtCenter)
+                    tbl.setFocus()
+            banner.mousePressEvent = _click
+            lbl.setCursor(Qt.PointingHandCursor)
+            lbl.mousePressEvent = _click
+            banner.show()
+
+            # Day examFrame xuong de chua banner
+            ef = page.findChild(QtWidgets.QFrame, 'examFrame')
+            if ef:
+                g = ef.geometry()
+                new_y = 104
+                if g.y() != new_y:
+                    new_h = max(g.height() - (new_y - g.y()), 200)
+                    ef.setGeometry(g.x(), new_y, g.width(), new_h)
+                    # Resize tbl ben trong (height giam tuong ung)
+                    tg = tbl.geometry()
+                    tbl.setGeometry(tg.x(), tg.y(), tg.width(), max(tg.height() - 32, 200))
+        else:
+            # Reset examFrame ve geometry mac dinh neu khong co banner
+            ef = page.findChild(QtWidgets.QFrame, 'examFrame')
+            if ef:
+                g = ef.geometry()
+                if g.y() != 72:
+                    ef.setGeometry(g.x(), 72, g.width(), g.height() + (g.y() - 72))
 
         # Load combo semester dynamic + filter theo sem_id thuc
         cbo = page.findChild(QtWidgets.QComboBox, 'cboSemester')
@@ -3775,6 +4249,13 @@ class MainWindow(QtWidgets.QWidget):
                 tbl.setRowHidden(r, False)
             elif r < len(self._exam_sem_ids):
                 tbl.setRowHidden(r, self._exam_sem_ids[r] != sem_id)
+
+    def _stu_on_exam_dblclick(self, row, col):
+        """HV double-click 1 row tbl Lich thi -> popup chi tiet ca thi."""
+        cache = getattr(self, '_stu_exam_rows_cache', [])
+        if row < 0 or row >= len(cache):
+            return
+        show_exam_detail_dialog(self, cache[row], role='hv')
 
     def _fill_grades(self):
         page = self.page_widgets[3]
@@ -4451,11 +4932,46 @@ class MainWindow(QtWidgets.QWidget):
             msg_warn(self, 'Đánh giá', f'Lưu đánh giá thất bại:\n{e}')
 
     def _fill_notifications(self):
-        """Generate cards dong theo so notif tu API, giu design cua .ui (border-left mau theo loai)."""
+        """Load notifs vao cache + render lan dau. Render thuc trong _render_notifications."""
         page = self.page_widgets[6]  # btnNotice moved to idx 6 sau khi insert btnAssign
-        sc = page.findChild(QtWidgets.QWidget, 'scrollContent')
-        if not sc:
-            return
+
+        # Add search + filter controls vao headerBar 1 lan
+        hb = page.findChild(QtWidgets.QFrame, 'headerBar')
+        if hb and not hb.findChild(QtWidgets.QLineEdit, 'txtNotifSearch'):
+            search = QtWidgets.QLineEdit(hb)
+            search.setObjectName('txtNotifSearch')
+            search.setGeometry(250, 12, 280, 32)
+            search.setPlaceholderText('🔍 Tìm theo tiêu đề / nội dung...')
+            search.setStyleSheet('QLineEdit { background: white; border: 1px solid #d2d6dc; '
+                                  'border-radius: 6px; padding: 4px 12px; font-size: 12px; } '
+                                  'QLineEdit:focus { border-color: #002060; }')
+            search.show()
+            search.textChanged.connect(lambda _t: self._render_notifications())
+
+            cbo = QtWidgets.QComboBox(hb)
+            cbo.setObjectName('cboNotifFilter')
+            cbo.setGeometry(550, 12, 180, 32)
+            cbo.setCursor(Qt.PointingHandCursor)
+            cbo.addItem('Tất cả loại', None)
+            cbo.addItem('🔴 Khẩn cấp', 'urgent')
+            cbo.addItem('🟠 Cảnh báo', 'warning')
+            cbo.addItem('🔵 Thông tin', 'info')
+            cbo.setStyleSheet('QComboBox { background: white; border: 1px solid #d2d6dc; '
+                               'border-radius: 6px; padding: 4px 10px; font-size: 12px; } '
+                               'QComboBox:hover { border-color: #002060; } '
+                               'QComboBox::drop-down { border: none; padding-right: 6px; }')
+            cbo.show()
+            cbo.currentIndexChanged.connect(lambda _i: self._render_notifications())
+
+            # Counter label "X / Y thông báo"
+            lbl_cnt = QtWidgets.QLabel('— / —', hb)
+            lbl_cnt.setObjectName('lblNotifCount')
+            lbl_cnt.setGeometry(745, 18, 110, 24)
+            lbl_cnt.setStyleSheet('color: #4a5568; font-size: 11px; font-weight: bold; '
+                                   'background: #f7fafc; border: 1px solid #e2e8f0; '
+                                   'border-radius: 6px; padding: 2px 8px;')
+            lbl_cnt.setAlignment(Qt.AlignCenter)
+            lbl_cnt.show()
 
         # An 6 card hardcode cua .ui (dung lam template thoi)
         for i in range(1, 7):
@@ -4463,37 +4979,67 @@ class MainWindow(QtWidgets.QWidget):
             if c:
                 c.hide()
 
-        # Xoa cac card dynamic da render lan truoc
-        for old in sc.findChildren(QtWidgets.QFrame):
-            if old.objectName().startswith('dynNotifCard'):
-                old.deleteLater()
-        old_empty = sc.findChild(QtWidgets.QLabel, 'lblNoNotif')
-        if old_empty:
-            old_empty.deleteLater()
-
-        # Lay notifs tu API
+        # Lay notifs tu API + cache
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
-        notifs = []
+        self._stu_notif_cache = []
         if DB_AVAILABLE and hv_id:
             try:
-                notifs = NotificationService.get_for_student(hv_id) or []
+                self._stu_notif_cache = NotificationService.get_for_student(hv_id) or []
             except Exception as e:
                 print(f'[STU_NOTIF] API loi: {e}')
 
+        self._render_notifications()
+
+    def _render_notifications(self):
+        """Re-render danh sach notif tu cache, ap dung search + filter."""
+        page = self.page_widgets[6]
+        sc = page.findChild(QtWidgets.QWidget, 'scrollContent')
+        if not sc:
+            return
+        notifs = getattr(self, '_stu_notif_cache', []) or []
+
+        # Apply filter loai
+        page_hb = page.findChild(QtWidgets.QFrame, 'headerBar')
+        cbo = page_hb.findChild(QtWidgets.QComboBox, 'cboNotifFilter') if page_hb else None
+        sel_loai = cbo.itemData(cbo.currentIndex()) if cbo else None
+        if sel_loai:
+            notifs = [n for n in notifs if (n.get('loai') or 'info') == sel_loai]
+
+        # Apply search keyword
+        search = page_hb.findChild(QtWidgets.QLineEdit, 'txtNotifSearch') if page_hb else None
+        kw = search.text().strip().lower() if search else ''
+        if kw:
+            notifs = [n for n in notifs
+                      if kw in (n.get('tieu_de', '') or '').lower()
+                      or kw in (n.get('noi_dung', '') or '').lower()]
+
+        # Update counter
+        total = len(getattr(self, '_stu_notif_cache', []) or [])
+        lbl_cnt = page_hb.findChild(QtWidgets.QLabel, 'lblNotifCount') if page_hb else None
+        if lbl_cnt:
+            lbl_cnt.setText(f'{len(notifs)} / {total}')
+
+        # Xoa cac card dynamic + empty cu
+        for old in sc.findChildren(QtWidgets.QFrame):
+            if old.objectName().startswith('dynNotifCard'):
+                old.setParent(None); old.deleteLater()
+        old_empty = sc.findChild(QtWidgets.QLabel, 'lblNoNotif')
+        if old_empty:
+            old_empty.setParent(None); old_empty.deleteLater()
+
         if not notifs:
-            empty = QtWidgets.QLabel('Không có thông báo nào', sc)
+            empty = QtWidgets.QLabel('Không có thông báo phù hợp' if (kw or sel_loai)
+                                       else 'Không có thông báo nào', sc)
             empty.setObjectName('lblNoNotif')
             empty.setGeometry(25, 20, 820, 80)
-            empty.setStyleSheet(f'color: {COLORS["text_light"]}; font-size: 13px; padding: 20px; background: white; border: 1px dashed #cbd5e0; border-radius: 8px;')
+            empty.setStyleSheet(f'color: {COLORS["text_light"]}; font-size: 13px; padding: 20px; '
+                                 f'background: white; border: 1px dashed #cbd5e0; border-radius: 8px;')
             empty.setAlignment(Qt.AlignCenter)
             empty.show()
             sc.setMinimumHeight(120)
             return
 
-        # Mau border-left theo loai
         color_map = {'urgent': '#c53030', 'warning': '#e8710a', 'info': '#002060'}
-
-        # Render moi notif thanh 1 card voi absolute geometry → scrollContent expand theo so card
         card_x = 25
         card_w = 820
         card_h = 105
@@ -4512,14 +5058,11 @@ class MainWindow(QtWidgets.QWidget):
                 f'border-radius: 10px; border-left: 4px solid {color}; }}'
             )
 
-            # Title
             title_lbl = QtWidgets.QLabel(n.get('tieu_de', '') or '(Không tiêu đề)', card)
             title_lbl.setGeometry(20, 14, 780, 22)
             title_lbl.setStyleSheet('color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent; border: none;')
             title_lbl.show()
 
-            # Date - source. Dung relative format ('5 phut truoc', 'Hom qua'...) cho UX
-            # Kem tooltip hien full timestamp khi hover
             date_lbl = QtWidgets.QLabel(card)
             date_str = fmt_relative_date(n.get('ngay_tao'))
             full_ts = fmt_date(n.get('ngay_tao'), fmt='%d/%m/%Y %H:%M')
@@ -4530,7 +5073,6 @@ class MainWindow(QtWidgets.QWidget):
             date_lbl.setStyleSheet('color: #718096; font-size: 11px; background: transparent; border: none;')
             date_lbl.show()
 
-            # Content
             content_lbl = QtWidgets.QLabel(n.get('noi_dung', '') or '', card)
             content_lbl.setGeometry(20, 62, 780, 32)
             content_lbl.setStyleSheet('color: #4a5568; font-size: 12px; background: transparent; border: none;')
@@ -4540,7 +5082,6 @@ class MainWindow(QtWidgets.QWidget):
             card.show()
             y += card_h + gap
 
-        # Set min height de scroll lam viec
         sc.setMinimumHeight(y + 20)
 
     def _fill_profile(self):
@@ -4739,6 +5280,9 @@ class AdminWindow(QtWidgets.QWidget):
             btn = getattr(self, btn_name)
             btn.clicked.connect(lambda checked, idx=i: self._on_nav(idx))
 
+        # Hop "Hom nay + Dot" - context-aware UX
+        add_sidebar_context_widget(sidebar)
+
         sep2 = QtWidgets.QFrame(sidebar)
         sep2.setGeometry(15, 610, 200, 1)
         sep2.setStyleSheet(f'background: {COLORS["border"]};')
@@ -4772,7 +5316,64 @@ class AdminWindow(QtWidgets.QWidget):
         btn_lo.setStyleSheet('QPushButton { background: transparent; border: none; } QPushButton:hover { background: #fce8e6; border-radius: 8px; }')
         btn_lo.clicked.connect(self._on_logout)
 
+        # Nut "Doi mat khau" cho admin (admin khong co page Profile)
+        btn_chpw = QtWidgets.QPushButton('🔑 Đổi mật khẩu', sidebar)
+        btn_chpw.setObjectName('btnAdmChangePass')
+        btn_chpw.setGeometry(15, 670, 200, 24)
+        btn_chpw.setCursor(Qt.PointingHandCursor)
+        btn_chpw.setToolTip('Mở dialog đổi mật khẩu')
+        btn_chpw.setStyleSheet(
+            'QPushButton { background: transparent; color: #4a5568; border: 1px solid #d2d6dc; '
+            'border-radius: 4px; font-size: 10px; font-weight: bold; } '
+            'QPushButton:hover { background: #edf2f7; color: #002060; border-color: #002060; }'
+        )
+        btn_chpw.clicked.connect(self._adm_change_pass)
+
         return sidebar
+
+    def _adm_change_pass(self):
+        """Dialog admin doi mat khau (admin khong co page profile rieng)."""
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle('Đổi mật khẩu')
+        dlg.setFixedSize(380, 220)
+        form = QtWidgets.QFormLayout(dlg)
+        old = QtWidgets.QLineEdit(); old.setEchoMode(QtWidgets.QLineEdit.Password)
+        new1 = QtWidgets.QLineEdit(); new1.setEchoMode(QtWidgets.QLineEdit.Password)
+        new2 = QtWidgets.QLineEdit(); new2.setEchoMode(QtWidgets.QLineEdit.Password)
+        form.addRow('Mật khẩu cũ:', old)
+        form.addRow('Mật khẩu mới:', new1)
+        form.addRow('Nhập lại:', new2)
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        if old.text() != MOCK_ADMIN.get('password', ''):
+            msg_warn(self, 'Lỗi', 'Sai mật khẩu cũ')
+            return
+        if not new1.text() or new1.text() != new2.text():
+            msg_warn(self, 'Lỗi', 'Mật khẩu mới không khớp')
+            return
+        err = validate_password(new1.text())
+        if err:
+            msg_warn(self, 'Mật khẩu yếu', err)
+            return
+        adm_user_id = ((getattr(self, 'current_user', None) and self.current_user.id)
+                       or MOCK_ADMIN.get('user_id') or MOCK_ADMIN.get('id'))
+        if not (DB_AVAILABLE and adm_user_id):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        try:
+            AuthService.change_password(adm_user_id, new1.text())
+        except Exception as e:
+            print(f'[ADM_AUTH] loi doi mk: {e}')
+            msg_warn(self, 'Không đổi được', api_error_msg(e))
+            return
+        MOCK_ADMIN['password'] = new1.text()
+        msg_info(self, 'Thành công',
+                 'Đổi mật khẩu thành công.\nLần đăng nhập sau dùng mật khẩu mới.')
 
     def _load_page(self, ui_file):
         # ui_file=None -> tao QFrame trong de fill bang code (cho Quan ly lich hoc)
@@ -6501,8 +7102,18 @@ class AdminWindow(QtWidgets.QWidget):
 
         lbl_count = QtWidgets.QLabel('', fb)
         lbl_count.setObjectName('lblSchedCount')
-        lbl_count.setGeometry(330, 14, 400, 22)
+        lbl_count.setGeometry(330, 14, 350, 22)
         lbl_count.setStyleSheet('color: #718096; font-size: 11px; background: transparent;')
+
+        # Search box loc theo ma lop / ten mon / phong / ngay
+        txt_s = QtWidgets.QLineEdit(fb)
+        txt_s.setObjectName('txtAdmSchedSearch')
+        txt_s.setGeometry(700, 11, 275, 28)
+        txt_s.setPlaceholderText('🔍 Tìm theo lớp / môn / phòng / ngày...')
+        txt_s.setClearButtonEnabled(True)
+        txt_s.setStyleSheet('QLineEdit { background: white; border: 1px solid #d2d6dc; '
+                             'border-radius: 4px; padding: 2px 8px; font-size: 12px; } '
+                             'QLineEdit:focus { border-color: #002060; }')
 
         # Table
         tbl = QtWidgets.QTableWidget(page)
@@ -6525,6 +7136,10 @@ class AdminWindow(QtWidgets.QWidget):
 
         # Wire combo filter
         cbo_lop.currentIndexChanged.connect(lambda: self._reload_admin_schedule(page))
+        # Wire search box: filter visible rows ngay bang table_filter (khong cần reload)
+        txt_s.textChanged.connect(
+            lambda s, _t=tbl: table_filter(_t, s, cols=[1, 2, 3, 6])
+        )
 
     def _reload_admin_schedule(self, page):
         """Load lai du lieu schedule (theo filter lop neu co)."""
@@ -7936,6 +8551,9 @@ class TeacherWindow(QtWidgets.QWidget):
             btn = getattr(self, btn_name)
             btn.clicked.connect(lambda checked, idx=i: self._on_nav(idx))
 
+        # Hop "Hom nay + Dot" - context-aware UX
+        add_sidebar_context_widget(sidebar)
+
         sep2 = QtWidgets.QFrame(sidebar)
         sep2.setGeometry(15, 610, 200, 1)
         sep2.setStyleSheet(f'background: {COLORS["border"]};')
@@ -8448,7 +9066,18 @@ class TeacherWindow(QtWidgets.QWidget):
         # Today schedule - lay tu API ScheduleService.get_today() filter theo gv_id
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblToday')
         if tbl:
+            from datetime import datetime as _dt, time as _time
             data = []
+            today_raw = []  # raw rows de double-click hien dialog
+            now_t = _dt.now().time()
+
+            def _parse_t(s):
+                try:
+                    parts = str(s)[:8].split(':')
+                    return _time(int(parts[0]), int(parts[1]))
+                except Exception:
+                    return None
+
             if DB_AVAILABLE and gv_id and ScheduleService:
                 try:
                     today_rows = ScheduleService.get_today() or []
@@ -8456,31 +9085,96 @@ class TeacherWindow(QtWidgets.QWidget):
                         # filter buoi cua gv hien tai
                         if r.get('gv_id') and r.get('gv_id') != gv_id:
                             continue
+                        today_raw.append(r)
                         gio_bd = str(r.get('gio_bat_dau', ''))[:5]
                         gio_kt = str(r.get('gio_ket_thuc', ''))[:5]
                         time_str = f'{gio_bd}-{gio_kt}' if gio_bd else '—'
+                        # Status badge dua tren now
+                        t_bd = _parse_t(r.get('gio_bat_dau', ''))
+                        t_kt = _parse_t(r.get('gio_ket_thuc', ''))
+                        status = ''   # '', 'now', 'soon', 'past'
+                        badge = ''
+                        if t_bd and t_kt:
+                            if t_bd <= now_t <= t_kt:
+                                status = 'now'
+                                badge = '\n🟢 Đang dạy'
+                            elif now_t < t_bd:
+                                # Tinh phut den buoi
+                                bd_min = t_bd.hour * 60 + t_bd.minute
+                                now_min = now_t.hour * 60 + now_t.minute
+                                left_min = bd_min - now_min
+                                if left_min <= 60:
+                                    status = 'soon'
+                                    badge = f'\n⏳ Còn {left_min} phút'
+                                else:
+                                    h = left_min // 60
+                                    m = left_min % 60
+                                    status = 'soon'
+                                    badge = f'\n⏳ Còn {h}h{m:02d}'
+                            else:
+                                status = 'past'
+                                badge = '\n✓ Đã dạy'
                         ma_lop = r.get('lop_id', '')
                         ten_mon = r.get('ten_mon', '')
                         data.append([
-                            time_str,
+                            time_str + badge,
                             f'{ma_lop} ({ten_mon})' if ten_mon else ma_lop,
                             r.get('phong', '') or '—',
+                            status,  # extra meta - khong hien
                         ])
                 except Exception as e:
                     print(f'[TEA_DASH] today loi: {e}')
+            # Cache de double-click reuse
+            self._tea_today_cache = today_raw
+
             if not data:
                 set_table_empty_state(tbl, 'Hôm nay không có buổi dạy')
             else:
                 tbl.setRowCount(len(data))
+                # Status -> background color
+                bg_map = {'now': '#dcfce7',    # green 100
+                          'soon': '#fef3c7',   # yellow 100
+                          'past': '#f7fafc'}   # gray
+                fg_map = {'now': '#166534',
+                          'soon': '#92400e',
+                          'past': '#9ca3af'}
                 for r, row in enumerate(data):
-                    for c, val in enumerate(row):
-                        item = QtWidgets.QTableWidgetItem(val)
+                    status = row[3]
+                    bg = bg_map.get(status)
+                    fg = fg_map.get(status)
+                    italic = (status == 'past')
+                    bold = (status == 'now')
+                    for c in range(3):
+                        item = QtWidgets.QTableWidgetItem(row[c])
                         item.setTextAlignment(Qt.AlignCenter if c != 1 else Qt.AlignLeft | Qt.AlignVCenter)
+                        if bg:
+                            item.setBackground(QColor(bg))
+                        if fg:
+                            item.setForeground(QColor(fg))
+                        if italic or bold:
+                            f = item.font()
+                            if bold: f.setBold(True)
+                            if italic: f.setItalic(True)
+                            item.setFont(f)
                         tbl.setItem(r, c, item)
                 for r in range(len(data)):
-                    tbl.setRowHeight(r, 38)
+                    has_badge = '\n' in data[r][0]
+                    tbl.setRowHeight(r, 50 if has_badge else 38)
+
+                # Wire double-click row -> popup show all today sessions (1 lan)
+                if not getattr(self, '_tea_today_dblclick_wired', False):
+                    tbl.cellDoubleClicked.connect(
+                        lambda *_: show_today_sessions_dialog(
+                            self, getattr(self, '_tea_today_cache', []), role='gv'
+                        )
+                    )
+                    self._tea_today_dblclick_wired = True
+                # Tooltip hint user
+                for r in range(len(data)):
+                    if tbl.item(r, 0):
+                        tbl.item(r, 0).setToolTip('Double-click để xem chi tiết tất cả buổi dạy hôm nay')
             tbl.horizontalHeader().setStretchLastSection(True)
-            tbl.setColumnWidth(0, 100)
+            tbl.setColumnWidth(0, 110)
             tbl.setColumnWidth(1, 180)
             tbl.verticalHeader().setVisible(False)
 
@@ -9108,48 +9802,63 @@ class TeacherWindow(QtWidgets.QWidget):
                 except Exception as e:
                     print(f'[TEA_NOTICE] DB loi HV: {e}')
 
+        # Sent panel: them search box + counter, push scroll xuong de chua
+        sf = page.findChild(QtWidgets.QFrame, 'sentFrame')
+        if sf and not sf.findChild(QtWidgets.QLineEdit, 'txtSentSearch'):
+            # Update title gon hon
+            lbl_t = sf.findChild(QtWidgets.QLabel, 'lblSentTitle')
+            if lbl_t:
+                lbl_t.setText('Đã gửi')
+                lbl_t.setGeometry(22, 14, 80, 22)
+            # Counter "X/Y" canh ben title
+            lbl_cnt = QtWidgets.QLabel('— / —', sf)
+            lbl_cnt.setObjectName('lblTeaSentCount')
+            lbl_cnt.setGeometry(110, 16, 70, 18)
+            lbl_cnt.setStyleSheet('color: #4a5568; font-size: 10px; font-weight: bold; '
+                                   'background: #f7fafc; border: 1px solid #e2e8f0; '
+                                   'border-radius: 4px; padding: 1px 6px;')
+            lbl_cnt.setAlignment(Qt.AlignCenter)
+            # Search box
+            txt_s = QtWidgets.QLineEdit(sf)
+            txt_s.setObjectName('txtSentSearch')
+            txt_s.setGeometry(22, 42, 260, 28)
+            txt_s.setPlaceholderText('🔍 Tìm tiêu đề / nội dung / lớp...')
+            txt_s.setClearButtonEnabled(True)
+            txt_s.setStyleSheet('QLineEdit { background: white; border: 1px solid #d2d6dc; '
+                                 'border-radius: 4px; padding: 2px 8px; font-size: 11px; } '
+                                 'QLineEdit:focus { border-color: #002060; }')
+            txt_s.show()
+            # Push scroll area xuong duoi search
+            ss = sf.findChild(QtWidgets.QScrollArea, 'sentScroll')
+            if ss:
+                g = ss.geometry()
+                ss.setGeometry(g.x(), 78, g.width(), max(g.height() - 34, 250))
+            # Wire search -> re-render
+            txt_s.textChanged.connect(lambda _t: self._render_tea_sent_notices())
+
         # Populate sent list - lay tu API NotificationService.get_sent_by_teacher()
         sc = page.findChild(QtWidgets.QWidget, 'sentContent')
         if sc:
             sc.setMinimumHeight(500)
-            # Clear cu neu da co layout
             if sc.layout() is None:
                 vlay = QtWidgets.QVBoxLayout(sc)
                 vlay.setContentsMargins(4, 4, 4, 4)
                 vlay.setSpacing(8)
             else:
                 vlay = sc.layout()
-                while vlay.count():
-                    it = vlay.takeAt(0)
-                    if it.widget():
-                        it.widget().deleteLater()
             self._tea_notice_layout = vlay
 
-            sent_data = []
+            self._tea_sent_cache = []
             gv_id = MOCK_TEACHER.get('user_id')
             if DB_AVAILABLE and gv_id:
                 try:
-                    rows = NotificationService.get_sent_by_teacher(gv_id, limit=10) or []
-                    for n in rows:
-                        target = n.get('den_lop') or 'Tất cả'
-                        sent_data.append((
-                            target,
-                            n.get('tieu_de', '') or '(không tiêu đề)',
-                            fmt_relative_date(n.get('ngay_tao')),  # 'Vua xong'/'5 phut truoc'...
-                        ))
+                    # Tang limit tu 10 -> 100 de search xuyen suot history
+                    rows = NotificationService.get_sent_by_teacher(gv_id, limit=100) or []
+                    self._tea_sent_cache = rows
                 except Exception as e:
                     print(f'[TEA_NOTICE] sent loi: {e}')
 
-            if not sent_data:
-                empty = QtWidgets.QLabel('Chưa gửi thông báo nào')
-                empty.setStyleSheet(f'color: {COLORS["text_light"]}; font-size: 13px; padding: 20px;')
-                empty.setAlignment(Qt.AlignCenter)
-                vlay.addWidget(empty)
-            else:
-                for to, subj, t in sent_data:
-                    card = self._make_notice_card(to, subj, t)
-                    vlay.addWidget(card)
-            vlay.addStretch()
+            self._render_tea_sent_notices()
 
         # nut gui / clear - safe_connect tranh accumulation
         btn_send = page.findChild(QtWidgets.QPushButton, 'btnSendNotice')
@@ -9177,6 +9886,54 @@ class TeacherWindow(QtWidgets.QWidget):
         vb.addWidget(l2)
         vb.addWidget(l3)
         return card
+
+    def _render_tea_sent_notices(self):
+        """Re-render danh sach thong bao da gui voi filter (cache + search)."""
+        page = self.page_widgets[5]
+        vlay = getattr(self, '_tea_notice_layout', None)
+        if vlay is None:
+            return
+        # Clear layout cu (cache widget de tranh None sau setParent)
+        while vlay.count():
+            it = vlay.takeAt(0)
+            w = it.widget()
+            if w:
+                w.setParent(None)
+                w.deleteLater()
+
+        rows_all = getattr(self, '_tea_sent_cache', []) or []
+        # Apply search keyword
+        sf = page.findChild(QtWidgets.QFrame, 'sentFrame')
+        txt_s = sf.findChild(QtWidgets.QLineEdit, 'txtSentSearch') if sf else None
+        kw = (txt_s.text().strip().lower() if txt_s else '')
+        if kw:
+            rows = [n for n in rows_all
+                    if kw in (n.get('tieu_de', '') or '').lower()
+                    or kw in (n.get('noi_dung', '') or '').lower()
+                    or kw in (n.get('den_lop', '') or '').lower()]
+        else:
+            rows = rows_all
+
+        # Update counter
+        lbl_cnt = sf.findChild(QtWidgets.QLabel, 'lblTeaSentCount') if sf else None
+        if lbl_cnt:
+            lbl_cnt.setText(f'{len(rows)} / {len(rows_all)}')
+
+        if not rows:
+            empty = QtWidgets.QLabel('Không có thông báo phù hợp' if kw else 'Chưa gửi thông báo nào')
+            empty.setStyleSheet(f'color: {COLORS["text_light"]}; font-size: 13px; padding: 20px;')
+            empty.setAlignment(Qt.AlignCenter)
+            vlay.addWidget(empty)
+        else:
+            for n in rows:
+                target = n.get('den_lop') or 'Tất cả'
+                card = self._make_notice_card(
+                    target,
+                    n.get('tieu_de', '') or '(không tiêu đề)',
+                    fmt_relative_date(n.get('ngay_tao'))
+                )
+                vlay.addWidget(card)
+        vlay.addStretch()
 
     def _tea_send_notice(self):
         page = self.page_widgets[5]
@@ -10332,6 +11089,21 @@ class TeacherWindow(QtWidgets.QWidget):
         title.setGeometry(25, 0, 400, 56)
         title.setStyleSheet('color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;')
 
+        # Combo loc theo lop - GV dang day nhieu lop -> can loc nhanh
+        lbl_f = QtWidgets.QLabel('Lớp:', hb)
+        lbl_f.setObjectName('lblTeaExamFilter')
+        lbl_f.setGeometry(425, 18, 35, 24)
+        lbl_f.setStyleSheet('color: #4a5568; font-size: 12px; font-weight: bold; background: transparent;')
+
+        cbo_f = QtWidgets.QComboBox(hb)
+        cbo_f.setObjectName('cboTeaExamFilter')
+        cbo_f.setGeometry(465, 12, 85, 32)
+        cbo_f.setCursor(Qt.PointingHandCursor)
+        cbo_f.setStyleSheet('QComboBox { background: white; border: 1px solid #d2d6dc; '
+                              'border-radius: 6px; padding: 4px 8px; font-size: 11px; } '
+                              'QComboBox:hover { border-color: #002060; } '
+                              'QComboBox::drop-down { border: none; padding-right: 4px; }')
+
         # Nut "In PDF" - de truoc nut Tao lich thi
         btn_pdf = QtWidgets.QPushButton('🖨 In PDF', hb)
         btn_pdf.setObjectName('btnTeaPrintExam')
@@ -10379,32 +11151,134 @@ class TeacherWindow(QtWidgets.QWidget):
         if not tbl:
             return
         gv_id = MOCK_TEACHER.get('user_id')
-        rows = []
+        rows_all = []
         if DB_AVAILABLE and gv_id:
             try:
-                rows = ExamService.get_for_teacher(gv_id) or []
+                rows_all = ExamService.get_for_teacher(gv_id) or []
             except Exception as e:
                 print(f'[TEA_EXAM] loi: {e}')
+
+        # Populate combo loc lop tu rows + wire 1 lan
+        cbo_f = page.findChild(QtWidgets.QComboBox, 'cboTeaExamFilter')
+        if cbo_f is not None:
+            # Luu lua chon hien tai de restore sau repopulate
+            cur_sel = cbo_f.currentData() if cbo_f.count() > 0 else None
+            cbo_f.blockSignals(True)
+            cbo_f.clear()
+            cbo_f.addItem('Tất cả', None)
+            seen = set()
+            for r in rows_all:
+                ma = r.get('lop_id', '')
+                if ma and ma not in seen:
+                    seen.add(ma)
+                    cbo_f.addItem(ma, ma)
+            # Restore sel cu neu con ton tai
+            if cur_sel:
+                idx = cbo_f.findData(cur_sel)
+                if idx >= 0:
+                    cbo_f.setCurrentIndex(idx)
+            cbo_f.blockSignals(False)
+            if not getattr(self, '_tea_exam_filter_wired', False):
+                cbo_f.currentIndexChanged.connect(lambda _i: self._reload_tea_exams(page))
+                self._tea_exam_filter_wired = True
+
+        # Apply filter
+        sel_lop = cbo_f.currentData() if cbo_f else None
+        rows = [r for r in rows_all if not sel_lop or r.get('lop_id') == sel_lop]
+
+        # Cache de double-click reuse (dung filtered rows)
+        self._tea_exam_rows_cache = rows
+
+        # Counters cho banner summary
+        n_today = n_soon_3 = n_soon_7 = 0
+        first_upcoming_row = None
 
         if not rows:
             set_table_empty_state(tbl, 'Chưa có lịch thi nào - bấm "Tạo lịch thi" để bắt đầu', row_height=80)
         else:
+            from datetime import date as _date
+            today_d = _date.today()
             tbl.setRowCount(len(rows))
             for r, row in enumerate(rows):
-                tbl.setRowHeight(r, 44)
                 ngay = fmt_date(row.get('ngay_thi'))
                 gio_bd = str(row.get('gio_bat_dau', ''))[:5]
                 gio_kt = str(row.get('gio_ket_thuc', ''))[:5]
                 ca_full = row.get('ca_thi', '')
                 if gio_bd and gio_kt:
                     ca_full = f'{ca_full}\n{gio_bd}-{gio_kt}'
+
+                # Tinh days_left
+                days_left = None
+                ngay_v = row.get('ngay_thi') or row.get('ngay', '')
+                if isinstance(ngay_v, _date):
+                    days_left = (ngay_v - today_d).days
+                else:
+                    try:
+                        d_parsed = _date.fromisoformat(str(ngay_v)[:10])
+                        days_left = (d_parsed - today_d).days
+                    except Exception:
+                        pass
+
+                bg_color = None
+                fg_color = None
+                bold = False
+                italic = False
+                if days_left is not None:
+                    if days_left == 0:
+                        bg_color = '#fef3c7'; fg_color = '#9a3412'; bold = True
+                        n_today += 1
+                        if first_upcoming_row is None:
+                            first_upcoming_row = r
+                    elif 1 <= days_left <= 3:
+                        bg_color = '#fee2e2'; fg_color = '#991b1b'; bold = True
+                        n_soon_3 += 1
+                        if first_upcoming_row is None:
+                            first_upcoming_row = r
+                    elif 4 <= days_left <= 7:
+                        bg_color = '#fef9e7'; fg_color = '#92400e'
+                        n_soon_7 += 1
+                        if first_upcoming_row is None:
+                            first_upcoming_row = r
+                    elif days_left < 0:
+                        bg_color = '#f7fafc'; fg_color = '#9ca3af'; italic = True
+
+                # Append badge vao ca thi cell
+                if days_left is not None and 0 <= days_left <= 7:
+                    badge = '\n⚠ HÔM NAY!' if days_left == 0 else f'\nCòn {days_left} ngày'
+                    ca_full = ca_full + badge
+
                 items = [str(r + 1), row.get('lop_id', ''), row.get('ten_mon', ''),
                          ngay, ca_full, row.get('phong', '') or '—',
                          row.get('hinh_thuc', '') or '']
                 for c, val in enumerate(items):
                     item = QtWidgets.QTableWidgetItem(str(val))
                     item.setTextAlignment(Qt.AlignCenter if c != 2 else Qt.AlignLeft | Qt.AlignVCenter)
+                    if bg_color:
+                        item.setBackground(QColor(bg_color))
+                    if fg_color:
+                        item.setForeground(QColor(fg_color))
+                    if bold or italic:
+                        f = item.font()
+                        if bold: f.setBold(True)
+                        if italic: f.setItalic(True)
+                        item.setFont(f)
                     tbl.setItem(r, c, item)
+
+                # Tooltip ca row (status + nhac dblclick)
+                base_tip = ''
+                if days_left is not None:
+                    base_tip = (f'Còn {days_left} ngày nữa thi' if days_left > 0
+                                 else 'Thi hôm nay - GV co mat som!' if days_left == 0
+                                 else f'Đã diễn ra cách đây {-days_left} ngày')
+                hint = ' · Double-click để xem chi tiết'
+                tip = (base_tip + hint).strip(' ·') if base_tip else 'Double-click để xem chi tiết'
+                for c in range(7):
+                    if tbl.item(r, c):
+                        tbl.item(r, c).setToolTip(tip)
+
+                # Row height tang neu co badge
+                tbl.setRowHeight(r, 56 if (days_left is not None and 0 <= days_left <= 7) else 44)
+
                 # Action: Xoa
                 cell, (btn_del,) = make_action_cell([('Xoá', 'red')])
                 tbl.setCellWidget(r, 7, cell)
@@ -10415,6 +11289,71 @@ class TeacherWindow(QtWidgets.QWidget):
         for c, w in enumerate([35, 85, 170, 90, 130, 85, 105, 140]):
             tbl.setColumnWidth(c, w)
         tbl.horizontalHeader().setStretchLastSection(False)
+
+        # Wire double-click (chi cot 0-6, khong chan cot Thao tac 7) -> popup detail
+        if not getattr(self, '_tea_exam_dblclick_wired', False):
+            tbl.cellDoubleClicked.connect(self._tea_on_exam_dblclick)
+            self._tea_exam_dblclick_wired = True
+
+        # === Banner summary mon thi sap toi (≤7 ngay) ===
+        for old in page.findChildren(QtWidgets.QFrame):
+            if old.objectName() == 'examTodayBannerTea':
+                old.setParent(None); old.deleteLater()
+        n_total_soon = n_today + n_soon_3 + n_soon_7
+        if n_total_soon > 0:
+            banner = QtWidgets.QFrame(page)
+            banner.setObjectName('examTodayBannerTea')
+            banner.setGeometry(15, 60, 840, 38)
+            if n_today > 0:
+                bg = '#fef3c7'; left = '#c05621'; text_clr = '#9a3412'
+            elif n_soon_3 > 0:
+                bg = '#fee2e2'; left = '#dc2626'; text_clr = '#991b1b'
+            else:
+                bg = '#fef9e7'; left = '#d97706'; text_clr = '#92400e'
+            banner.setStyleSheet(
+                f'QFrame#examTodayBannerTea {{ background: {bg}; border: 1px solid {left}; '
+                f'border-left: 4px solid {left}; border-radius: 8px; }}'
+            )
+            banner.setCursor(Qt.PointingHandCursor)
+
+            parts = []
+            if n_today > 0:
+                parts.append(f'<b>{n_today}</b> ca thi <b style="color:#9a3412;">HÔM NAY</b>')
+            if n_soon_3 > 0:
+                parts.append(f'<b>{n_soon_3}</b> ca trong 3 ngày')
+            if n_soon_7 > 0:
+                parts.append(f'<b>{n_soon_7}</b> ca trong 4-7 ngày')
+            text_html = f'🔔 Bạn có {" · ".join(parts)} — <span style="color:#1e3a8a;">click để jump tới mục đầu</span>'
+
+            lbl = QtWidgets.QLabel(text_html, banner)
+            lbl.setGeometry(15, 0, 820, 38)
+            lbl.setStyleSheet(f'color: {text_clr}; font-size: 12px; background: transparent; border: none;')
+            lbl.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+            lbl.setTextFormat(Qt.RichText)
+            banner.setToolTip(f'{n_total_soon} ca thi sắp tới — click để jump')
+
+            target_row = first_upcoming_row
+            def _click(ev, _r=target_row):
+                if ev.button() == Qt.LeftButton and _r is not None:
+                    tbl.selectRow(_r)
+                    tbl.scrollToItem(tbl.item(_r, 0), QtWidgets.QAbstractItemView.PositionAtCenter)
+                    tbl.setFocus()
+            banner.mousePressEvent = _click
+            lbl.setCursor(Qt.PointingHandCursor)
+            lbl.mousePressEvent = _click
+            banner.show()
+
+            # Push tbl xuong de chua banner
+            tg = tbl.geometry()
+            new_y = 110
+            if tg.y() != new_y:
+                new_h = max(tg.height() - (new_y - tg.y()), 250)
+                tbl.setGeometry(tg.x(), new_y, tg.width(), new_h)
+        else:
+            # Reset tbl ve geometry mac dinh neu khong co banner
+            tg = tbl.geometry()
+            if tg.y() != 70:
+                tbl.setGeometry(tg.x(), 70, tg.width(), tg.height() + (tg.y() - 70))
 
     def _tea_dialog_new_exam(self):
         """Dialog GV tao lich thi moi cho lop minh day."""
@@ -10548,6 +11487,15 @@ class TeacherWindow(QtWidgets.QWidget):
             return
         msg_info(self, 'Đã xoá', f'Đã xoá lịch thi #{exam_id}')
         self._reload_tea_exams(self.page_widgets[8])
+
+    def _tea_on_exam_dblclick(self, row, col):
+        """GV double-click row Lich thi -> popup chi tiet (skip cot Thao tac 7)."""
+        if col == 7:
+            return
+        cache = getattr(self, '_tea_exam_rows_cache', [])
+        if row < 0 or row >= len(cache):
+            return
+        show_exam_detail_dialog(self, cache[row], role='gv')
 
     def _tea_export_exam_pdf(self):
         """In lich thi cua GV ra PDF."""
@@ -10738,6 +11686,9 @@ class EmployeeWindow(QtWidgets.QWidget):
         for i, (btn_name, _) in enumerate(EMPLOYEE_PAGES):
             btn = getattr(self, btn_name)
             btn.clicked.connect(lambda checked, idx=i: self._on_nav(idx))
+
+        # Hop "Hom nay + Dot" - context-aware UX
+        add_sidebar_context_widget(sidebar)
 
         sep2 = QtWidgets.QFrame(sidebar)
         sep2.setGeometry(15, 610, 200, 1)
@@ -10944,8 +11895,20 @@ class EmployeeWindow(QtWidgets.QWidget):
                     smax_c, scur_c = int(cls[6] or 0), int(cls[7] or 0)
                 except (TypeError, ValueError):
                     smax_c, scur_c = 0, 0
-                full_tag = '  ⚠ ĐÃ ĐẦY' if (smax_c > 0 and scur_c >= smax_c) else ''
-                cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8], suffix="đ")}){full_tag}')
+                is_full = (smax_c > 0 and scur_c >= smax_c)
+                cho_trong = max(0, smax_c - scur_c) if smax_c else 0
+                if is_full:
+                    suffix = '  ⛔ ĐÃ ĐẦY'
+                else:
+                    suffix = f'  ({cho_trong} chỗ trống)' if cho_trong > 0 else ''
+                cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8], suffix="đ")}){suffix}')
+                # Disable item neu lop day -> NV khong the chon
+                if is_full:
+                    last_idx = cbo_cls.count() - 1
+                    item = cbo_cls.model().item(last_idx)
+                    if item:
+                        item.setFlags(item.flags() & ~Qt.ItemIsEnabled)
+                        item.setForeground(QColor('#9ca3af'))
             # Khi chon lop -> hien info chi tiet vao lblClassDetails
             safe_connect(cbo_cls.currentIndexChanged, self._emp_show_class_info)
 
@@ -10974,28 +11937,39 @@ class EmployeeWindow(QtWidgets.QWidget):
         cbo_cls = page.findChild(QtWidgets.QComboBox, 'cboClassEmp')
         if cbo_c is None or cbo_cls is None:
             return
-        # Helper format 1 entry voi tag ⚠ ĐÃ ĐẦY (đồng bộ với _fill_emp_register)
-        def _fmt_cls_entry(cls):
+        # Helper add 1 cls vao cbo + disable neu day - dong bo voi _fill_emp_register
+        def _add_cls(cls):
             try:
                 smax_c, scur_c = int(cls[6] or 0), int(cls[7] or 0)
             except (TypeError, ValueError):
                 smax_c, scur_c = 0, 0
-            full_tag = '  ⚠ ĐÃ ĐẦY' if (smax_c > 0 and scur_c >= smax_c) else ''
-            return f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8], suffix="đ")}){full_tag}'
+            is_full = (smax_c > 0 and scur_c >= smax_c)
+            cho_trong = max(0, smax_c - scur_c) if smax_c else 0
+            if is_full:
+                suffix = '  ⛔ ĐÃ ĐẦY'
+            else:
+                suffix = f'  ({cho_trong} chỗ trống)' if cho_trong > 0 else ''
+            cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8], suffix="đ")}){suffix}')
+            if is_full:
+                last_idx = cbo_cls.count() - 1
+                item = cbo_cls.model().item(last_idx)
+                if item:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEnabled)
+                    item.setForeground(QColor('#9ca3af'))
         # Chi xet active classes (thuoc dot OPEN)
         active_classes = [c for c in MOCK_CLASSES if is_class_active(c)]
         cbo_cls.clear()
         cbo_cls.addItem('-- Chọn lớp --')
         if idx == 0:
             for cls in active_classes:
-                cbo_cls.addItem(_fmt_cls_entry(cls))
+                _add_cls(cls)
             return
         # cboCourse text format: "MA - Ten" -> parse ma_mon
         cur_text = cbo_c.currentText()
         mon_code = cur_text.split(' - ')[0] if ' - ' in cur_text else None
         for cls in active_classes:
             if cls[1] == mon_code:
-                cbo_cls.addItem(_fmt_cls_entry(cls))
+                _add_cls(cls)
 
     def _emp_show_class_info(self, idx):
         """Khi NV chon lop trong cbo -> hien chi tiet (GV, Lich, Phong, Si so, Hoc phi)."""
@@ -11018,12 +11992,24 @@ class EmployeeWindow(QtWidgets.QWidget):
             lbl.setText(f'Không tìm thấy thông tin lớp {ma_lop}')
             return
         _, _, ten_mon, gv, lich, phong, smax, scur, gia, *_ = cls
-        cho_trong = max(0, smax - scur)
+        try:
+            smax_i = int(smax or 0); scur_i = int(scur or 0)
+        except (TypeError, ValueError):
+            smax_i, scur_i = 0, 0
+        cho_trong = max(0, smax_i - scur_i)
+        is_full = (smax_i > 0 and scur_i >= smax_i)
+        # Style cho status si so: do bold neu day, cam neu sap day (≥80%), xanh neu con nhieu
+        if is_full:
+            siso_html = f'<span style="color:#c53030; font-weight:bold;">⛔ ĐÃ ĐẦY ({scur_i}/{smax_i})</span>'
+        elif smax_i > 0 and scur_i / smax_i >= 0.8:
+            siso_html = f'<span style="color:#c05621; font-weight:bold;">{cho_trong}/{smax_i} chỗ (sắp đầy)</span>'
+        else:
+            siso_html = f'<span style="color:#166534;">{cho_trong}/{smax_i} chỗ trống</span>'
         info = (
             f'<b>Khóa:</b> {ten_mon}<br>'
             f'<b>Giảng viên:</b> {gv or "—"}<br>'
             f'<b>Lịch học:</b> {lich or "—"}  ·  <b>Phòng:</b> {phong or "—"}<br>'
-            f'<b>Còn:</b> {cho_trong}/{smax} chỗ  ·  '
+            f'<b>Sĩ số:</b> {siso_html}  ·  '
             f'<b>Học phí:</b> <span style="color:#c05621;">{fmt_vnd(gia, suffix="đ")}</span>'
         )
         lbl.setText(info)
@@ -11106,12 +12092,14 @@ class EmployeeWindow(QtWidgets.QWidget):
 
         # === CHECK FULL: lop da day si so chua? ===
         # Lay tu MOCK_CLASSES cache (vua _refresh_cache sau register/cancel)
+        # Tuple co 10 fields: ma_lop, ma_mon, ten_mon, ten_gv, lich, phong,
+        #                     smax, scur, gia, sem_id -> dung *_ tranh ValueError
         cls_info = next((c for c in MOCK_CLASSES if c[0] == lop_code), None)
         if cls_info:
-            _, _, _, _, _, _, smax_chk, scur_chk, _ = cls_info
             try:
-                smax_chk = int(smax_chk); scur_chk = int(scur_chk)
-            except (TypeError, ValueError):
+                smax_chk = int(cls_info[6] or 0)
+                scur_chk = int(cls_info[7] or 0)
+            except (TypeError, ValueError, IndexError):
                 smax_chk, scur_chk = 0, 0
             if smax_chk > 0 and scur_chk >= smax_chk:
                 msg_warn(self, 'Lớp đã đầy',
