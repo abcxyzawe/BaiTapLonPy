@@ -32,3 +32,8 @@ frontend/screenshots/
 test_ui_screenshot.py
 test_output.log
 .claude/settings.local.json
+
+# File test/preview tam (PDF export, output...)
+test_*.pdf
+test_*.json
+*.tmp
