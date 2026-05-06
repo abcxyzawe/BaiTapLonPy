@@ -21,7 +21,9 @@ class AssignmentService:
 
     @staticmethod
     def update(assignment_id: int, **fields):
-        """GV sua bai tap. Chi update fields da truyen vao."""
+        """GV sua bai tap. Tra ve rowcount - 0 = bai tap khong ton tai
+        (router can dung de phan biet 404 vs 200 ok). Truoc luon return True
+        khien API tra 200 ok du record bi xoa truoc do."""
         allowed = {'tieu_de', 'mo_ta', 'han_nop', 'diem_toi_da'}
         sets = []
         vals = []
@@ -30,10 +32,13 @@ class AssignmentService:
                 sets.append(f'{k} = %s')
                 vals.append(v)
         if not sets:
-            return False
+            # Khong co field -> chi check exists
+            row = db.fetch_one('SELECT 1 FROM assignments WHERE id = %s', (assignment_id,))
+            return 1 if row else 0
         vals.append(assignment_id)
-        db.execute(f'UPDATE assignments SET {", ".join(sets)} WHERE id = %s', tuple(vals))
-        return True
+        return db.execute(
+            f'UPDATE assignments SET {", ".join(sets)} WHERE id = %s', tuple(vals)
+        ) or 0
 
     @staticmethod
     def delete(assignment_id: int) -> bool:
@@ -110,13 +115,15 @@ class AssignmentService:
 
     @staticmethod
     def grade(submission_id: int, diem: float, nhan_xet: str = ''):
-        """GV cham diem + gop y cho 1 bai nop."""
-        db.execute(
+        """GV cham diem + gop y. Tra ve rowcount - 0 = sub khong ton tai
+        (router check de tra 404, truoc voi UPDATE silent ignore khien GV
+        nghi da cham nhung that ra khong update gi)."""
+        return db.execute(
             """UPDATE submissions
                   SET diem = %s, nhan_xet = %s, cham_luc = CURRENT_TIMESTAMP
                 WHERE id = %s""",
             (diem, nhan_xet, submission_id)
-        )
+        ) or 0
 
     @staticmethod
     def get_submissions_by_assignment(assignment_id: int):
@@ -164,7 +171,13 @@ class AssignmentService:
 
     @staticmethod
     def get_pending_for_student(hv_id: int):
-        """Bai tap HV CAN nop (chua nop hoac da qua han) - cho dashboard / banner."""
+        """Bai tap HV CAN nop (chua nop hoac da qua han) - cho dashboard / banner.
+
+        Bao gom 'pending_payment' (chua dong tien) - HV van phai biet bai tap
+        cua lop dang hoc du chua dong tien xong (giong ScheduleService va
+        ExamService cung include pending_payment). Truoc chi 'paid','completed'
+        khien HV moi DK chua TT khong thay bai tap nao -> banner "0 bai tap"
+        sai, dashboard thieu data."""
         sql = """
             SELECT a.id, a.tieu_de, a.lop_id, a.han_nop, a.diem_toi_da,
                    co.ten_mon,
@@ -174,7 +187,7 @@ class AssignmentService:
               JOIN courses co ON co.ma_mon = c.ma_mon
               JOIN registrations r ON r.lop_id = a.lop_id
                                   AND r.hv_id = %s
-                                  AND r.trang_thai IN ('paid', 'completed')
+                                  AND r.trang_thai IN ('pending_payment', 'paid', 'completed')
          LEFT JOIN submissions sub ON sub.assignment_id = a.id AND sub.hv_id = %s
              ORDER BY a.han_nop NULLS LAST, a.created_at DESC
         """

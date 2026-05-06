@@ -458,25 +458,11 @@ ORDER BY sc.gio_bat_dau;
 -- TRIGGERS
 -- ==========================================================
 
--- Trigger 1: tu dong update siso khi co dang ky moi
-CREATE OR REPLACE FUNCTION update_class_siso() RETURNS TRIGGER AS $$
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        UPDATE classes SET siso_hien_tai = siso_hien_tai + 1 WHERE ma_lop = NEW.lop_id;
-        UPDATE classes SET trang_thai = 'full'
-         WHERE ma_lop = NEW.lop_id AND siso_hien_tai >= siso_max;
-    ELSIF TG_OP = 'DELETE' THEN
-        UPDATE classes SET siso_hien_tai = GREATEST(siso_hien_tai - 1, 0) WHERE ma_lop = OLD.lop_id;
-        UPDATE classes SET trang_thai = 'open'
-         WHERE ma_lop = OLD.lop_id AND siso_hien_tai < siso_max AND trang_thai = 'full';
-    END IF;
-    RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_reg_siso
-AFTER INSERT OR DELETE ON registrations
-FOR EACH ROW EXECUTE FUNCTION update_class_siso();
+-- Trigger 1 (definition cu): di chuyen logic vao trigger sync moi (line 535+)
+-- Truoc co 2 ban CREATE OR REPLACE FUNCTION update_class_siso() khien ban
+-- thu 2 override, va co 2 trigger cung goi 1 function -> moi reg INSERT/DELETE
+-- chay UPDATE classes 2 lan (lang phi). Cong logic trang_thai=full/open vao
+-- ham COUNT-based ben duoi de giu nguyen behavior.
 
 
 -- Trigger 2: tu dong log audit khi co thao tac quan trong
@@ -532,9 +518,14 @@ FOR EACH ROW EXECUTE FUNCTION log_audit_changes();
 
 -- Trigger: tu dong sync classes.siso_hien_tai khi registrations thay doi
 -- (truoc day siso static seed, drift voi actual paid count)
+-- + Tu dong toggle trang_thai 'full' khi siso_hien_tai >= siso_max va 'open'
+--   khi giam xuong (logic chuyen tu trigger cu trg_reg_siso da bi gop)
 CREATE OR REPLACE FUNCTION update_class_siso() RETURNS TRIGGER AS $$
 DECLARE
   target_lop VARCHAR(30);
+  cur_siso INT;
+  max_siso INT;
+  cur_status VARCHAR(20);
 BEGIN
   target_lop := COALESCE(NEW.lop_id, OLD.lop_id);
   IF target_lop IS NOT NULL THEN
@@ -543,6 +534,17 @@ BEGIN
        WHERE lop_id = target_lop
          AND trang_thai IN ('pending_payment', 'paid', 'completed')
     ) WHERE ma_lop = target_lop;
+    -- Auto toggle trang_thai theo siso. Bo qua neu admin set 'closed' thu cong
+    SELECT siso_hien_tai, siso_max, trang_thai
+      INTO cur_siso, max_siso, cur_status
+      FROM classes WHERE ma_lop = target_lop;
+    IF cur_status != 'closed' THEN
+      IF cur_siso >= max_siso AND cur_status = 'open' THEN
+        UPDATE classes SET trang_thai = 'full' WHERE ma_lop = target_lop;
+      ELSIF cur_siso < max_siso AND cur_status = 'full' THEN
+        UPDATE classes SET trang_thai = 'open' WHERE ma_lop = target_lop;
+      END IF;
+    END IF;
   END IF;
   RETURN NULL;
 END;

@@ -42,15 +42,23 @@ def register(req: RegisterRequest):
 
 @router.post('/{reg_id}/payment')
 def confirm_payment(reg_id: int, req: PaymentRequest):
-    RegistrationService.confirm_payment(
-        reg_id, req.so_tien, req.hinh_thuc, req.nv_id, ghi_chu=req.ghi_chu
-    )
+    try:
+        RegistrationService.confirm_payment(
+            reg_id, req.so_tien, req.hinh_thuc, req.nv_id, ghi_chu=req.ghi_chu
+        )
+    except ValueError as e:
+        # ValueError = reg khong ton tai / da paid / cancelled / completed
+        raise HTTPException(status_code=400, detail=str(e))
     return {'status': 'paid'}
 
 
 @router.delete('/{reg_id}')
 def cancel(reg_id: int):
-    affected = RegistrationService.cancel_registration(reg_id)
+    try:
+        affected = RegistrationService.cancel_registration(reg_id)
+    except ValueError as e:
+        # Reg da completed/cancelled -> 400 voi msg ro rang
+        raise HTTPException(status_code=400, detail=str(e))
     if not affected:
         raise HTTPException(status_code=404, detail=f'Đăng ký id={reg_id} không tồn tại')
     return {'status': 'cancelled'}

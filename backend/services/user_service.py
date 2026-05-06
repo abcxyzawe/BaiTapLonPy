@@ -39,8 +39,11 @@ class StudentService:
 
     @staticmethod
     def get_by_msv(msv: str):
+        # Alias u.id AS user_id - dong nhat voi TeacherService.get_by_code,
+        # EmployeeService.get_by_code (callers fallback row.get('user_id') or row.get('id')
+        # -> alias rang buoc giup tranh case khi caller chi tim 'user_id')
         return db.fetch_one(
-            """SELECT u.id, u.full_name, u.email, u.sdt,
+            """SELECT u.id AS user_id, u.id, u.full_name, u.email, u.sdt,
                       s.msv, s.ngaysinh, s.gioitinh, s.diachi
                  FROM users u JOIN students s ON s.user_id = u.id
                 WHERE s.msv = %s""",

@@ -2,7 +2,7 @@
 from datetime import date as Date
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from backend.api.schemas import AuditLog
 from backend.services.audit_service import AuditService
@@ -18,6 +18,12 @@ def list_logs(
     from_date: Optional[Date] = None,
     to_date: Optional[Date] = None,
 ):
+    # Cap limit 5000 - tranh client xin limit=999999 keo het bang audit_logs
+    # ve UI lam crash hoac chiem RAM
+    if limit < 1:
+        limit = 100
+    elif limit > 5000:
+        limit = 5000
     return AuditService.get_all(limit=limit, user_id=user_id, action=action,
                                  from_date=from_date, to_date=to_date)
 
@@ -34,5 +40,12 @@ def log(req: AuditLog):
 
 @router.delete('/purge')
 def purge_old(days: int = 90):
+    # Min 7 ngay de tranh accident wipe het log (vd admin go nham days=0
+    # se delete WHERE created_at < CURRENT_DATE -> xoa toan bo log truoc hom nay)
+    if days < 7:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Số ngày tối thiểu để purge là 7 (truyền: {days}). Tránh xoá log mới.'
+        )
     AuditService.purge_old(days=days)
     return {'status': 'purged'}

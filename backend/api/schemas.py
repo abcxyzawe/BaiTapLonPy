@@ -4,7 +4,7 @@ Optional fields = client co the omit, server tu fill default hoac null.
 from datetime import date, time
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Enum values khop voi DB CHECK constraint (schema.sql)
 AttendanceStatus = Literal['present', 'absent', 'late', 'excused']
@@ -13,6 +13,7 @@ SemesterStatus = Literal['open', 'closed', 'upcoming']
 ClassStatus = Literal['open', 'full', 'closed']
 ScheduleStatus = Literal['scheduled', 'completed', 'cancelled', 'postponed']
 RegistrationStatus = Literal['pending_payment', 'paid', 'cancelled', 'completed']
+CurriculumLoai = Literal['Bat buoc', 'Tu chon', 'Dai cuong']  # khop CHECK schema.sql
 
 
 # ===== Auth =====
@@ -171,7 +172,9 @@ class EmployeeUpdate(BaseModel):
     email: Optional[str] = Field(None, max_length=100)
     sdt: Optional[str] = Field(None, max_length=20)
     chuc_vu: Optional[str] = Field(None, max_length=50)
-    phong_ban: Optional[str] = None
+    # Truoc thieu max_length -> attacker co the gui chuoi 1MB qua API. Dong nhat
+    # voi EmployeeCreate.phong_ban (max=50) va TeacherUpdate.khoa (max=50)
+    phong_ban: Optional[str] = Field(None, max_length=50)
 
 
 class ReviewSubmit(BaseModel):
@@ -191,6 +194,13 @@ class SemesterCreate(BaseModel):
     ket_thuc: date
     trang_thai: SemesterStatus = 'closed'  # open | closed | upcoming - khop CHECK constraint DB
 
+    @model_validator(mode='after')
+    def _check_date_order(self):
+        # bat_dau < ket_thuc, tranh tao HK kieu '2025-09-01 -> 2025-08-01'
+        if self.bat_dau and self.ket_thuc and self.bat_dau >= self.ket_thuc:
+            raise ValueError('Ngày bắt đầu phải nhỏ hơn ngày kết thúc')
+        return self
+
 
 class SemesterStatusUpdate(BaseModel):
     trang_thai: SemesterStatus  # open | closed | upcoming
@@ -200,7 +210,9 @@ class SemesterStatusUpdate(BaseModel):
 class CurriculumCreate(BaseModel):
     ma_mon: str = Field(..., min_length=1, max_length=20)
     tin_chi: int = Field(..., ge=1, le=10)
-    loai: str = Field(..., min_length=1, max_length=20)
+    # Truoc plain str max=20 -> client co the gui 'Khac' -> BE accept nhung
+    # DB CHECK reject (Bat buoc/Tu chon/Dai cuong) -> 400 vi pham CHECK
+    loai: CurriculumLoai
     hoc_ky_de_nghi: Optional[str] = Field(None, max_length=30)
     mon_tien_quyet: Optional[str] = Field(None, max_length=200)
     nganh: str = Field('CNTT', max_length=50)
@@ -210,7 +222,7 @@ class CurriculumCreate(BaseModel):
 class CurriculumUpdate(BaseModel):
     ma_mon: Optional[str] = Field(None, min_length=1, max_length=20)
     tin_chi: Optional[int] = Field(None, ge=1, le=10)
-    loai: Optional[str] = Field(None, min_length=1, max_length=20)
+    loai: Optional[CurriculumLoai] = None
     hoc_ky_de_nghi: Optional[str] = Field(None, max_length=30)
     mon_tien_quyet: Optional[str] = Field(None, max_length=200)
     nganh: Optional[str] = Field(None, max_length=50)
@@ -229,6 +241,14 @@ class ScheduleCreate(BaseModel):
     thu: Optional[int] = Field(None, ge=2, le=8)
     trang_thai: ScheduleStatus = 'scheduled'  # scheduled|completed|cancelled|postponed
 
+    @model_validator(mode='after')
+    def _check_time_order(self):
+        # Check gio_bat_dau < gio_ket_thuc - tranh DB CHECK violation con xa
+        # va cho user error message ro hon ('Gio bat dau phai truoc gio ket thuc')
+        if self.gio_bat_dau and self.gio_ket_thuc and self.gio_bat_dau >= self.gio_ket_thuc:
+            raise ValueError('Giờ bắt đầu phải nhỏ hơn giờ kết thúc')
+        return self
+
 
 class ScheduleBatchCreate(BaseModel):
     """Tao nhieu buoi hoc theo pattern (vd T2/T5 cho 12 tuan)."""
@@ -241,6 +261,24 @@ class ScheduleBatchCreate(BaseModel):
     phong: Optional[str] = Field(None, max_length=20)
     start_buoi_so: int = Field(1, ge=1, le=200)
     noi_dung: Optional[str] = Field(None, max_length=500)
+
+    @model_validator(mode='after')
+    def _check_time_order(self):
+        if self.gio_bat_dau and self.gio_ket_thuc and self.gio_bat_dau >= self.gio_ket_thuc:
+            raise ValueError('Giờ bắt đầu phải nhỏ hơn giờ kết thúc')
+        return self
+
+    @model_validator(mode='after')
+    def _check_days_range(self):
+        # Service chap nhan 0-6 (Mon=0) hoac 2-8 (T2=2..CN=8). Truoc khong validate
+        # -> client gui [100] -> service normalize -> days_norm=[] -> tra count=0
+        # khong loi nhung khong tao gi (UX confusing)
+        for d in self.days_of_week:
+            if not (0 <= d <= 6 or 2 <= d <= 8):
+                raise ValueError(
+                    f'days_of_week phải trong 0-6 (Mon=0..Sun=6) hoặc 2-8 (T2=2..CN=8), nhận: {d}'
+                )
+        return self
 
 
 # ===== Exams =====
@@ -255,6 +293,13 @@ class ExamCreate(BaseModel):
     gio_ket_thuc: Optional[time] = None
     so_cau: Optional[int] = Field(None, ge=1, le=500)
     thoi_gian_phut: int = Field(90, ge=15, le=300)
+
+    @model_validator(mode='after')
+    def _check_time_order(self):
+        # Cho exam: 2 truong optional - chi check khi ca 2 deu co
+        if self.gio_bat_dau and self.gio_ket_thuc and self.gio_bat_dau >= self.gio_ket_thuc:
+            raise ValueError('Giờ bắt đầu phải nhỏ hơn giờ kết thúc')
+        return self
 
 
 # ===== Attendance =====

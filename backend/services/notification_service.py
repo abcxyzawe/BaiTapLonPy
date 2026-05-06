@@ -47,10 +47,15 @@ class NotificationService:
 
     @staticmethod
     def get_sent_by_teacher(gv_id: int, limit: int = 10):
+        # JOIN users de lay ten HV neu notif gui rieng (den_hv_id != NULL).
+        # Truoc chi SELECT * -> FE chi co den_lop / den_hv_id thieu ten HV
+        # -> display fallback 'Tat ca' bi sai khi notif gui rieng 1 HV
         sql = """
-            SELECT * FROM notifications
-             WHERE tu_id = %s
-             ORDER BY ngay_tao DESC
+            SELECT n.*, u.full_name AS ten_hv_dich
+              FROM notifications n
+         LEFT JOIN users u ON u.id = n.den_hv_id
+             WHERE n.tu_id = %s
+             ORDER BY n.ngay_tao DESC
              LIMIT %s
         """
         return db.fetch_all(sql, (gv_id, limit))

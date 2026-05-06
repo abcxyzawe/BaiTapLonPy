@@ -42,7 +42,9 @@ def create_assignment(req: AssignmentCreate):
 
 @router.put('/{asg_id}')
 def update_assignment(asg_id: int, req: AssignmentUpdate):
-    AssignmentService.update(asg_id, **req.model_dump(exclude_unset=True))
+    affected = AssignmentService.update(asg_id, **req.model_dump(exclude_unset=True))
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Bai tap id={asg_id} khong ton tai')
     return {'status': 'ok'}
 
 

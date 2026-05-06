@@ -82,16 +82,29 @@ def _style_msgbox(box):
 
 def fmt_date(value, fmt='%d/%m/%Y', default='—'):
     """Format date/datetime/ISO string thanh dd/mm/yyyy.
-    API tra ve ISO string (do JSON), nen luc parse can detect string."""
+    API tra ve ISO string (do JSON), nen luc parse can detect string.
+    Truoc strip phan sau 'T' o ISO -> datetime time bi reset = 00:00, fmt
+    co %H:%M se hien sai 'han nop 31/12/2025 00:00' thay vi '10:30'.
+    Fix: parse full ISO string khi co 'T' (datetime.fromisoformat ho tro)."""
     if not value:
         return default
     if isinstance(value, str):
         try:
             from datetime import datetime
-            # Thu parse ISO format (2025-12-31 hoac 2025-12-31T10:00:00)
-            value = datetime.fromisoformat(value.split('T')[0] if 'T' in value else value)
+            # Parse ISO format full (vd '2025-12-31T10:00:00' giu time)
+            # Drop fractional seconds + 'Z' suffix neu co (Python <3.11 chi
+            # ho tro chuong trinh chuan)
+            v = value
+            if v.endswith('Z'):
+                v = v[:-1] + '+00:00'
+            value = datetime.fromisoformat(v)
         except Exception:
-            return value  # tra ve string nguyen ban neu parse fail
+            try:
+                # Fallback: chi parse phan date
+                from datetime import datetime as _dt2
+                value = _dt2.fromisoformat(value.split('T')[0])
+            except Exception:
+                return str(value)  # parse fail -> tra string nguyen
     try:
         return value.strftime(fmt)
     except Exception:
@@ -124,6 +137,31 @@ def parse_iso_date(value):
         return value
     try:
         return _date.fromisoformat(str(value)[:10])
+    except (ValueError, TypeError):
+        return None
+
+
+def parse_iso_datetime(value):
+    """Parse ISO datetime string (kem 'Z' suffix UTC) -> naive datetime hoac None.
+
+    Replace pattern duplicate:
+        han_dt = _dt.fromisoformat(han) if isinstance(han, str) else han
+    Truoc khong handle 'Z' suffix (Python <3.11) -> ValueError, va khi ISO co
+    timezone se tra aware datetime khong so sanh voi naive `now()` duoc.
+    """
+    if value is None or value == '':
+        return None
+    from datetime import datetime as _dt
+    if isinstance(value, _dt):
+        return value.replace(tzinfo=None) if value.tzinfo is not None else value
+    try:
+        s = str(value)
+        if s.endswith('Z'):
+            s = s[:-1] + '+00:00'
+        d = _dt.fromisoformat(s)
+        if d.tzinfo is not None:
+            d = d.replace(tzinfo=None)
+        return d
     except (ValueError, TypeError):
         return None
 
@@ -253,36 +291,26 @@ APP_NAME = 'EAUT - Hệ thống đăng ký khoá học ngoại khoá'
 def fmt_relative_date(value, full_fmt='%d/%m/%Y') -> str:
     """Format ngay theo dang relative: 'Vua xong' / 'X phut truoc' / 'Hom qua' / 'X ngay truoc' / dd/mm/yyyy.
 
+    Truoc parse loop voi format strings + slicing hacky `value[:len(fmt)+5]`,
+    khong handle 'Z' suffix UTC. Dung parse_iso_datetime() helper de robust.
+
     Args:
         value: datetime/date/ISO str/None
         full_fmt: format khi date xa (>7 ngay)
     """
-    from datetime import datetime, date as _date, timezone
+    from datetime import datetime, date as _date
     if value is None or value == '':
         return '—'
     try:
-        # Parse value -> datetime
-        if isinstance(value, str):
-            # Try ISO format with/without time
-            for fmt in ('%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S',
-                        '%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
-                try:
-                    dt = datetime.strptime(value[:len(fmt) + 5], fmt)
-                    break
-                except (ValueError, TypeError):
-                    continue
-            else:
-                return value  # khong parse duoc -> tra raw
-        elif isinstance(value, datetime):
-            dt = value
+        if isinstance(value, datetime):
+            dt = value.replace(tzinfo=None) if value.tzinfo is not None else value
         elif isinstance(value, _date):
             dt = datetime(value.year, value.month, value.day)
         else:
-            return str(value)
-
-        # Strip tzinfo cho dong nhat (so sanh local time)
-        if dt.tzinfo is not None:
-            dt = dt.replace(tzinfo=None)
+            # str path - dung helper xu ly 'Z' suffix + tzinfo
+            dt = parse_iso_datetime(value)
+            if dt is None:
+                return str(value)[:20]
 
         now = datetime.now()
         diff = now - dt
@@ -934,10 +962,12 @@ def export_class_full_schedule_pdf(parent, lop_id, ten_mon, schedules,
     rows.sort(key=_key)
 
     days_vn_short = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
-    st_vn = {'planned': 'Đã lên lịch', 'done': 'Đã diễn ra',
-             'cancelled': 'Đã huỷ', 'rescheduled': 'Đã dời lịch'}
-    st_color = {'planned': '#1e3a8a', 'done': '#166534',
-                'cancelled': '#991b1b', 'rescheduled': '#92400e'}
+    # Map khop voi DB CHECK constraint schema.sql (truoc dung 'planned'/'done'
+    # khong khop voi DB 'scheduled'/'completed' -> raw key fall through)
+    st_vn = {'scheduled': 'Đã lên lịch', 'completed': 'Đã diễn ra',
+             'cancelled': 'Đã huỷ', 'postponed': 'Đã dời lịch'}
+    st_color = {'scheduled': '#1e3a8a', 'completed': '#166534',
+                'cancelled': '#991b1b', 'postponed': '#92400e'}
 
     # Stats: tong / da dien ra / sap toi / huy
     n_done = n_upcoming = n_cancel = 0
@@ -964,11 +994,11 @@ def export_class_full_schedule_pdf(parent, lop_id, ten_mon, schedules,
         gio_str = f'{gio_bd}-{gio_kt}' if gio_bd and gio_kt else '—'
         phong = sc.get('phong', '') or '—'
         nd = sc.get('noi_dung', '') or '—'
-        st_raw = sc.get('trang_thai') or 'planned'
-        # Auto downgrade planned -> done neu da qua
+        st_raw = sc.get('trang_thai') or 'scheduled'
+        # Auto downgrade scheduled -> completed neu da qua ngay hien tai
         display_st = st_raw
-        if st_raw == 'planned' and ngay_d and ngay_d < today:
-            display_st = 'done'
+        if st_raw == 'scheduled' and ngay_d and ngay_d < today:
+            display_st = 'completed'
         st_label = st_vn.get(display_st, display_st)
         st_clr = st_color.get(display_st, '#1a1a2e')
         # Highlight today
@@ -1789,13 +1819,15 @@ def msg_input(parent, title, label, default=''):
 
 
 def norm(s):
-    """bo dau + lower cho search"""
+    """bo dau + lower + strip whitespace cho search.
+    Truoc khong strip -> user go ' admin' (leading space) co the bi miss
+    vi ' admin' khong la substring cua 'admin'."""
     if not s:
         return ''
     import unicodedata
     s = unicodedata.normalize('NFD', str(s))
     s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
-    return s.lower().replace('đ', 'd').replace('Đ', 'd')
+    return s.lower().replace('đ', 'd').replace('Đ', 'd').strip()
 
 
 def table_filter(tbl, keyword, cols=None):
@@ -2417,10 +2449,11 @@ def show_class_full_schedule_dialog(parent, lop_id, ten_mon, schedules, role='hv
     else:
         tbl.setRowCount(len(rows))
         days_vn_short = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
-        st_vn = {'planned': 'Đã lên lịch', 'done': 'Đã diễn ra',
-                 'cancelled': 'Đã huỷ', 'rescheduled': 'Đã dời lịch'}
-        st_color = {'planned': '#1e3a8a', 'done': '#166534',
-                    'cancelled': '#991b1b', 'rescheduled': '#92400e'}
+        # Map khop voi DB CHECK schema.sql: 'scheduled'/'completed'/'cancelled'/'postponed'
+        st_vn = {'scheduled': 'Đã lên lịch', 'completed': 'Đã diễn ra',
+                 'cancelled': 'Đã huỷ', 'postponed': 'Đã dời lịch'}
+        st_color = {'scheduled': '#1e3a8a', 'completed': '#166534',
+                    'cancelled': '#991b1b', 'postponed': '#92400e'}
         for r, sc in enumerate(rows):
             tbl.setRowHeight(r, 36)
             buoi_so = sc.get('buoi_so')
@@ -2456,11 +2489,11 @@ def show_class_full_schedule_dialog(parent, lop_id, ten_mon, schedules, role='hv
             it_phong.setTextAlignment(Qt.AlignCenter)
             tbl.setItem(r, 4, it_phong)
 
-            st_raw = sc.get('trang_thai') or 'planned'
-            # Auto downgrade planned -> done neu ngay da qua va chua co status overide
+            st_raw = sc.get('trang_thai') or 'scheduled'
+            # Auto downgrade scheduled -> completed neu ngay da qua
             display_st = st_raw
-            if st_raw == 'planned' and ngay_d and ngay_d < today:
-                display_st = 'done'
+            if st_raw == 'scheduled' and ngay_d and ngay_d < today:
+                display_st = 'completed'
             it_st = QtWidgets.QTableWidgetItem(st_vn.get(display_st, display_st))
             it_st.setTextAlignment(Qt.AlignCenter)
             it_st.setForeground(QColor(st_color.get(display_st, text_dark)))
@@ -2730,7 +2763,8 @@ def verify_old_password(username: str, old_password: str) -> bool:
     if not (DB_AVAILABLE and AuthService and username and old_password):
         return False
     try:
-        return AuthService.login(username, old_password) is not None
+        # Lowercase username dong bo voi on_login (DB WHERE username=%s case-sensitive)
+        return AuthService.login(username.strip().lower(), old_password) is not None
     except Exception:
         return False
 
@@ -2766,11 +2800,25 @@ def show_change_password_dialog(parent, mock_dict, user_id_resolver):
     form.addRow(btns)
     if dlg.exec_() != QtWidgets.QDialog.Accepted:
         return
+    # Step 1: ban old phai duoc nhap (truoc neu de trong -> verify_old_password
+    # se goi API voi password rong gay loi 422 thay vi msg ro)
+    if not old.text():
+        msg_warn(parent, 'Lỗi', 'Vui lòng nhập mật khẩu cũ')
+        return
     if not verify_old_password(mock_dict.get('username', ''), old.text()):
         msg_warn(parent, 'Lỗi', 'Sai mật khẩu cũ')
         return
-    if not new1.text() or new1.text() != new2.text():
-        msg_warn(parent, 'Lỗi', 'Mật khẩu mới không khớp')
+    # Step 2: ban moi phai duoc nhap (truoc 'không khớp' bi nham vi
+    # 2 chuoi rong = bang nhau, nguoi dung khong hieu vi sao bi loi)
+    if not new1.text():
+        msg_warn(parent, 'Lỗi', 'Vui lòng nhập mật khẩu mới')
+        return
+    if new1.text() != new2.text():
+        msg_warn(parent, 'Lỗi', 'Mật khẩu mới và xác nhận không khớp')
+        return
+    # Step 3: khong cho doi sang chinh mat khau cu (vo nghia + dau hieu user nham)
+    if new1.text() == old.text():
+        msg_warn(parent, 'Lỗi', 'Mật khẩu mới phải khác mật khẩu cũ')
         return
     err = validate_password(new1.text())
     if err:
@@ -3257,12 +3305,13 @@ class MainWindow(QtWidgets.QWidget):
         from datetime import date as _date, datetime as _dt
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
 
-        # Notif badge
+        # Notif badge - tru di so notif HV da dismiss (an UI-only)
         n_notif = 0
         if DB_AVAILABLE and hv_id:
             try:
                 notifs = NotificationService.get_for_student(hv_id) or []
-                n_notif = len(notifs)
+                dismissed = getattr(self, '_stu_notif_dismissed', set())
+                n_notif = sum(1 for n in notifs if n.get('id') not in dismissed)
             except Exception:
                 pass
         set_sidebar_badge(getattr(self, 'lblNotifBadge', None), n_notif)
@@ -3295,12 +3344,9 @@ class MainWindow(QtWidgets.QWidget):
                         continue
                     han = r.get('han_nop')
                     if han:
-                        try:
-                            han_dt = _dt.fromisoformat(han) if isinstance(han, str) else han
-                            if han_dt < now:
-                                continue  # quá hạn không tính
-                        except Exception:
-                            pass
+                        han_dt = parse_iso_datetime(han)
+                        if han_dt and han_dt < now:
+                            continue  # qua han khong tinh
                     n_asg += 1
             except Exception as e:
                 print(f'[STU_BADGE] asg loi: {e}')
@@ -3803,9 +3849,10 @@ class MainWindow(QtWidgets.QWidget):
         ten_gv = sched_row.get('ten_gv', '') or '—'
         buoi_so = sched_row.get('buoi_so')
         nd = sched_row.get('noi_dung', '') or ''
-        trang_thai = sched_row.get('trang_thai') or 'planned'
-        st_vn = {'planned': 'Đã lên lịch', 'done': 'Đã diễn ra',
-                 'cancelled': 'Đã huỷ', 'rescheduled': 'Đã dời lịch'}
+        trang_thai = sched_row.get('trang_thai') or 'scheduled'
+        # Map khop DB CHECK schema.sql ('scheduled'/'completed'/'cancelled'/'postponed')
+        st_vn = {'scheduled': 'Đã lên lịch', 'completed': 'Đã diễn ra',
+                 'cancelled': 'Đã huỷ', 'postponed': 'Đã dời lịch'}
         st_label = st_vn.get(trang_thai, trang_thai)
 
         fields = [
@@ -3983,21 +4030,18 @@ class MainWindow(QtWidgets.QWidget):
             if not han:
                 n_pending += 1
                 continue
-            try:
-                if isinstance(han, str):
-                    han_dt = _dt.fromisoformat(han)
-                else:
-                    han_dt = han
-                if han_dt < now:
-                    n_overdue += 1
-                else:
-                    delta = (han_dt - now).total_seconds() / 86400  # days
-                    if delta <= 3:
-                        n_due_soon += 1
-                    else:
-                        n_pending += 1
-            except Exception:
+            han_dt = parse_iso_datetime(han)
+            if han_dt is None:
                 n_pending += 1
+                continue
+            if han_dt < now:
+                n_overdue += 1
+            else:
+                delta = (han_dt - now).total_seconds() / 86400  # days
+                if delta <= 3:
+                    n_due_soon += 1
+                else:
+                    n_pending += 1
 
         banner = QtWidgets.QFrame(page)
         banner.setObjectName('asgBanner')
@@ -4474,7 +4518,14 @@ class MainWindow(QtWidgets.QWidget):
             f.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #d2d6dc; border-radius: 4px; border-top: 3px solid {color}; margin: 1px; }}')
             f.setCursor(Qt.PointingHandCursor)
             # Tooltip rich HTML voi day du info (hover show full detail)
-            phong_disp = phong if phong.lower().startswith(('p.', 'p ', 'phòng', 'phong')) else f'P. {phong}'
+            # Skip prefix 'P. ' khi phong = '—' (placeholder cho 'chua co phong')
+            phong_low = (phong or '').lower()
+            if not phong or phong == '—':
+                phong_disp = '—'
+            elif phong_low.startswith(('p.', 'p ', 'phòng', 'phong')):
+                phong_disp = phong
+            else:
+                phong_disp = f'P. {phong}'
             tip = (
                 f'<b style="color:{color};">{ma_lop}</b><br>'
                 f'<b>{ten_mon}</b><br>'
@@ -5313,13 +5364,16 @@ class MainWindow(QtWidgets.QWidget):
         tbl.verticalHeader().setVisible(False)
         tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        # Header padding 14x10 + min-height 46 dong nhat voi adm sched + bai nop dialog
         tbl.setStyleSheet(
             'QTableWidget { background: white; border: 1px solid #d2d6dc; '
             'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
             'QHeaderView::section { background: #f7fafc; color: #4a5568; '
-            'padding: 8px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'font-family: "Segoe UI", "Inter", sans-serif; '
             'font-weight: bold; font-size: 11px; }'
         )
+        tbl.horizontalHeader().setMinimumHeight(46)
         tbl.show()
 
     def _reload_stu_assignments(self, page):
@@ -5349,13 +5403,11 @@ class MainWindow(QtWidgets.QWidget):
                 han_str = '—'
                 han_overdue = False
                 if row.get('han_nop'):
-                    try:
-                        han_dt = row['han_nop']
-                        if isinstance(han_dt, str):
-                            han_dt = datetime.fromisoformat(han_dt)
+                    han_dt = parse_iso_datetime(row['han_nop'])
+                    if han_dt:
                         han_str = han_dt.strftime('%d/%m/%Y %H:%M')
                         han_overdue = han_dt < now
-                    except Exception:
+                    else:
                         han_str = str(row['han_nop'])
 
                 has_sub = row.get('submission_id') is not None
@@ -5413,7 +5465,8 @@ class MainWindow(QtWidgets.QWidget):
         cbo = page.findChild(QtWidgets.QComboBox, 'cboStuAsgStatus')
         if not tbl:
             return
-        kw = (txt_s.text().strip().lower() if txt_s else '')
+        # Search via norm() de bo dau - user go 'cham' match 'Đã chấm' / 'Bai tap' match 'Bài tập'
+        kw = norm(txt_s.text() if txt_s else '')
         sel_status = cbo.itemData(cbo.currentIndex()) if cbo else None
         # Map filter id -> trang thai VN
         status_map_vn = {
@@ -5425,12 +5478,12 @@ class MainWindow(QtWidgets.QWidget):
         target_st = status_map_vn.get(sel_status) if sel_status else None
         for r in range(tbl.rowCount()):
             show = True
-            # Search keyword (col 1=title, col 2=lớp+khóa)
+            # Search keyword (col 1=title, col 2=lớp+khóa) via norm
             if kw:
                 hit = False
                 for c in (1, 2):
                     it = tbl.item(r, c)
-                    if it and kw in it.text().lower():
+                    if it and kw in norm(it.text()):
                         hit = True; break
                 if not hit:
                     show = False
@@ -5607,16 +5660,19 @@ class MainWindow(QtWidgets.QWidget):
                         )
 
         widen_search(page, 'txtSearchReview', 280, ['cboSubject', 'cboDept'])
-        # search + filter
+        # search + filter - safe_connect tranh accumulation khi page reload
+        # (truoc moi lan _fill_review chay them 1 handler -> nav qua lai N lan
+        # se trigger filter N lan moi text change -> lag UI)
         txt_s = page.findChild(QtWidgets.QLineEdit, 'txtSearchReview')
         if txt_s:
-            txt_s.textChanged.connect(lambda t: table_filter(tbl, t, cols=[1, 2]) if tbl else None)
+            safe_connect(txt_s.textChanged,
+                         lambda t: table_filter(tbl, t, cols=[1, 2]) if tbl else None)
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboDept')
         if cbo_d:
-            cbo_d.currentIndexChanged.connect(lambda: self._apply_review_filter())
+            safe_connect(cbo_d.currentIndexChanged, lambda: self._apply_review_filter())
         cbo_s = page.findChild(QtWidgets.QComboBox, 'cboSubject')
         if cbo_s:
-            cbo_s.currentIndexChanged.connect(lambda: self._apply_review_filter())
+            safe_connect(cbo_s.currentIndexChanged, lambda: self._apply_review_filter())
 
     def _apply_review_filter(self):
         page = self.page_widgets[5]  # btnReview moved to idx 5 sau khi insert btnAssign
@@ -5687,7 +5743,7 @@ class MainWindow(QtWidgets.QWidget):
             self._fill_review()
         except Exception as e:
             print(f'[REVIEW] submit loi: {e}')
-            msg_warn(self, 'Đánh giá', f'Lưu đánh giá thất bại:\n{e}')
+            msg_warn(self, 'Đánh giá', f'Lưu đánh giá thất bại:\n{api_error_msg(e)}')
 
     def _fill_notifications(self):
         """Load notifs vao cache + render lan dau. Render thuc trong _render_notifications."""
@@ -5751,12 +5807,15 @@ class MainWindow(QtWidgets.QWidget):
             if c:
                 c.hide()
 
-        # Lay notifs tu API + cache
+        # Lay notifs tu API + cache. Filter notif HV da dismiss UI-only
+        # (xem _delete_notif: khong goi API DELETE de tranh xoa broadcast notif)
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
         self._stu_notif_cache = []
         if DB_AVAILABLE and hv_id:
             try:
-                self._stu_notif_cache = NotificationService.get_for_student(hv_id) or []
+                rows = NotificationService.get_for_student(hv_id) or []
+                dismissed = getattr(self, '_stu_notif_dismissed', set())
+                self._stu_notif_cache = [n for n in rows if n.get('id') not in dismissed]
             except Exception as e:
                 print(f'[STU_NOTIF] API loi: {e}')
 
@@ -5777,13 +5836,15 @@ class MainWindow(QtWidgets.QWidget):
         if sel_loai:
             notifs = [n for n in notifs if (n.get('loai') or 'info') == sel_loai]
 
-        # Apply search keyword
+        # Apply search keyword - dung norm() bo dau de user go 'thong bao' tim duoc
+        # 'Thông báo' (truoc lower() khong strip dau -> miss diacritic match)
         search = page_hb.findChild(QtWidgets.QLineEdit, 'txtNotifSearch') if page_hb else None
-        kw = search.text().strip().lower() if search else ''
+        kw_raw = search.text().strip() if search else ''
+        kw = norm(kw_raw)
         if kw:
             notifs = [n for n in notifs
-                      if kw in (n.get('tieu_de', '') or '').lower()
-                      or kw in (n.get('noi_dung', '') or '').lower()]
+                      if kw in norm(n.get('tieu_de', '') or '')
+                      or kw in norm(n.get('noi_dung', '') or '')]
 
         # Update counter
         total = len(getattr(self, '_stu_notif_cache', []) or [])
@@ -5836,14 +5897,14 @@ class MainWindow(QtWidgets.QWidget):
             title_lbl.setStyleSheet('color: #1a1a2e; font-size: 14px; font-weight: bold; background: transparent; border: none;')
             title_lbl.show()
 
-            # Nut Xoa (X) o goc phai card
+            # Nut An (X) o goc phai card - dismiss UI-only, khong xoa DB
             notif_id = n.get('id')
             if notif_id is not None:
                 btn_del = QtWidgets.QPushButton('🗑', card)
                 btn_del.setObjectName(f'btnDelNotif{i}')
                 btn_del.setGeometry(card_w - 42, 12, 26, 26)
                 btn_del.setCursor(Qt.PointingHandCursor)
-                btn_del.setToolTip('Xóa thông báo này')
+                btn_del.setToolTip('Ẩn thông báo này khỏi danh sách (HV khác vẫn nhận được)')
                 btn_del.setStyleSheet(
                     'QPushButton { background: transparent; border: 1px solid transparent; '
                     'border-radius: 4px; font-size: 13px; color: #a0aec0; } '
@@ -5883,7 +5944,8 @@ class MainWindow(QtWidgets.QWidget):
         cbo = page_hb.findChild(QtWidgets.QComboBox, 'cboNotifFilter') if page_hb else None
         sel_loai = cbo.itemData(cbo.currentIndex()) if cbo else None
         search = page_hb.findChild(QtWidgets.QLineEdit, 'txtNotifSearch') if page_hb else None
-        kw = (search.text().strip().lower() if search else '')
+        # Dung norm() bo dau de target khop voi visible danh sach (deu render qua norm)
+        kw = norm(search.text() if search else '')
 
         cache = getattr(self, '_stu_notif_cache', []) or []
         target = list(cache)
@@ -5891,36 +5953,31 @@ class MainWindow(QtWidgets.QWidget):
             target = [n for n in target if (n.get('loai') or 'info') == sel_loai]
         if kw:
             target = [n for n in target
-                      if kw in (n.get('tieu_de', '') or '').lower()
-                      or kw in (n.get('noi_dung', '') or '').lower()]
+                      if kw in norm(n.get('tieu_de', '') or '')
+                      or kw in norm(n.get('noi_dung', '') or '')]
 
         if not target:
-            msg_warn(self, 'Không có gì để xóa', 'Danh sách hiện tại đang trống.')
+            msg_warn(self, 'Không có gì để ẩn', 'Danh sách hiện tại đang trống.')
             return
 
-        # Confirm voi count
-        if not msg_confirm(self, 'Xác nhận xóa tất cả',
-                           f'Bạn có chắc muốn xóa <b>{len(target)}</b> thông báo đang hiển thị?\n\n'
-                           f'Hành động này KHÔNG thể hoàn tác.'):
-            return
-        if not (DB_AVAILABLE and NotificationService):
-            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+        # Confirm voi count - msg dung 'an' (dismiss UI-only) thay vi 'xoa'
+        # vi behavior la ẩn local, khong DELETE DB. Ẩn co the reset khi reload window.
+        if not msg_confirm(self, 'Xác nhận ẩn tất cả',
+                           f'Bạn có chắc muốn ẩn <b>{len(target)}</b> thông báo đang hiển thị?\n\n'
+                           f'Thông báo sẽ ẩn khỏi danh sách của bạn (không xóa khỏi DB nên HV khác vẫn nhận được).'):
             return
 
-        deleted = 0
-        failed = 0
+        # Bulk dismiss UI-only (KHONG goi API DELETE - tranh xoa notif broadcast
+        # khoi DB lam HV khac mat). Track set _stu_notif_dismissed cho reload.
+        if not hasattr(self, '_stu_notif_dismissed'):
+            self._stu_notif_dismissed = set()
         delete_ids = set()
         for n in target:
             nid = n.get('id')
             if not nid:
                 continue
-            try:
-                NotificationService.delete(nid)
-                delete_ids.add(nid)
-                deleted += 1
-            except Exception as e:
-                failed += 1
-                print(f'[STU_NOTIF_DEL_ALL] loi {nid}: {e}')
+            self._stu_notif_dismissed.add(nid)
+            delete_ids.add(nid)
 
         # Update cache
         self._stu_notif_cache = [n for n in cache if n.get('id') not in delete_ids]
@@ -5928,30 +5985,35 @@ class MainWindow(QtWidgets.QWidget):
         if hasattr(self, '_update_notif_badge'):
             self._update_notif_badge()
 
-        if failed:
-            msg_warn(self, 'Hoàn tất với lỗi',
-                     f'Đã xóa: <b>{deleted}/{len(target)}</b><br>Lỗi: <b>{failed}</b>')
-        else:
-            msg_info(self, 'Đã xóa', f'✓ Đã xóa <b>{deleted}</b> thông báo.')
+        msg_info(self, 'Đã ẩn', f'✓ Đã ẩn <b>{len(delete_ids)}</b> thông báo khỏi danh sách (không xóa khỏi DB).')
 
     def _delete_notif(self, notif_id, tieu_de=''):
-        """Xoa 1 thong bao - confirm truoc khi goi API."""
-        if not msg_confirm_delete(self, 'thông báo', str(notif_id),
-                                   item_name=tieu_de[:40] if tieu_de else ''):
+        """An 1 thong bao khoi danh sach cua HV nay - dismiss UI-only.
+
+        QUAN TRONG: Khong goi API delete vi notification la BROADCAST
+        (GV/Admin gui den toan lop hoac toan he thong). Neu HV1 xoa thi
+        DB DELETE -> HV2 mat luon notif chua doc -> bug.
+
+        Chi xoa khoi cache local (_stu_notif_cache) + persist set 'da an'
+        vao instance attr de re-fetch khong hien lai. Refresh page (F5)
+        se reset. De-luu permanent can them bang notification_reads voi
+        FK (notif_id, hv_id) - chua implement.
+        """
+        # Confirm bang msg_confirm thuong (khong dung msg_confirm_delete vi
+        # text 'XOA' va 'KHONG THE HOAN TAC' khong dung voi dismiss UI-only)
+        title_short = tieu_de[:40] if tieu_de else f'#{notif_id}'
+        if not msg_confirm(self, 'Xác nhận ẩn',
+                           f'Ẩn thông báo <b>"{title_short}"</b> khỏi danh sách của bạn?\n\n'
+                           f'<i>Chỉ ẩn UI - HV khác vẫn nhận được thông báo này.</i>'):
             return
-        if not (DB_AVAILABLE and NotificationService):
-            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
-            return
-        try:
-            NotificationService.delete(notif_id)
-        except Exception as e:
-            msg_warn(self, 'Không xóa được', api_error_msg(e))
-            return
-        # Update cache + re-render
+        # Track ID da dismiss trong session (reset khi reload)
+        if not hasattr(self, '_stu_notif_dismissed'):
+            self._stu_notif_dismissed = set()
+        self._stu_notif_dismissed.add(notif_id)
+        # Update cache local + re-render
         cache = getattr(self, '_stu_notif_cache', []) or []
         self._stu_notif_cache = [n for n in cache if n.get('id') != notif_id]
         self._render_notifications()
-        # Update sidebar badge nếu có
         if hasattr(self, '_update_notif_badge'):
             self._update_notif_badge()
 
@@ -6331,13 +6393,20 @@ class AdminWindow(QtWidgets.QWidget):
         if hasattr(self, 'lblAdmRegBadge'):
             set_sidebar_badge(self.lblAdmRegBadge, count_overdue_pending_registrations())
 
-        # Badge 2: lop chua co GV (gv_id IS NULL)
+        # Badge 2: lop chua co GV (gv_id IS NULL) - chi dem lop o dot open/upcoming
+        # de admin khong bi spam boi cac lop dot da closed
         n_no_gv = 0
         if DB_AVAILABLE and CourseService and hasattr(self, 'lblAdmClsBadge'):
             try:
                 rows = CourseService.get_all_classes() or []
+                active_sems = {sid for sid, st in MOCK_SEM_STATUS.items()
+                                if st in ('open', 'upcoming')}
                 for r in rows:
-                    if not r.get('gv_id'):
+                    if r.get('gv_id'):
+                        continue
+                    sid = r.get('semester_id') or ''
+                    # Khong sem hoac sem trong active set -> dem
+                    if not sid or not MOCK_SEM_STATUS or sid in active_sems:
                         n_no_gv += 1
             except Exception as e:
                 print(f'[ADM_CLS_BADGE] loi: {e}')
@@ -6586,14 +6655,20 @@ class AdminWindow(QtWidgets.QWidget):
         if DB_AVAILABLE and CourseService:
             try:
                 rows = CourseService.get_all_classes() or []
+                # Chi dem lop dot open/upcoming - dot closed thi GV cu da xong, khong can canh bao
+                active_sems = {sid for sid, st in MOCK_SEM_STATUS.items()
+                                if st in ('open', 'upcoming')}
                 for r in rows:
                     gv_id = r.get('gv_id')
                     ten_gv = r.get('ten_gv')
-                    # Coi la "chua co GV" neu gv_id NULL HOAC ten_gv rong/null
-                    if gv_id is None and not ten_gv:
-                        n_no_gv += 1
-                        if len(sample_lops) < 5:
-                            sample_lops.append(r.get('ma_lop', '?'))
+                    if gv_id is not None or ten_gv:
+                        continue
+                    sid = r.get('semester_id') or ''
+                    if sid and MOCK_SEM_STATUS and sid not in active_sems:
+                        continue  # dot da closed -> bo qua
+                    n_no_gv += 1
+                    if len(sample_lops) < 5:
+                        sample_lops.append(r.get('ma_lop', '?'))
             except Exception as e:
                 print(f'[ADM_DASH_NOGV] loi: {e}')
 
@@ -6629,11 +6704,12 @@ class AdminWindow(QtWidgets.QWidget):
                 f'  ·  {sample_str}'
                 f'  ·  <span style="color:#1e3a8a;">click để gán GV</span>')
 
-        lbl = QtWidgets.QLabel(text, banner)
+        lbl = QtWidgets.QLabel(banner)
+        lbl.setTextFormat(Qt.RichText)  # set TRUOC setText cho HTML parse dung
+        lbl.setText(text)
         lbl.setGeometry(15, 0, 950, 38)
         lbl.setStyleSheet('color: #9a3412; font-size: 12px; background: transparent; border: none;')
         lbl.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        lbl.setTextFormat(Qt.RichText)
         lbl.setCursor(Qt.PointingHandCursor)
         banner.setToolTip(f'{n_no_gv} lớp chưa gán GV — click để vào trang Quản lý lớp')
 
@@ -7372,26 +7448,22 @@ class AdminWindow(QtWidgets.QWidget):
         btn_s = page.findChild(QtWidgets.QPushButton, 'btnSearchStudent')
         if btn_s and txt:
             safe_connect(btn_s.clicked, lambda: table_filter(tbl, txt.text(), cols=[0, 1]))
-        # mapping khoa -> lop (dung khi cascade)
-        self._adm_lop_by_khoa = {
-            'CNTT': ['CNTT-K20A', 'CNTT-K20B'],
-            'Toán': ['TOAN-K20'],
-            'Ngoại ngữ': ['NN-K20'],
-        }
-        # Khoa truoc (cha)
+        # cbo_d (Khoa): bo loc theo khoa vi students table KHONG co cot khoa
+        # (khoa la field cua teachers/employees). Truoc cho admin chon
+        # 'CNTT'/'Toán'/'Ngoại ngữ' nhung col 3 cua row la hardcode '—' ->
+        # filter khong bao gio match -> chon khoa thi an HET hv.
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
         if cbo_d:
-            cbo_d.clear()
-            cbo_d.addItems(['Tất cả khoa', 'CNTT', 'Toán', 'Ngoại ngữ'])
-            safe_connect(cbo_d.currentIndexChanged, self._adm_st_khoa_changed)
-        # Lop sau (con) - mac dinh tat ca, doi khi khoa thay doi
+            cbo_d.hide()  # An hoan toan thay vi hien filter ma khong work
+        # Lop combo: populate tu cac lop thuc te HV dang ky (khong hardcode
+        # 'CNTT-K20A'). Lay unique tu cot 2 (cac_lop) cua data.
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
         if cbo_c:
             cbo_c.clear()
             cbo_c.addItem('Tất cả lớp')
-            for lops in self._adm_lop_by_khoa.values():
-                for lop in lops:
-                    cbo_c.addItem(lop)
+            # Lay danh sach lop tu MOCK_CLASSES (chuan, da pop tu API)
+            for cls in MOCK_CLASSES:
+                cbo_c.addItem(cls[0])  # ma_lop
             safe_connect(cbo_c.currentIndexChanged, lambda: self._admin_filter_students())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddStudent')
         if btn_add:
@@ -7444,20 +7516,16 @@ class AdminWindow(QtWidgets.QWidget):
         page = self.page_widgets[3]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdminStudents')
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
-        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
         if not tbl:
             return
-        # Strip dau khi so sanh - DB co the chua data khong dau ('Toan')
-        # nhung combo UI co dau ('Toán')
+        # Strip dau khi so sanh - cac_lop la chuoi 'IT001-A, IT002-B' nen
+        # check substring de khop ma_lop. Bo cbo_d (khoa) - student khong co
+        # khoa col, filter cu luon hide het rows
         lop_sel = _status_normalize(cbo_c.currentText()) if cbo_c and cbo_c.currentIndex() > 0 else None
-        khoa_sel = _status_normalize(cbo_d.currentText()) if cbo_d and cbo_d.currentIndex() > 0 else None
         for r in range(tbl.rowCount()):
             it_lop = tbl.item(r, 2)
-            it_khoa = tbl.item(r, 3)
             show = True
             if lop_sel and it_lop and lop_sel not in _status_normalize(it_lop.text()):
-                show = False
-            if khoa_sel and it_khoa and khoa_sel not in _status_normalize(it_khoa.text()):
                 show = False
             tbl.setRowHidden(r, not show)
 
@@ -7549,10 +7617,12 @@ class AdminWindow(QtWidgets.QWidget):
             msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống.')
             return
         # Build payload (clean rows - strip whitespace + handle empty)
+        # Lowercase username dong bo voi single-add + login flow (DB
+        # WHERE username=%s case-sensitive)
         payload = []
         for row in rows:
             d = {
-                'username': (row.get('username') or '').strip(),
+                'username': (row.get('username') or '').strip().lower(),
                 'password': (row.get('password') or '').strip() or 'pass1234',
                 'full_name': (row.get('full_name') or '').strip(),
                 'msv': (row.get('msv') or '').strip(),
@@ -8190,12 +8260,13 @@ class AdminWindow(QtWidgets.QWidget):
         hk_sel = cbo_h.currentText() if cbo_h and cbo_h.currentIndex() > 0 else None
         nganh_prefix = None
         if cbo_n and cbo_n.currentIndex() > 0:
-            t = cbo_n.currentText()
-            if 'CNTT' in t or 'thông tin' in t.lower():
+            t_norm = norm(cbo_n.currentText())  # bo dau + lower
+            # Truoc 'CNTT' in t case-sensitive + 'Toán' in t -> 'toán' lowercase miss
+            if 'cntt' in t_norm or 'thong tin' in t_norm:
                 nganh_prefix = 'IT'
-            elif 'Toán' in t:
+            elif 'toan' in t_norm:
                 nganh_prefix = 'MA'
-            elif 'Ngoại ngữ' in t or 'Anh' in t:
+            elif 'ngoai ngu' in t_norm or 'anh' in t_norm:
                 nganh_prefix = 'EN'
         for r in range(tbl.rowCount()):
             show = True
@@ -8287,23 +8358,28 @@ class AdminWindow(QtWidgets.QWidget):
                              'border-radius: 4px; padding: 2px 8px; font-size: 12px; } '
                              'QLineEdit:focus { border-color: #002060; }')
 
-        # Table - gap 6px sau filter (truoc 130 -> 112)
+        # Table - gap 12px sau filter de header table khong dinh sat filter bar
         tbl = QtWidgets.QTableWidget(page)
         tbl.setObjectName('tblAdmSched')
-        tbl.setGeometry(15, 112, 990, 580)
+        tbl.setGeometry(15, 118, 990, 574)
         tbl.setColumnCount(8)
         tbl.setHorizontalHeaderLabels(['#', 'Lớp', 'Khóa học', 'Ngày', 'Thứ',
                                        'Giờ học', 'Phòng', 'Thao tác'])
         tbl.verticalHeader().setVisible(False)
         tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        # Header padding tang 14px (tu 8) de chu khong dinh sat mep tren / canh
+        # font Segoe UI nho hon mot chut + letter-spacing nhe cho de doc
         tbl.setStyleSheet(
             'QTableWidget { background: white; border: 1px solid #d2d6dc; '
             'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
             'QHeaderView::section { background: #f7fafc; color: #4a5568; '
-            'padding: 8px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'font-family: "Segoe UI", "Inter", sans-serif; '
             'font-weight: bold; font-size: 11px; }'
         )
+        # Tang chieu cao header de them lasting hon
+        tbl.horizontalHeader().setMinimumHeight(46)
         tbl.show()
 
         # Wire combo filter
@@ -8716,7 +8792,9 @@ class AdminWindow(QtWidgets.QWidget):
                 if not AuditService: raise RuntimeError("AuditService chua co")
                 rows = AuditService.get_all(limit=50)
                 role_map = {'admin': 'QTV', 'teacher': 'GV', 'employee': 'NV', 'student': 'HV'}
-                # Map action code (tu DB trigger) -> ten thao tac than thien
+                # Map action code (tu DB trigger + auth_service.log_login) -> ten thao tac
+                # than thien tieng Viet. Truoc 'login'/'login_failed' khong trong map ->
+                # hien raw 'login' -> filter 'Đăng nhập' khong match
                 action_map = {
                     'create_registrations': 'Tạo đăng ký',
                     'update_registrations': 'Cập nhật ĐK',
@@ -8729,6 +8807,9 @@ class AdminWindow(QtWidgets.QWidget):
                     'delete_grades': 'Xoá điểm',
                     'create_attendance': 'Điểm danh',
                     'update_attendance': 'Sửa điểm danh',
+                    'login': 'Đăng nhập',
+                    'login_failed': 'Đăng nhập thất bại',
+                    'logout': 'Đăng xuất',
                 }
                 data = []
                 for l in rows:
@@ -8768,7 +8849,9 @@ class AdminWindow(QtWidgets.QWidget):
                 ['17/04/2026 09:30:00', '2024010', 'HV', 'Thanh toán', 'Thanh toán 9,000,000 đ - HK2', '10.0.0.91'],
             ]
         action_colors = {
-            'Đăng nhập': COLORS['green'], 'Đăng ký': COLORS['navy'],
+            'Đăng nhập': COLORS['green'], 'Đăng nhập thất bại': COLORS['red'],
+            'Đăng xuất': COLORS['text_mid'],
+            'Đăng ký': COLORS['navy'],
             'Tạo đăng ký': COLORS['navy'], 'Huỷ đăng ký': COLORS['orange'],
             'Cập nhật ĐK': COLORS['text_mid'],
             'Thanh toán': COLORS['gold'], 'Hoàn tiền': COLORS['orange'],
@@ -8812,8 +8895,11 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_a = page.findChild(QtWidgets.QComboBox, 'cboAuditAction')
         if cbo_a:
             cbo_a.clear()
-            cbo_a.addItems(['Tất cả hành động', 'Đăng nhập', 'Đăng ký', 'Hủy ĐK',
-                            'Thanh toán', 'Cập nhật', 'Cảnh báo', 'Mở đăng ký'])
+            # Cac muc filter phai khop voi nhan o cot 3 (action_map): 'Huy DK' khong
+            # match 'Huỷ đăng ký' substring. Cap nhat de filter chay dung
+            cbo_a.addItems(['Tất cả hành động', 'Đăng nhập', 'Tạo đăng ký', 'Huỷ đăng ký',
+                            'Thanh toán', 'Hoàn tiền', 'Nhập điểm', 'Sửa điểm',
+                            'Điểm danh', 'Mở đăng ký', 'Cảnh báo'])
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboAuditDate')
         if cbo_d:
             cbo_d.clear()
@@ -9426,14 +9512,19 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_mon.addItem('-- Chọn môn --')
         for code, name in MOCK_COURSES:
             cbo_mon.addItem(f'{code} - {name}', userData=(code, name))
-        # GV = combo tu cac GV co trong MOCK_CLASSES
+        # GV combo: load tu TeacherService de dam bao co GV moi (chua co lop)
+        # Truoc lay tu MOCK_CLASSES -> GV chua duoc gan lop nao se khong xuat hien
+        # -> admin khong them duoc lop cho GV moi cho den khi co lop khac roi
         cbo_gv = QtWidgets.QComboBox()
-        cbo_gv.addItem('-- Chọn giảng viên --')
-        seen_gv = set()
-        for cls in MOCK_CLASSES:
-            if cls[3] not in seen_gv:
-                seen_gv.add(cls[3])
-                cbo_gv.addItem(cls[3])
+        cbo_gv.addItem('-- Chọn giảng viên --', None)
+        try:
+            for t in (TeacherService.get_all() or []):
+                tid = t.get('id') or t.get('user_id')
+                ten = (t.get('full_name') or '').strip()
+                if tid and ten:
+                    cbo_gv.addItem(ten, userData=tid)
+        except Exception as e:
+            print(f'[ADM_ADD_CLS] load teachers loi: {e}')
         lich = QtWidgets.QLineEdit('T2 (7:00-9:30)')
         phong = QtWidgets.QLineEdit('P.?')
         smax = QtWidgets.QSpinBox(); smax.setRange(10, 100); smax.setValue(40)
@@ -9468,27 +9559,15 @@ class AdminWindow(QtWidgets.QWidget):
             return
 
         mon_code, mon_name = cbo_mon.currentData()
+        gv_id = cbo_gv.currentData()  # userData = teacher_id (set khi build combo)
         gv_name = cbo_gv.currentText()
         ma_lop = ma.text().upper().strip()
 
         if not DB_AVAILABLE:
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
-
-        # Tim gv_id qua API
-        gv_id = None
-        try:
-            teachers = TeacherService.get_all() or []
-            for t in teachers:
-                if (t.get('full_name') or '').strip() == gv_name.strip():
-                    gv_id = t.get('id') or t.get('user_id')
-                    break
-        except Exception as e:
-            print(f'[ADM_ADD_CLS] tim GV loi: {e}')
-            msg_warn(self, 'Lỗi', f'Không lấy được danh sách GV:\n{api_error_msg(e)}')
-            return
         if not gv_id:
-            msg_warn(self, 'Lỗi', f'Không tìm thấy giảng viên "{gv_name}" trong hệ thống.')
+            msg_warn(self, 'Lỗi', f'Không xác định được giảng viên "{gv_name}".')
             return
 
         # Semester hien tai
@@ -9586,14 +9665,25 @@ class AdminWindow(QtWidgets.QWidget):
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchTea')
         if txt:
             safe_connect(txt.textChanged, lambda s: table_filter(tbl, s, cols=[0, 1]))
+        # Populate cbo dynamic tu data thuc te thay vi hardcode (truoc cbo co
+        # 'Cử nhân'/'Ngoại ngữ' nhung DB khong co GV nao co value do -> chon
+        # filter hien rong, gay UX bad. Lay unique tu cot 2 (khoa) + cot 3 (hoc_vi))
         cbo_k = page.findChild(QtWidgets.QComboBox, 'cboTeaKhoa')
         if cbo_k:
             cbo_k.clear()
-            cbo_k.addItems(['Tất cả khoa', 'CNTT', 'Toán', 'Ngoại ngữ'])
+            cbo_k.addItem('Tất cả khoa')
+            seen_k = set()
+            for row in data:
+                if len(row) > 2 and row[2] and row[2] not in seen_k:
+                    seen_k.add(row[2]); cbo_k.addItem(row[2])
         cbo_hv = page.findChild(QtWidgets.QComboBox, 'cboTeaHocVi')
         if cbo_hv:
             cbo_hv.clear()
-            cbo_hv.addItems(['Tất cả học vị', 'Tiến sĩ', 'Thạc sĩ', 'Phó giáo sư', 'Cử nhân'])
+            cbo_hv.addItem('Tất cả học vị')
+            seen_hv = set()
+            for row in data:
+                if len(row) > 3 and row[3] and row[3] not in seen_hv:
+                    seen_hv.add(row[3]); cbo_hv.addItem(row[3])
         for nm in ('cboTeaKhoa', 'cboTeaHocVi'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
@@ -9797,14 +9887,24 @@ class AdminWindow(QtWidgets.QWidget):
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchEmp')
         if txt:
             safe_connect(txt.textChanged, lambda s: table_filter(tbl, s, cols=[0, 1]))
+        # Populate cbo dynamic tu data thuc te (truoc cbo_s co 'Nghỉ phép' nhung
+        # FE chi map is_active -> 'Đang làm'/'Đã nghỉ' -> filter 'Nghỉ phép' empty)
         cbo_r = page.findChild(QtWidgets.QComboBox, 'cboEmpRole')
         if cbo_r:
             cbo_r.clear()
-            cbo_r.addItems(['Tất cả chức vụ', 'Nhân viên đăng ký', 'Nhân viên thu ngân', 'Quản lý'])
+            cbo_r.addItem('Tất cả chức vụ')
+            seen_r = set()
+            for row in data:
+                if len(row) > 2 and row[2] and row[2] != '—' and row[2] not in seen_r:
+                    seen_r.add(row[2]); cbo_r.addItem(row[2])
         cbo_s = page.findChild(QtWidgets.QComboBox, 'cboEmpStatus')
         if cbo_s:
             cbo_s.clear()
-            cbo_s.addItems(['Tất cả trạng thái', 'Đang làm', 'Nghỉ phép', 'Đã nghỉ'])
+            cbo_s.addItem('Tất cả trạng thái')
+            seen_s = set()
+            for row in data:
+                if len(row) > 5 and row[5] and row[5] not in seen_s:
+                    seen_s.add(row[5]); cbo_s.addItem(row[5])
         for nm in ('cboEmpRole', 'cboEmpStatus'):
             cbo = page.findChild(QtWidgets.QComboBox, nm)
             if cbo:
@@ -9841,7 +9941,9 @@ class AdminWindow(QtWidgets.QWidget):
             preview_keys=['ma_gv', 'full_name', 'username', 'khoa', 'hoc_vi', 'sdt'],
             preview_widths=[35, 90, 200, 130, 150, 100, 100],
             create_fn=lambda d: TeacherService.create(
-                username=d.get('username'), password=d.get('password') or 'pass1234',
+                # Lowercase username dong bo voi single-add + login flow
+                username=(d.get('username') or '').strip().lower(),
+                password=d.get('password') or 'pass1234',
                 full_name=d.get('full_name'), ma_gv=d.get('ma_gv'),
                 email=d.get('email') or None, sdt=d.get('sdt') or None,
                 hoc_vi=d.get('hoc_vi') or None, khoa=d.get('khoa') or None,
@@ -9862,7 +9964,9 @@ class AdminWindow(QtWidgets.QWidget):
             preview_keys=['ma_nv', 'full_name', 'username', 'chuc_vu', 'phong_ban', 'sdt'],
             preview_widths=[35, 90, 200, 130, 130, 130, 100],
             create_fn=lambda d: EmployeeService.create(
-                username=d.get('username'), password=d.get('password') or 'pass1234',
+                # Lowercase username dong bo voi single-add + login flow
+                username=(d.get('username') or '').strip().lower(),
+                password=d.get('password') or 'pass1234',
                 full_name=d.get('full_name'), ma_nv=d.get('ma_nv'),
                 email=d.get('email') or None, sdt=d.get('sdt') or None,
                 chuc_vu=d.get('chuc_vu') or None, phong_ban=d.get('phong_ban') or None,
@@ -10528,24 +10632,24 @@ class TeacherWindow(QtWidgets.QWidget):
                     ngay_val = buoi_info.get('ngay') or _date.today()
                     gio_bd = str(buoi_info.get('gio_bat_dau', '07:00'))[:5]
                     gio_kt = str(buoi_info.get('gio_ket_thuc', '09:30'))[:5]
-                    ScheduleService.create(
+                    # Truoc: ScheduleService.create + re-query GET /class/{ma_lop}
+                    # roi matched[-1] de lay id - fragile khi co nhieu buoi cung
+                    # ngay (ORDER BY ngay nhung khong specify ASC/DESC -> id thu
+                    # tu khong dam bao). Backend tra ve {'id': sid} -> dung
+                    # truc tiep
+                    resp = ScheduleService.create(
                         ma_lop, ngay_val, gio_bd, gio_kt,
                         trang_thai='completed'
                     )
-                    # Re-query schedule list de lay id moi tao
-                    new_schedules = ScheduleService.get_for_class(ma_lop) or []
-                    # Tim schedule co ngay khop (moi tao gan day nhat)
-                    matched = [s for s in new_schedules
-                               if str(s.get('ngay', ''))[:10] == str(ngay_val)[:10]]
-                    if matched:
-                        buoi_id = matched[-1].get('id')  # lay id cao nhat
+                    buoi_id = resp.get('id') if isinstance(resp, dict) else None
+                    if buoi_id:
                         print(f'[TEA_ATTEND] Tao schedule moi cho {ma_lop}, id={buoi_id}')
                     if not buoi_id or buoi_id <= 0:
                         msg_warn(self, 'Lỗi', 'Đã tạo buổi học nhưng không lấy được mã. Vui lòng thử lại.')
                         return
                 except Exception as e:
                     print(f'[TEA_ATTEND] Khong tao duoc schedule: {e}')
-                    msg_warn(self, 'Lỗi tạo buổi', f'Không thể tạo buổi học mới:\n{e}')
+                    msg_warn(self, 'Lỗi tạo buổi', f'Không thể tạo buổi học mới:\n{api_error_msg(e)}')
                     return
             else:
                 return  # User chọn "Không" -> hủy
@@ -10601,10 +10705,19 @@ class TeacherWindow(QtWidgets.QWidget):
         page = self.page_widgets[0]
         w = page.findChild(QtWidgets.QLabel, 'lblWelcome')
         if w:
-            # Hoc vi prefix neu co (TS./ThS./PGS./GS.) - it confusing hon "thay/co"
+            # Hoc vi prefix neu co - map ten day du sang viet tat
+            # (DB seed luu 'Tiến sĩ' -> 'TS.' thay vi 'Tiến sĩ.' awkward)
             hv = (MOCK_TEACHER.get('hocvi') or '').strip()
-            prefix = f"{hv}. " if hv else "Thầy/Cô "
-            w.setText(f"{time_greeting()}, {prefix}{MOCK_TEACHER['name']}")
+            _HV_MAP = {
+                'tien si': 'TS.', 'thac si': 'ThS.',
+                'pho giao su': 'PGS.', 'giao su': 'GS.',
+                'cu nhan': 'CN.', 'ky su': 'KS.',
+            }
+            hv_norm = _status_normalize(hv)
+            prefix = _HV_MAP.get(hv_norm, f"{hv}. " if hv else '') or "Thầy/Cô "
+            if not prefix.endswith(' '):
+                prefix += ' '
+            w.setText(f"{time_greeting()}, {prefix}{MOCK_TEACHER.get('name', '')}")
 
         # Header semester label - lay tu DB thay vi hardcode HK
         lbl_sem = page.findChild(QtWidgets.QLabel, 'lblSemester')
@@ -10764,7 +10877,13 @@ class TeacherWindow(QtWidgets.QWidget):
                     sent = NotificationService.get_sent_by_teacher(gv_id, limit=5) or []
                     for n in sent:
                         t_str = fmt_relative_date(n.get('ngay_tao'))
-                        target = n.get('den_lop') or 'Tat ca'
+                        # Target priority: HV cu the > lop > broadcast
+                        if n.get('den_hv_id'):
+                            target = f"HV {n.get('ten_hv_dich') or '?'}"
+                        elif n.get('den_lop'):
+                            target = n['den_lop']
+                        else:
+                            target = 'Tất cả'
                         data.append((t_str, f"Đã gửi '{n.get('tieu_de', '')}' đến {target}"))
                 except Exception as e:
                     print(f'[TEA_DASH] activity loi: {e}')
@@ -11164,7 +11283,14 @@ class TeacherWindow(QtWidgets.QWidget):
             f = QtWidgets.QFrame()
             f.setStyleSheet(f'QFrame {{ background: white; border: 1px solid #d2d6dc; border-radius: 4px; border-top: 3px solid {color}; margin: 1px; }}')
             f.setCursor(Qt.PointingHandCursor)
-            phong_disp = phong if phong.lower().startswith(('p.', 'p ', 'phòng', 'phong')) else f'P. {phong}'
+            # Skip prefix 'P. ' khi phong = '—' (placeholder); avoid 'P. —' awkward
+            phong_low = (phong or '').lower()
+            if not phong or phong == '—':
+                phong_disp = '—'
+            elif phong_low.startswith(('p.', 'p ', 'phòng', 'phong')):
+                phong_disp = phong
+            else:
+                phong_disp = f'P. {phong}'
             tip = (
                 f'<b style="color:{color};">{ma_lop}</b><br>'
                 f'<b>{ten_mon}</b><br>'
@@ -11450,9 +11576,18 @@ class TeacherWindow(QtWidgets.QWidget):
                 gv_id = MOCK_TEACHER.get('user_id')
                 if gv_id:
                     rows = CourseService.get_students_by_teacher(gv_id)
+                    # Map trang thai DB -> tieng Viet hien thi (truoc chi check 'paid'
+                    # -> 'completed' bi nham hien 'Cho TT' -> GV thay HV da hoan thanh
+                    # van bao 'cho thanh toan' -> confusing)
+                    _ST_VN = {
+                        'paid': 'Đang học',
+                        'pending_payment': 'Chờ TT',
+                        'completed': 'Hoàn thành',
+                    }
                     data = []
                     for i, s in enumerate(rows, start=1):
-                        status = 'Đang học' if s.get('trang_thai') == 'paid' else 'Chờ TT'
+                        st_raw = s.get('trang_thai', '')
+                        status = _ST_VN.get(st_raw, st_raw or '—')
                         data.append([str(i), s['msv'], s['full_name'],
                                      s.get('lop_id', ''), s.get('sdt') or '—', status])
             except Exception as e:
@@ -11715,15 +11850,16 @@ class TeacherWindow(QtWidgets.QWidget):
         page = self.page_widgets[5]
         sf = page.findChild(QtWidgets.QFrame, 'sentFrame')
         txt_s = sf.findChild(QtWidgets.QLineEdit, 'txtSentSearch') if sf else None
-        kw = (txt_s.text().strip().lower() if txt_s else '')
+        # Dung norm() bo dau de match diacritic / khong dau dong nhat
+        kw = norm(txt_s.text() if txt_s else '')
 
         cache = getattr(self, '_tea_sent_cache', []) or []
         target = list(cache)
         if kw:
             target = [n for n in target
-                      if kw in (n.get('tieu_de', '') or '').lower()
-                      or kw in (n.get('noi_dung', '') or '').lower()
-                      or kw in (n.get('den_lop', '') or '').lower()]
+                      if kw in norm(n.get('tieu_de', '') or '')
+                      or kw in norm(n.get('noi_dung', '') or '')
+                      or kw in norm(n.get('den_lop', '') or '')]
 
         if not target:
             msg_warn(self, 'Không có gì để xóa', 'Danh sách hiện tại đang trống.')
@@ -11775,15 +11911,15 @@ class TeacherWindow(QtWidgets.QWidget):
                 w.deleteLater()
 
         rows_all = getattr(self, '_tea_sent_cache', []) or []
-        # Apply search keyword
+        # Apply search keyword - dung norm() bo dau de tim 'thong bao' match 'Thông báo'
         sf = page.findChild(QtWidgets.QFrame, 'sentFrame')
         txt_s = sf.findChild(QtWidgets.QLineEdit, 'txtSentSearch') if sf else None
-        kw = (txt_s.text().strip().lower() if txt_s else '')
+        kw = norm(txt_s.text() if txt_s else '')
         if kw:
             rows = [n for n in rows_all
-                    if kw in (n.get('tieu_de', '') or '').lower()
-                    or kw in (n.get('noi_dung', '') or '').lower()
-                    or kw in (n.get('den_lop', '') or '').lower()]
+                    if kw in norm(n.get('tieu_de', '') or '')
+                    or kw in norm(n.get('noi_dung', '') or '')
+                    or kw in norm(n.get('den_lop', '') or '')]
         else:
             rows = rows_all
 
@@ -11799,7 +11935,13 @@ class TeacherWindow(QtWidgets.QWidget):
             vlay.addWidget(empty)
         else:
             for n in rows:
-                target = n.get('den_lop') or 'Tất cả'
+                # Target priority: HV cu the > lop > broadcast
+                if n.get('den_hv_id'):
+                    target = f"HV: {n.get('ten_hv_dich') or '?'}"
+                elif n.get('den_lop'):
+                    target = n['den_lop']
+                else:
+                    target = 'Tất cả'
                 card = self._make_notice_card(
                     target,
                     n.get('tieu_de', '') or '(không tiêu đề)',
@@ -11943,13 +12085,15 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.setItemDelegateForColumn(3, _GradeEditorDelegate(tbl))
         tbl.setItemDelegateForColumn(4, _GradeEditorDelegate(tbl))
         tbl.setItemDelegateForColumn(5, _GradeEditorDelegate(tbl))
-        tbl.itemChanged.connect(self._recalc_grade_row)
+        # safe_connect tranh accumulation khi user nav qua lai trang -> moi
+        # lan _fill_tea_grades chay them 1 handler -> recalc N lan / 1 edit
+        safe_connect(tbl.itemChanged, self._recalc_grade_row)
         self._grades_recalc_lock = False
 
-        # save button
+        # save button - safe_connect tranh save N lan / 1 click
         btn = page.findChild(QtWidgets.QPushButton, 'btnSaveGrades')
         if btn:
-            btn.clicked.connect(self._save_tea_grades)
+            safe_connect(btn.clicked, self._save_tea_grades)
 
         # Wire search box -> filter row theo MSV/ten HV (1 lan, idempotent)
         if fb:
@@ -12362,10 +12506,18 @@ class TeacherWindow(QtWidgets.QWidget):
                 msv = (tbl.item(r, 1).text() or '').strip() if tbl.item(r, 1) else ''
                 if not msv:
                     continue
-                qt_text = (tbl.item(r, 4).text() if tbl.item(r, 4) else '0').replace(',', '.')
-                thi_text = (tbl.item(r, 5).text() if tbl.item(r, 5) else '0').replace(',', '.')
-                qt = float(qt_text)
-                thi = float(thi_text)
+                qt_text = (tbl.item(r, 4).text() if tbl.item(r, 4) else '').strip().replace(',', '.')
+                thi_text = (tbl.item(r, 5).text() if tbl.item(r, 5) else '').strip().replace(',', '.')
+                # Cell trong -> bo qua hang nay (msg ro hon 'could not convert string')
+                if not qt_text or not thi_text:
+                    skipped.append((msv, 'thiếu điểm QT hoặc Thi'))
+                    continue
+                try:
+                    qt = float(qt_text)
+                    thi = float(thi_text)
+                except ValueError:
+                    skipped.append((msv, f'điểm không phải số: QT="{qt_text}", Thi="{thi_text}"'))
+                    continue
                 if not (0 <= qt <= 10 and 0 <= thi <= 10):
                     skipped.append((msv, 'điểm ngoài [0-10]'))
                     continue
@@ -12458,13 +12610,16 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.verticalHeader().setVisible(False)
         tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        # Header padding 14x10 dong nhat voi cac trang khac
         tbl.setStyleSheet(
             'QTableWidget { background: white; border: 1px solid #d2d6dc; '
             'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
             'QHeaderView::section { background: #f7fafc; color: #4a5568; '
-            'padding: 8px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'font-family: "Segoe UI", "Inter", sans-serif; '
             'font-weight: bold; font-size: 11px; }'
         )
+        tbl.horizontalHeader().setMinimumHeight(46)
         tbl.show()
 
     def _reload_tea_assignments(self, page):
@@ -12559,16 +12714,17 @@ class TeacherWindow(QtWidgets.QWidget):
         hb = page.findChild(QtWidgets.QFrame, 'headerBar')
         txt_s = hb.findChild(QtWidgets.QLineEdit, 'txtTeaAsgSearch') if hb else None
         cbo = hb.findChild(QtWidgets.QComboBox, 'cboTeaAsgClass') if hb else None
-        kw = (txt_s.text().strip().lower() if txt_s else '')
+        # Dung norm() bo dau cho search nhat quan voi cac filter khac
+        kw = norm(txt_s.text() if txt_s else '')
         sel_lop = cbo.currentData() if cbo else None
         for r in range(tbl.rowCount()):
             show = True
-            # Search keyword (col 1=tieu de, col 2=lop, col 3=khoa hoc)
+            # Search keyword (col 1=tieu de, col 2=lop, col 3=khoa hoc) qua norm
             if kw:
                 hit = False
                 for c in (1, 2, 3):
                     it = tbl.item(r, c)
-                    if it and kw in it.text().lower():
+                    if it and kw in norm(it.text()):
                         hit = True; break
                 if not hit:
                     show = False
@@ -12676,26 +12832,68 @@ class TeacherWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle(f'Bài nộp - Bài tập #{asg_id}')
-        dlg.setFixedSize(820, 560)
+        dlg.setFixedSize(820, 580)
         v = QtWidgets.QVBoxLayout(dlg)
+        v.setContentsMargins(0, 0, 0, 12)
+        v.setSpacing(10)
 
-        # Header info
-        info_lbl = QtWidgets.QLabel('Đang tải...')
-        info_lbl.setStyleSheet('color: #2d3748; font-size: 12px; padding: 4px;')
-        info_lbl.setWordWrap(True)
-        v.addWidget(info_lbl)
+        # Header banner navy - thay text tho bang banner chuyen nghiep
+        banner = QtWidgets.QFrame()
+        banner.setObjectName('asgBanner')
+        banner.setStyleSheet(
+            'QFrame#asgBanner { background: #002060; border: none; border-radius: 0px; }'
+        )
+        banner.setFixedHeight(78)
+        bv = QtWidgets.QVBoxLayout(banner)
+        bv.setContentsMargins(20, 12, 20, 12)
+        bv.setSpacing(4)
+        lbl_title = QtWidgets.QLabel('Đang tải...')
+        lbl_title.setObjectName('lblAsgTitle')
+        lbl_title.setStyleSheet('color: white; font-size: 16px; font-weight: bold; '
+                                 'background: transparent;')
+        bv.addWidget(lbl_title)
+        lbl_meta = QtWidgets.QLabel('')
+        lbl_meta.setObjectName('lblAsgMeta')
+        lbl_meta.setStyleSheet('color: rgba(255,255,255,0.85); font-size: 12px; '
+                                'background: transparent;')
+        lbl_meta.setWordWrap(True)
+        bv.addWidget(lbl_meta)
+        v.addWidget(banner)
 
-        # Bang ds nop
+        # Wrapper de body co padding 2 ben
+        body = QtWidgets.QWidget()
+        body_v = QtWidgets.QVBoxLayout(body)
+        body_v.setContentsMargins(16, 4, 16, 0)
+        body_v.setSpacing(8)
+        v.addWidget(body, 1)
+
+        # Description (mo ta) hien rieng dong duoi banner cho de doc
+        lbl_desc = QtWidgets.QLabel('')
+        lbl_desc.setObjectName('lblAsgDesc')
+        lbl_desc.setWordWrap(True)
+        lbl_desc.setStyleSheet('color: #4a5568; font-size: 12px; padding: 4px 2px;')
+        body_v.addWidget(lbl_desc)
+
+        # Bang ds nop - padding header thoang hon, font Segoe UI/Inter
         tbl = QtWidgets.QTableWidget()
         tbl.setColumnCount(6)
         tbl.setHorizontalHeaderLabels(['MSV', 'Họ tên', 'Trạng thái', 'Nộp lúc', 'Điểm', 'Thao tác'])
         tbl.verticalHeader().setVisible(False)
         tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        v.addWidget(tbl)
+        tbl.setStyleSheet(
+            'QTableWidget { background: white; border: 1px solid #d2d6dc; '
+            'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
+            'QHeaderView::section { background: #f7fafc; color: #4a5568; '
+            'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'font-family: "Segoe UI", "Inter", sans-serif; '
+            'font-weight: bold; font-size: 11px; }'
+        )
+        tbl.horizontalHeader().setMinimumHeight(46)
+        body_v.addWidget(tbl)
 
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)
         btns.rejected.connect(dlg.reject)
-        v.addWidget(btns)
+        body_v.addWidget(btns)
 
         def reload_subs():
             try:
@@ -12705,15 +12903,17 @@ class TeacherWindow(QtWidgets.QWidget):
                 msg_warn(dlg, 'Lỗi', api_error_msg(e))
                 return
             han = fmt_date(asg.get('han_nop'), fmt='%d/%m/%Y %H:%M', default='Không hạn')
-            info_lbl.setText(
-                f'<b>{asg.get("tieu_de", "")}</b> · Lớp {asg.get("lop_id", "")} '
-                f'({asg.get("ten_mon", "")}) · Hạn: {han} · '
-                f'Tối đa {asg.get("diem_toi_da", 10)} điểm<br>'
-                f'<span style="color:#718096;">{asg.get("mo_ta", "") or "(không có mô tả)"}</span>'
+            lbl_title.setText(asg.get('tieu_de', '') or f'Bài tập #{asg_id}')
+            lbl_meta.setText(
+                f'Lớp <b>{asg.get("lop_id", "")}</b> '
+                f'({asg.get("ten_mon", "")})  ·  '
+                f'Hạn: <b>{han}</b>  ·  '
+                f'Tối đa <b>{asg.get("diem_toi_da", 10)}</b> điểm'
             )
+            lbl_desc.setText(asg.get('mo_ta', '') or '<i style="color:#a0aec0;">(không có mô tả)</i>')
             tbl.setRowCount(len(subs))
             for r, s in enumerate(subs):
-                tbl.setRowHeight(r, 40)
+                tbl.setRowHeight(r, 44)
                 has_sub = s.get('submission_id') is not None
                 graded = s.get('diem') is not None
                 status = 'Đã chấm' if graded else ('Đã nộp' if has_sub else 'Chưa nộp')
@@ -12727,13 +12927,28 @@ class TeacherWindow(QtWidgets.QWidget):
                     if c == 2:  # status
                         style_status_item(item, status)
                     tbl.setItem(r, c, item)
-                # Action button - dung make_action_cell de dong nhat style
+                # Action button - tu style cho dialog nay (font 10pt + padding rong + hover)
                 if has_sub:
                     btn_text = 'Sửa điểm' if graded else 'Chấm bài'
-                    cell, (btn,) = make_action_cell([(btn_text, 'navy')])
-                    tbl.setCellWidget(r, 5, cell)
+                    cell_w = QtWidgets.QWidget()
+                    hl = QtWidgets.QHBoxLayout(cell_w)
+                    hl.setContentsMargins(6, 4, 6, 4)
+                    hl.setAlignment(Qt.AlignCenter)
+                    btn = QtWidgets.QPushButton(btn_text)
+                    btn.setCursor(Qt.PointingHandCursor)
+                    btn.setFixedSize(110, 32)
+                    btn.setStyleSheet(
+                        'QPushButton { font-family: "Segoe UI", "Inter", sans-serif; '
+                        'font-size: 13px; font-weight: bold; color: white; '
+                        'background: #002060; border: none; border-radius: 4px; '
+                        'padding: 6px 14px; } '
+                        'QPushButton:hover { background: #1e3a8a; } '
+                        'QPushButton:pressed { background: #001640; }'
+                    )
                     btn.clicked.connect(lambda ch, sub=dict(s), a=dict(asg):
                                         self._tea_dialog_grade(sub, a, reload_subs))
+                    hl.addWidget(btn)
+                    tbl.setCellWidget(r, 5, cell_w)
                 else:
                     no_lbl = QtWidgets.QLabel('—')
                     no_lbl.setAlignment(Qt.AlignCenter)
@@ -12754,30 +12969,52 @@ class TeacherWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle(f'Chấm bài - {sub.get("full_name", "")}')
-        dlg.setFixedSize(560, 540)
+        dlg.setFixedSize(560, 560)
         v = QtWidgets.QVBoxLayout(dlg)
+        v.setContentsMargins(0, 0, 0, 12)
+        v.setSpacing(10)
 
-        # Info HV + bai
-        head = QtWidgets.QLabel(
-            f'<b>{sub.get("full_name", "")}</b> ({sub.get("msv", "")})<br>'
-            f'Bài: <b>{asg.get("tieu_de", "")}</b> · Tối đa {asg.get("diem_toi_da", 10)} điểm'
+        # Header banner navy - dong nhat voi dialog cha 'Bai nop'
+        banner = QtWidgets.QFrame()
+        banner.setStyleSheet('QFrame { background: #002060; border: none; }')
+        banner.setFixedHeight(72)
+        bv = QtWidgets.QVBoxLayout(banner)
+        bv.setContentsMargins(20, 10, 20, 10)
+        bv.setSpacing(3)
+        lbl_hv = QtWidgets.QLabel(
+            f'{sub.get("full_name", "") or "?"} '
+            f'<span style="color: rgba(255,255,255,0.7); font-weight: normal;">'
+            f'({sub.get("msv", "") or "?"})</span>'
         )
-        head.setStyleSheet('color: #2d3748; font-size: 12px; padding: 6px; '
-                           'background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px;')
-        head.setWordWrap(True)
-        v.addWidget(head)
+        lbl_hv.setStyleSheet('color: white; font-size: 16px; font-weight: bold; background: transparent;')
+        bv.addWidget(lbl_hv)
+        lbl_asg = QtWidgets.QLabel(
+            f'Bài: <b>{asg.get("tieu_de", "")}</b>  ·  '
+            f'Tối đa <b>{asg.get("diem_toi_da", 10)}</b> điểm'
+        )
+        lbl_asg.setStyleSheet('color: rgba(255,255,255,0.85); font-size: 12px; background: transparent;')
+        bv.addWidget(lbl_asg)
+        v.addWidget(banner)
+
+        # Body wrapper voi padding 2 ben
+        body = QtWidgets.QWidget()
+        body_v = QtWidgets.QVBoxLayout(body)
+        body_v.setContentsMargins(16, 4, 16, 0)
+        body_v.setSpacing(6)
+        v.addWidget(body, 1)
 
         # Bai nop
-        v.addWidget(QtWidgets.QLabel('<b>Bài nộp:</b>'))
+        body_v.addWidget(QtWidgets.QLabel('<b>Bài nộp:</b>'))
         sub_view = QtWidgets.QTextEdit()
         sub_view.setPlainText(sub.get('noi_dung', '') or '(HV nộp file - chưa có nội dung text)')
         sub_view.setReadOnly(True)
-        sub_view.setFixedHeight(180)
-        sub_view.setStyleSheet('background: #f7fafc; color: #2d3748;')
-        v.addWidget(sub_view)
+        sub_view.setFixedHeight(160)
+        sub_view.setStyleSheet('background: #f7fafc; color: #2d3748; border: 1px solid #e2e8f0; border-radius: 6px;')
+        body_v.addWidget(sub_view)
 
         # Diem + nhan xet
         form = QtWidgets.QFormLayout()
+        form.setContentsMargins(0, 4, 0, 0)
         spin = QtWidgets.QDoubleSpinBox()
         spin.setRange(0, float(asg.get('diem_toi_da', 10)))
         spin.setSingleStep(0.5)
@@ -12787,17 +13024,17 @@ class TeacherWindow(QtWidgets.QWidget):
 
         txt_nx = QtWidgets.QTextEdit()
         txt_nx.setPlaceholderText('Nhận xét / góp ý cho học viên...')
-        txt_nx.setFixedHeight(100)
+        txt_nx.setFixedHeight(90)
         if sub.get('nhan_xet'):
             txt_nx.setPlainText(sub['nhan_xet'])
 
         form.addRow('Điểm:', spin)
         form.addRow('Nhận xét:', txt_nx)
-        v.addLayout(form)
+        body_v.addLayout(form)
 
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
-        v.addWidget(btns)
+        body_v.addWidget(btns)
 
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
@@ -12919,9 +13156,10 @@ class TeacherWindow(QtWidgets.QWidget):
             ss_str = '—'
         buoi_so = sched_row.get('buoi_so')
         nd = sched_row.get('noi_dung', '') or ''
-        trang_thai = sched_row.get('trang_thai') or 'planned'
-        st_vn = {'planned': 'Đã lên lịch', 'done': 'Đã diễn ra',
-                 'cancelled': 'Đã huỷ', 'rescheduled': 'Đã dời lịch'}
+        trang_thai = sched_row.get('trang_thai') or 'scheduled'
+        # Map khop DB CHECK schema.sql ('scheduled'/'completed'/'cancelled'/'postponed')
+        st_vn = {'scheduled': 'Đã lên lịch', 'completed': 'Đã diễn ra',
+                 'cancelled': 'Đã huỷ', 'postponed': 'Đã dời lịch'}
         st_label = st_vn.get(trang_thai, trang_thai)
 
         fields = [
@@ -13123,13 +13361,16 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.verticalHeader().setVisible(False)
         tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        # Header padding 14x10 dong nhat voi cac trang khac
         tbl.setStyleSheet(
             'QTableWidget { background: white; border: 1px solid #d2d6dc; '
             'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
             'QHeaderView::section { background: #f7fafc; color: #4a5568; '
-            'padding: 8px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'font-family: "Segoe UI", "Inter", sans-serif; '
             'font-weight: bold; font-size: 11px; }'
         )
+        tbl.horizontalHeader().setMinimumHeight(46)
         tbl.show()
 
     def _reload_tea_exams(self, page):
@@ -14314,7 +14555,7 @@ class EmployeeWindow(QtWidgets.QWidget):
                     )
             except Exception as e:
                 print(f'[REG] loi: {e}')
-                msg_warn(self, 'Lỗi', f'Đăng ký thất bại:\n{e}')
+                msg_warn(self, 'Lỗi', f'Đăng ký thất bại:\n{api_error_msg(e)}')
                 return
         if saved_id:
             # Refresh cache MOCK_CLASSES de siso_hien_tai update (DB trigger da update)
@@ -14428,7 +14669,10 @@ class EmployeeWindow(QtWidgets.QWidget):
         cbo_st = page.findChild(QtWidgets.QComboBox, 'cboRegStatus')
         if cbo_st:
             cbo_st.clear()
-            cbo_st.addItems(['Tất cả trạng thái', 'Đã thanh toán', 'Chờ thanh toán', 'Đã hủy'])
+            # 4 trang thai khop voi DB CHECK: pending_payment/paid/cancelled/completed
+            # Truoc thieu 'Hoan thanh' -> NV khong loc duoc reg da hoc xong
+            cbo_st.addItems(['Tất cả trạng thái', 'Đã thanh toán', 'Chờ thanh toán',
+                             'Đã hủy', 'Hoàn thành'])
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboRegDate')
         if cbo_d:
             cbo_d.clear()
@@ -14665,6 +14909,12 @@ class EmployeeWindow(QtWidgets.QWidget):
 
         now = datetime.datetime.now()
         receipt_no = f'BL{now.strftime("%Y%m%d%H%M%S")}'
+        # Format VND so co cham ngan: 2500000 -> '2.500.000 đ'. Truoc raw '{gia} đ'
+        # khien bien lai hien '2500000 đ' nhin xau + kho doc
+        try:
+            gia_disp = fmt_vnd(int(gia)) if str(gia).strip() else '0 đ'
+        except (ValueError, TypeError):
+            gia_disp = f'{gia} đ'
         form = QtWidgets.QFormLayout()
         form.setSpacing(8)
         for label, val in [
@@ -14673,7 +14923,7 @@ class EmployeeWindow(QtWidgets.QWidget):
             ('Mã đăng ký:', ma),
             ('Học viên:', ten),
             ('Lớp:', lop),
-            ('Số tiền:', f'{gia} đ'),
+            ('Số tiền:', gia_disp),
             ('Hình thức:', method),
             ('Ghi chú:', ghi_chu or '(không)'),
             ('Nhân viên thu:', MOCK_EMPLOYEE['name']),
@@ -14730,6 +14980,10 @@ class EmployeeWindow(QtWidgets.QWidget):
 
     def _emp_build_receipt_content(self, receipt_no, ma, ten, lop, gia, method, ghi_chu, dt) -> str:
         """Build noi dung text bien lai - dung cho ca Save va Copy clipboard."""
+        try:
+            gia_disp = fmt_vnd(int(gia), suffix=' d') if str(gia).strip() else '0 d'
+        except (ValueError, TypeError):
+            gia_disp = f'{gia} d'
         return (
             'TRUNG TAM NGOAI KHOA EAUT\n'
             'Km 23, QL5, Trung Trac, Van Lam, Hung Yen\n'
@@ -14742,7 +14996,7 @@ class EmployeeWindow(QtWidgets.QWidget):
             f'Ma dang ky:   {ma}\n'
             f'Hoc vien:     {ten}\n'
             f'Lop:          {lop}\n'
-            f'So tien:      {gia} d\n'
+            f'So tien:      {gia_disp}\n'
             f'Hinh thuc:    {method}\n'
             f'Ghi chu:      {ghi_chu or "(khong)"}\n'
             f'Nhan vien:    {MOCK_EMPLOYEE["name"]}\n'
@@ -14769,6 +15023,10 @@ class EmployeeWindow(QtWidgets.QWidget):
     def _emp_build_receipt_html(self, receipt_no, ma, ten, lop, gia, method, ghi_chu, dt) -> str:
         """Build noi dung HTML bien lai - dung cho PDF export (formatted dep)."""
         nv_name = MOCK_EMPLOYEE.get('name', '—')
+        try:
+            gia_disp = fmt_vnd(int(gia)) if str(gia).strip() else '0 đ'
+        except (ValueError, TypeError):
+            gia_disp = f'{gia} đ'
         return f'''
         <html><head><meta charset="utf-8"></head>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e;">
@@ -14800,7 +15058,7 @@ class EmployeeWindow(QtWidgets.QWidget):
             </tr>
             <tr>
                 <td style="color: #4a5568; border-bottom: 1px solid #e2e8f0;">Số tiền</td>
-                <td style="border-bottom: 1px solid #e2e8f0; color: #c05621;"><b style="font-size: 16px;">{gia} đ</b></td>
+                <td style="border-bottom: 1px solid #e2e8f0; color: #c05621;"><b style="font-size: 16px;">{gia_disp}</b></td>
             </tr>
             <tr style="background: #f7fafc;">
                 <td style="color: #4a5568; border-bottom: 1px solid #e2e8f0;">Hình thức</td>
@@ -14942,7 +15200,7 @@ class EmployeeWindow(QtWidgets.QWidget):
                     dt_to.date().toString('yyyy-MM-dd')
                 ) or {}
             except Exception as e:
-                preview.setHtml(f'<p style="color:#c53030;">Lỗi tải: {e}</p>')
+                preview.setHtml(f'<p style="color:#c53030;">Lỗi tải: {api_error_msg(e)}</p>')
                 report_data[0] = None
                 return
             report_data[0] = data
@@ -15614,7 +15872,11 @@ class App:
         pw_field.installEventFilter(self.login_win._caps_filter)
 
         def on_login():
-            u = self.login_win.txtUsername.text().strip()
+            # Username case-insensitive: FE luu lowercase ('hv2024001'), DB
+            # WHERE username=%s la case-sensitive. Nếu user go 'HV2024001'
+            # se khong khop -> login fail dù seed/registered username dung.
+            # Lowercase de match dong nhat. Password giu nguyen case
+            u = self.login_win.txtUsername.text().strip().lower()
             p = self.login_win.txtPassword.text().strip()
 
             if not DB_AVAILABLE:

@@ -10,6 +10,10 @@ class RegistrationService:
 
         Validate: lop phai thuoc dot dang OPEN (trang_thai='open'),
         khong cho register vao lop dot da closed/upcoming.
+
+        DB co UNIQUE (hv_id, lop_id) -> neu HV da co reg cu (cancelled), INSERT
+        moi se vi pham unique. Detect va revive reg cancelled cu thay vi INSERT
+        moi (UX: HV co the dang ky lai sau khi huy nham).
         """
         # Check sem status cua lop truoc khi register
         sem_row = db.fetch_one(
@@ -28,6 +32,48 @@ class RegistrationService:
             raise ValueError(
                 f'Đợt "{sem_id_disp}" của lớp {lop_id} hiện {status_vn}. '
                 'Không thể đăng ký mới vào lớp này.'
+            )
+        # Check reg cu (handle UNIQUE constraint) - neu cancelled thi revive,
+        # con lai (pending/paid/completed) raise loi cho FE biet
+        old = db.fetch_one(
+            'SELECT id, trang_thai FROM registrations WHERE hv_id = %s AND lop_id = %s',
+            (hv_id, lop_id)
+        )
+        if old:
+            old_status = old.get('trang_thai')
+            if old_status == 'cancelled':
+                # Trigger trg_check_class_full chi BEFORE INSERT, khong fire khi
+                # UPDATE -> can check capacity thu cong de tranh over-fill khi revive
+                cap = db.fetch_one(
+                    'SELECT siso_hien_tai, siso_max, trang_thai FROM classes WHERE ma_lop = %s',
+                    (lop_id,)
+                )
+                if cap:
+                    if cap.get('trang_thai') == 'closed':
+                        raise ValueError(f'Lớp {lop_id} đã đóng, không thể đăng ký lại.')
+                    if cap.get('siso_hien_tai', 0) >= cap.get('siso_max', 0):
+                        raise ValueError(
+                            f'Lớp {lop_id} đã đủ sĩ số '
+                            f'({cap.get("siso_hien_tai")}/{cap.get("siso_max")}). '
+                            'Không thể đăng ký lại.'
+                        )
+                # Revive: UPDATE trang_thai + nv_xu_ly + ngay_dk moi
+                db.execute(
+                    """UPDATE registrations
+                          SET trang_thai = 'pending_payment',
+                              nv_xu_ly = %s,
+                              ngay_dk = CURRENT_TIMESTAMP
+                        WHERE id = %s""",
+                    (nv_id, old['id'])
+                )
+                return old['id']
+            # Reg active (pending/paid/completed) - khong cho dang ky lai
+            status_vn = {'pending_payment': 'chờ thanh toán',
+                         'paid': 'đã thanh toán',
+                         'completed': 'đã hoàn thành'}.get(old_status, old_status)
+            raise ValueError(
+                f'Học viên đã đăng ký lớp {lop_id} (trạng thái: {status_vn}). '
+                'Mỗi học viên chỉ đăng ký 1 lần / lớp.'
             )
         row = db.execute_returning(
             """INSERT INTO registrations (hv_id, lop_id, nv_xu_ly, trang_thai)
@@ -73,7 +119,25 @@ class RegistrationService:
     @staticmethod
     def confirm_payment(reg_id: int, so_tien: int, hinh_thuc: str,
                         nv_id: int, ghi_chu: str = None):
-        """ghi nhan thanh toan + update trang thai dang ky (transaction)"""
+        """ghi nhan thanh toan + update trang thai dang ky (transaction).
+
+        Validate reg_id phai ton tai va dang o trang thai pending_payment.
+        Truoc khong check -> co the goi vao reg cancelled lam reg do hoi sinh
+        thanh paid, hoac ghi payment vao reg da paid (double-pay).
+        """
+        cur_row = db.fetch_one(
+            "SELECT trang_thai FROM registrations WHERE id = %s",
+            (reg_id,)
+        )
+        if not cur_row:
+            raise ValueError(f'Đăng ký id={reg_id} không tồn tại')
+        cur_status = cur_row.get('trang_thai')
+        if cur_status != 'pending_payment':
+            status_vn = {'paid': 'đã thanh toán', 'cancelled': 'đã huỷ',
+                         'completed': 'đã hoàn tất'}.get(cur_status, cur_status or '?')
+            raise ValueError(
+                f'Đăng ký id={reg_id} hiện {status_vn}, không thể thu tiền.'
+            )
         with db.cursor() as cur:
             cur.execute(
                 """INSERT INTO payments (reg_id, so_tien, hinh_thuc, nv_thu, ghi_chu)
@@ -87,6 +151,24 @@ class RegistrationService:
 
     @staticmethod
     def cancel_registration(reg_id: int):
+        """Huy dang ky. Chi cho phep huy reg dang pending_payment hoac paid.
+        Reg completed (da hoc xong) khong duoc huy de giu lich su.
+        Reg cancelled san -> raise de UI bao 'da huy roi' thay vi silent no-op."""
+        cur_row = db.fetch_one(
+            "SELECT trang_thai FROM registrations WHERE id = %s",
+            (reg_id,)
+        )
+        if not cur_row:
+            return 0  # router tra 404
+        cur_status = cur_row.get('trang_thai')
+        if cur_status == 'completed':
+            raise ValueError(
+                f'Đăng ký id={reg_id} đã hoàn tất, không thể huỷ.'
+            )
+        if cur_status == 'cancelled':
+            raise ValueError(
+                f'Đăng ký id={reg_id} đã được huỷ trước đó.'
+            )
         return db.execute(
             "UPDATE registrations SET trang_thai = 'cancelled' WHERE id = %s",
             (reg_id,)

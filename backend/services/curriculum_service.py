@@ -127,8 +127,10 @@ class CurriculumService:
                 GROUP BY c.ma_mon""",
             (hv_id,)
         )
-        best_by_mon = {r['ma_mon']: float(r['best_score']) if r.get('best_score') else 0
-                       for r in grade_rows}
+        # Chi them vao dict neu co best_score (None = chua co diem -> bo qua, KHONG
+        # set =0). Truoc neu best_score=NULL -> value=0 -> sau bi mark 'fail' nham
+        best_by_mon = {r['ma_mon']: float(r['best_score'])
+                       for r in grade_rows if r.get('best_score') is not None}
 
         # Cac mon dang hoc (paid, chua co diem)
         learning_rows = db.fetch_all(

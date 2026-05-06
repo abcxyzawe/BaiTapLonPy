@@ -28,7 +28,9 @@ def submit(req: SubmissionCreate):
 @router.post('/{sub_id}/grade')
 def grade(sub_id: int, req: SubmissionGrade):
     """GV cham diem + nhan xet cho 1 bai nop."""
-    AssignmentService.grade(sub_id, req.diem, req.nhan_xet or '')
+    affected = AssignmentService.grade(sub_id, req.diem, req.nhan_xet or '')
+    if not affected:
+        raise HTTPException(status_code=404, detail=f'Bai nop id={sub_id} khong ton tai')
     return {'status': 'graded'}
 
 
