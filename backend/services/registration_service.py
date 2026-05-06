@@ -41,6 +41,7 @@ class RegistrationService:
     def get_all_registrations(limit: int = 100):
         sql = """
             SELECT r.id, r.ngay_dk, r.trang_thai,
+                   r.nv_xu_ly AS nv_id, r.hv_id,
                    u.full_name AS ten_hv, s.msv,
                    r.lop_id, c.gia,
                    co.ten_mon

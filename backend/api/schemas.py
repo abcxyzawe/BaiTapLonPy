@@ -31,7 +31,9 @@ class LoginResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     user_id: int = Field(..., gt=0)
-    new_password: str = Field(..., min_length=4, max_length=100)
+    # min=6 dong bo voi frontend validate_password() (toi thieu 6 ky tu).
+    # Truoc =4 -> attacker bypass FE validate co the doi sang mat khau yeu 4-char
+    new_password: str = Field(..., min_length=6, max_length=100)
 
 
 # ===== Courses =====
@@ -112,7 +114,7 @@ class NotificationSend(BaseModel):
 # ===== Users (Student/Teacher/Employee) =====
 class StudentCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=4, max_length=100)
+    password: str = Field(..., min_length=6, max_length=100)
     full_name: str = Field(..., min_length=2, max_length=100)
     msv: str = Field(..., min_length=3, max_length=20)
     email: Optional[str] = Field(None, max_length=100)
@@ -131,7 +133,7 @@ class StudentUpdate(BaseModel):
 
 class TeacherCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=4, max_length=100)
+    password: str = Field(..., min_length=6, max_length=100)
     full_name: str = Field(..., min_length=2, max_length=100)
     ma_gv: str = Field(..., min_length=3, max_length=20)
     email: Optional[str] = Field(None, max_length=100)
@@ -154,7 +156,7 @@ class TeacherUpdate(BaseModel):
 
 class EmployeeCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=4, max_length=100)
+    password: str = Field(..., min_length=6, max_length=100)
     full_name: str = Field(..., min_length=2, max_length=100)
     ma_nv: str = Field(..., min_length=3, max_length=20)
     email: Optional[str] = Field(None, max_length=100)

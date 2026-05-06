@@ -7141,24 +7141,13 @@ class AdminWindow(QtWidgets.QWidget):
             print(f'[ADM_ADD_COURSE] DB loi: {e}')
             msg_warn(self, 'Không thêm được', api_error_msg(e))
             return
-        # DB OK -> update UI
-        MOCK_COURSES.append((new_code, new_name))
-        tbl = self.page_widgets[1].findChild(QtWidgets.QTableWidget, 'tblAdminCourses')
-        if tbl:
-            r = tbl.rowCount()
-            tbl.insertRow(r)
-            vals = [new_code, new_name, txt_tc.text() or '3', txt_gv.text() or '—', '—']
-            for c, v in enumerate(vals):
-                tbl.setItem(r, c, QtWidgets.QTableWidgetItem(v))
-            item_ss = QtWidgets.QTableWidgetItem('0/40')
-            item_ss.setTextAlignment(Qt.AlignCenter)
-            item_ss.setForeground(QColor(COLORS['green']))
-            tbl.setItem(r, 5, item_ss)
-            tbl.setRowHeight(r, 44)
-            cell, (btn_edit, btn_del) = make_action_cell([('Sửa', 'navy'), ('Xóa', 'red')])
-            tbl.setCellWidget(r, 6, cell)
-            btn_edit.clicked.connect(lambda ch, ma=new_code, nm=new_name: self._admin_edit_course(ma, nm))
-            btn_del.clicked.connect(lambda ch, ma=new_code, nm=new_name: self._admin_del_row(tbl, ma, nm, 'khóa học'))
+        # DB OK -> refresh cache + re-fill bang. Truoc append + insertRow manual
+        # voi vals khong dong nhat (txt_tc/txt_gv chi dung trong mo_ta fallback,
+        # khong phai field thuc cua course) -> bang hien sai sau add
+        _refresh_cache()
+        self.pages_filled[1] = False
+        self._fill_admin_courses()
+        self.pages_filled[1] = True
         msg_info(self, 'Thành công', f'Đã thêm môn {new_code} - {new_name}')
 
     def _admin_edit_course(self, ma, nm):
@@ -7230,15 +7219,17 @@ class AdminWindow(QtWidgets.QWidget):
                 new_desc += f'. Lịch: {txt_lich.text().strip()}'
         try:
             CourseService.update_course(ma, ten_mon=new_name, mo_ta=new_desc)
-            _refresh_cache()
         except Exception as e:
             print(f'[ADM_EDIT_COURSE] loi: {e}')
             msg_warn(self, 'Không lưu được', api_error_msg(e))
             return
 
-        # Update UI sau khi save thanh cong (chi update 5 col visible)
-        for c, w in enumerate([txt_code, txt_name, txt_tc, txt_gv, txt_lich]):
-            tbl.setItem(target_row, c, QtWidgets.QTableWidgetItem(w.text()))
+        # DB OK -> refresh cache + re-fill bang (truoc setItem manual khong update
+        # cot 'So buoi' aggregate tu cac lop -> bang hien stale)
+        _refresh_cache()
+        self.pages_filled[1] = False
+        self._fill_admin_courses()
+        self.pages_filled[1] = True
         msg_info(self, 'Đã cập nhật', f'Đã lưu thay đổi cho {ma}')
 
     def _admin_del_row(self, tbl, ma, nm, loai):
@@ -7317,7 +7308,12 @@ class AdminWindow(QtWidgets.QWidget):
             msg_warn(self, 'Không xóa được', api_error_msg(e))
             return  # khong xoa UI neu DB fail
 
-        # DB delete OK - moi xoa UI
+        # DB delete OK - refresh cache neu xoa khoa/lop (anh huong MOCK_COURSES/CLASSES)
+        # Cac places khac (vd Adm add_class combo) doc tu cache nay - neu khong refresh
+        # se hien khoa/lop da xoa
+        if loai in ('khóa học', 'lớp'):
+            _refresh_cache()
+        # xoa UI
         for r in range(tbl.rowCount()):
             it = tbl.item(r, 0)
             if it and it.text() == ma:
@@ -7451,15 +7447,17 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
         if not tbl:
             return
-        lop_sel = cbo_c.currentText() if cbo_c and cbo_c.currentIndex() > 0 else None
-        khoa_sel = cbo_d.currentText() if cbo_d and cbo_d.currentIndex() > 0 else None
+        # Strip dau khi so sanh - DB co the chua data khong dau ('Toan')
+        # nhung combo UI co dau ('Toán')
+        lop_sel = _status_normalize(cbo_c.currentText()) if cbo_c and cbo_c.currentIndex() > 0 else None
+        khoa_sel = _status_normalize(cbo_d.currentText()) if cbo_d and cbo_d.currentIndex() > 0 else None
         for r in range(tbl.rowCount()):
             it_lop = tbl.item(r, 2)
             it_khoa = tbl.item(r, 3)
             show = True
-            if lop_sel and it_lop and lop_sel not in it_lop.text():
+            if lop_sel and it_lop and lop_sel not in _status_normalize(it_lop.text()):
                 show = False
-            if khoa_sel and it_khoa and khoa_sel not in it_khoa.text():
+            if khoa_sel and it_khoa and khoa_sel not in _status_normalize(it_khoa.text()):
                 show = False
             tbl.setRowHidden(r, not show)
 
@@ -7874,6 +7872,7 @@ class AdminWindow(QtWidgets.QWidget):
             lbl_stats.setObjectName('lblCurrStats')
             lbl_stats.setGeometry(380, 18, 540, 22)
             lbl_stats.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 12px; background: transparent;')
+            lbl_stats.setTextFormat(Qt.RichText)  # explicit cho HTML <b>/<span> render dung
             lbl_stats.setText(
                 f'<b>{n_total}</b> môn  ·  '
                 f'<span style="color:{COLORS["navy"]};"><b>{n_bb}</b> Cơ bản</span>  '
@@ -9629,17 +9628,20 @@ class AdminWindow(QtWidgets.QWidget):
             return
         cbo_k = page.findChild(QtWidgets.QComboBox, 'cboTeaKhoa')
         cbo_hv = page.findChild(QtWidgets.QComboBox, 'cboTeaHocVi')
-        khoa_sel = cbo_k.currentText() if cbo_k and cbo_k.currentIndex() > 0 else None
-        hv_sel = cbo_hv.currentText() if cbo_hv and cbo_hv.currentIndex() > 0 else None
+        # Strip dau (NFD) khi so sanh - DB seed luu khong dau ('Tien si', 'Toan')
+        # nhung combo UI hien co dau ('Tiến sĩ', 'Toán'). Khong normalize -> filter
+        # khong khop -> tat ca rows bi an
+        khoa_sel = _status_normalize(cbo_k.currentText()) if cbo_k and cbo_k.currentIndex() > 0 else None
+        hv_sel = _status_normalize(cbo_hv.currentText()) if cbo_hv and cbo_hv.currentIndex() > 0 else None
         for r in range(tbl.rowCount()):
             show = True
             if khoa_sel:
                 it = tbl.item(r, 2)
-                if it and khoa_sel not in it.text():
+                if it and khoa_sel not in _status_normalize(it.text()):
                     show = False
             if hv_sel:
                 it = tbl.item(r, 3)
-                if it and hv_sel not in it.text():
+                if it and hv_sel not in _status_normalize(it.text()):
                     show = False
             tbl.setRowHidden(r, not show)
 
@@ -9650,17 +9652,19 @@ class AdminWindow(QtWidgets.QWidget):
             return
         cbo_r = page.findChild(QtWidgets.QComboBox, 'cboEmpRole')
         cbo_s = page.findChild(QtWidgets.QComboBox, 'cboEmpStatus')
-        role_sel = cbo_r.currentText() if cbo_r and cbo_r.currentIndex() > 0 else None
-        status_sel = cbo_s.currentText() if cbo_s and cbo_s.currentIndex() > 0 else None
+        # Strip dau khi so sanh - DB co the chua data khong dau ('Nhan vien dang ky')
+        # nhung combo UI co dau ('Nhân viên đăng ký')
+        role_sel = _status_normalize(cbo_r.currentText()) if cbo_r and cbo_r.currentIndex() > 0 else None
+        status_sel = _status_normalize(cbo_s.currentText()) if cbo_s and cbo_s.currentIndex() > 0 else None
         for r in range(tbl.rowCount()):
             show = True
             if role_sel:
                 it = tbl.item(r, 2)
-                if it and role_sel not in it.text():
+                if it and role_sel not in _status_normalize(it.text()):
                     show = False
             if status_sel:
                 it = tbl.item(r, 5)
-                if it and status_sel not in it.text():
+                if it and status_sel not in _status_normalize(it.text()):
                     show = False
             tbl.setRowHidden(r, not show)
 
