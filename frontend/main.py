@@ -2728,11 +2728,12 @@ def clear_session_state():
     KHONG xoa toan bo dict (dict.clear()) vi se mat structure default keys
     -> KeyError khi access. Thay vao do reset ve template default.
     """
-    global MOCK_USER, MOCK_TEACHER, MOCK_EMPLOYEE
+    global MOCK_USER, MOCK_TEACHER, MOCK_EMPLOYEE, MOCK_ADMIN
     # Reset ve template default thay vi clear() (giu structure, tranh KeyError)
     MOCK_USER.clear(); MOCK_USER.update(CURRENT_USER)
     MOCK_TEACHER.clear(); MOCK_TEACHER.update(CURRENT_TEACHER)
     MOCK_EMPLOYEE.clear(); MOCK_EMPLOYEE.update(CURRENT_EMPLOYEE)
+    MOCK_ADMIN.clear(); MOCK_ADMIN.update(CURRENT_ADMIN)
 
 
 def safe_connect(signal, slot):
@@ -2748,6 +2749,79 @@ def safe_connect(signal, slot):
     except (TypeError, RuntimeError):
         pass
     signal.connect(slot)
+
+
+def verify_old_password(username: str, old_password: str) -> bool:
+    """Xac thuc mat khau cu bang cach goi lai AuthService.login.
+
+    Truoc kia 4 dialog doi mat khau (HV/Adm/GV/NV) compare voi MOCK_*['password']
+    nhung field nay khong bao gio duoc set tu API login -> luon empty -> check
+    luon fail "Sai mat khau cu" du nguoi dung nhap dung. Bug nay khien feature
+    doi mat khau khong dung duoc trong online mode.
+
+    Fix: re-login voi (username, old_password). Login OK = mat khau cu dung,
+    khong phai luu plain text trong dict.
+    """
+    if not (DB_AVAILABLE and AuthService and username and old_password):
+        return False
+    try:
+        return AuthService.login(username, old_password) is not None
+    except Exception:
+        return False
+
+
+def show_change_password_dialog(parent, mock_dict, user_id_resolver):
+    """Dialog doi mat khau dung chung cho ca 4 role (HV/Adm/GV/NV).
+
+    Truoc duplicate ~30 dong x 4 cho - 95% giong nhau, chi khac:
+    - mock_dict: MOCK_USER vs MOCK_TEACHER vs MOCK_ADMIN vs MOCK_EMPLOYEE
+    - user_id_resolver: callable tra ve user_id thuc (id/user_id/current_user.id)
+
+    Args:
+        parent: window parent
+        mock_dict: dict cua role hien tai - dung lookup username
+        user_id_resolver: callable () -> int|None
+    """
+    dlg = QtWidgets.QDialog(parent)
+    style_dialog(dlg)
+    dlg.setWindowTitle('Đổi mật khẩu')
+    dlg.setFixedSize(420, 260)
+    form = QtWidgets.QFormLayout(dlg)
+    old = QtWidgets.QLineEdit(); old.setEchoMode(QtWidgets.QLineEdit.Password)
+    new1 = QtWidgets.QLineEdit(); new1.setEchoMode(QtWidgets.QLineEdit.Password)
+    new2 = QtWidgets.QLineEdit(); new2.setEchoMode(QtWidgets.QLineEdit.Password)
+    form.addRow('Mật khẩu cũ:', old)
+    form.addRow('Mật khẩu mới:', new1)
+    strength_lbl = attach_password_strength_indicator(new1)
+    form.addRow('', strength_lbl)
+    form.addRow('Nhập lại:', new2)
+    btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+    btns.accepted.connect(dlg.accept)
+    btns.rejected.connect(dlg.reject)
+    form.addRow(btns)
+    if dlg.exec_() != QtWidgets.QDialog.Accepted:
+        return
+    if not verify_old_password(mock_dict.get('username', ''), old.text()):
+        msg_warn(parent, 'Lỗi', 'Sai mật khẩu cũ')
+        return
+    if not new1.text() or new1.text() != new2.text():
+        msg_warn(parent, 'Lỗi', 'Mật khẩu mới không khớp')
+        return
+    err = validate_password(new1.text())
+    if err:
+        msg_warn(parent, 'Mật khẩu yếu', err)
+        return
+    user_id = user_id_resolver()
+    if not (DB_AVAILABLE and user_id):
+        msg_warn(parent, 'Lỗi', 'Chưa kết nối được hệ thống.')
+        return
+    try:
+        AuthService.change_password(user_id, new1.text())
+    except Exception as e:
+        print(f'[AUTH] doi mk loi: {e}')
+        msg_warn(parent, 'Không đổi được', api_error_msg(e))
+        return
+    msg_info(parent, 'Thành công', 'Đổi mật khẩu thành công.')
 
 
 def is_valid_email(email):
@@ -2946,7 +3020,7 @@ ICONS = os.path.join(RES, 'icons')
 # 4 dict tuong ung 4 role, sidebar/profile binding default truoc khi co data that.
 # Sau login, _sync_current_from_user(user) overwrite cac field tu /auth/login response.
 CURRENT_USER = {
-    'username': '', 'password': '', 'role': 'Học viên',
+    'username': '', 'role': 'Học viên',
     'name': '', 'msv': '', 'lop': '',
     'khoa': '', 'ngaysinh': '', 'gioitinh': '',
     'nienkhoa': '', 'hedt': '',
@@ -2955,19 +3029,19 @@ CURRENT_USER = {
 }
 
 CURRENT_ADMIN = {
-    'username': '', 'password': '',
+    'username': '',
     'name': '', 'role': 'Quản trị viên', 'initials': 'AD',
 }
 
 CURRENT_TEACHER = {
-    'username': '', 'password': '', 'role': 'Giảng viên',
+    'username': '', 'role': 'Giảng viên',
     'id': '', 'name': '', 'initials': '?',
     'khoa': '', 'hocvi': '',
     'email': '', 'sdt': '',
 }
 
 CURRENT_EMPLOYEE = {
-    'username': '', 'password': '', 'role': 'Nhân viên',
+    'username': '', 'role': 'Nhân viên',
     'id': '', 'name': '', 'initials': '?',
     'chucvu': '',
     'email': '', 'sdt': '',
@@ -6051,48 +6125,7 @@ class MainWindow(QtWidgets.QWidget):
         msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
 
     def _change_pass(self):
-        dlg = QtWidgets.QDialog(self)
-        style_dialog(dlg)
-        dlg.setWindowTitle('Đổi mật khẩu')
-        dlg.setFixedSize(420, 260)
-        form = QtWidgets.QFormLayout(dlg)
-        old = QtWidgets.QLineEdit(); old.setEchoMode(QtWidgets.QLineEdit.Password)
-        new1 = QtWidgets.QLineEdit(); new1.setEchoMode(QtWidgets.QLineEdit.Password)
-        new2 = QtWidgets.QLineEdit(); new2.setEchoMode(QtWidgets.QLineEdit.Password)
-        form.addRow('Mật khẩu cũ:', old)
-        form.addRow('Mật khẩu mới:', new1)
-        # Strength indicator append duoi field new1
-        strength_lbl = attach_password_strength_indicator(new1)
-        form.addRow('', strength_lbl)
-        form.addRow('Nhập lại:', new2)
-        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        btns.accepted.connect(dlg.accept)
-        btns.rejected.connect(dlg.reject)
-        form.addRow(btns)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
-            return
-        if old.text() != MOCK_USER['password']:
-            msg_warn(self, 'Lỗi', 'Sai mật khẩu cũ')
-            return
-        if not new1.text() or new1.text() != new2.text():
-            msg_warn(self, 'Lỗi', 'Mật khẩu mới không khớp')
-            return
-        err = validate_password(new1.text())
-        if err:
-            msg_warn(self, 'Mật khẩu yếu', err)
-            return
-        if not (DB_AVAILABLE and MOCK_USER.get('id')):
-            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
-            return
-        # Goi API truoc, chi update local khi success
-        try:
-            AuthService.change_password(MOCK_USER['id'], new1.text())
-        except Exception as e:
-            print(f'[AUTH] loi doi mk: {e}')
-            msg_warn(self, 'Không đổi được', api_error_msg(e))
-            return
-        MOCK_USER['password'] = new1.text()
-        msg_info(self, 'Thành công', 'Đổi mật khẩu thành công')
+        show_change_password_dialog(self, MOCK_USER, lambda: MOCK_USER.get('id'))
 
 
 class AdminWindow(QtWidgets.QWidget):
@@ -6268,49 +6301,10 @@ class AdminWindow(QtWidgets.QWidget):
 
     def _adm_change_pass(self):
         """Dialog admin doi mat khau (admin khong co page profile rieng)."""
-        dlg = QtWidgets.QDialog(self)
-        style_dialog(dlg)
-        dlg.setWindowTitle('Đổi mật khẩu')
-        dlg.setFixedSize(420, 260)
-        form = QtWidgets.QFormLayout(dlg)
-        old = QtWidgets.QLineEdit(); old.setEchoMode(QtWidgets.QLineEdit.Password)
-        new1 = QtWidgets.QLineEdit(); new1.setEchoMode(QtWidgets.QLineEdit.Password)
-        new2 = QtWidgets.QLineEdit(); new2.setEchoMode(QtWidgets.QLineEdit.Password)
-        form.addRow('Mật khẩu cũ:', old)
-        form.addRow('Mật khẩu mới:', new1)
-        strength_lbl = attach_password_strength_indicator(new1)
-        form.addRow('', strength_lbl)
-        form.addRow('Nhập lại:', new2)
-        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        btns.accepted.connect(dlg.accept)
-        btns.rejected.connect(dlg.reject)
-        form.addRow(btns)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
-            return
-        if old.text() != MOCK_ADMIN.get('password', ''):
-            msg_warn(self, 'Lỗi', 'Sai mật khẩu cũ')
-            return
-        if not new1.text() or new1.text() != new2.text():
-            msg_warn(self, 'Lỗi', 'Mật khẩu mới không khớp')
-            return
-        err = validate_password(new1.text())
-        if err:
-            msg_warn(self, 'Mật khẩu yếu', err)
-            return
-        adm_user_id = ((getattr(self, 'current_user', None) and self.current_user.id)
-                       or MOCK_ADMIN.get('user_id') or MOCK_ADMIN.get('id'))
-        if not (DB_AVAILABLE and adm_user_id):
-            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
-            return
-        try:
-            AuthService.change_password(adm_user_id, new1.text())
-        except Exception as e:
-            print(f'[ADM_AUTH] loi doi mk: {e}')
-            msg_warn(self, 'Không đổi được', api_error_msg(e))
-            return
-        MOCK_ADMIN['password'] = new1.text()
-        msg_info(self, 'Thành công',
-                 'Đổi mật khẩu thành công.\nLần đăng nhập sau dùng mật khẩu mới.')
+        def _resolve_id():
+            return ((getattr(self, 'current_user', None) and self.current_user.id)
+                    or MOCK_ADMIN.get('user_id') or MOCK_ADMIN.get('id'))
+        show_change_password_dialog(self, MOCK_ADMIN, _resolve_id)
 
     def _load_page(self, ui_file):
         # ui_file=None -> tao QFrame trong de fill bang code (cho Quan ly lich hoc)
@@ -13611,45 +13605,7 @@ class TeacherWindow(QtWidgets.QWidget):
         msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
 
     def _tea_change_pass(self):
-        dlg = QtWidgets.QDialog(self)
-        style_dialog(dlg)
-        dlg.setWindowTitle('Đổi mật khẩu')
-        dlg.setFixedSize(420, 260)
-        form = QtWidgets.QFormLayout(dlg)
-        old = QtWidgets.QLineEdit(); old.setEchoMode(QtWidgets.QLineEdit.Password)
-        new1 = QtWidgets.QLineEdit(); new1.setEchoMode(QtWidgets.QLineEdit.Password)
-        new2 = QtWidgets.QLineEdit(); new2.setEchoMode(QtWidgets.QLineEdit.Password)
-        form.addRow('Mật khẩu cũ:', old)
-        form.addRow('Mật khẩu mới:', new1)
-        strength_lbl = attach_password_strength_indicator(new1)
-        form.addRow('', strength_lbl)
-        form.addRow('Nhập lại:', new2)
-        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        btns.accepted.connect(dlg.accept)
-        btns.rejected.connect(dlg.reject)
-        form.addRow(btns)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
-            return
-        if old.text() != MOCK_TEACHER.get('password', ''):
-            msg_warn(self, 'Lỗi', 'Sai mật khẩu cũ')
-            return
-        if not new1.text() or new1.text() != new2.text():
-            msg_warn(self, 'Lỗi', 'Mật khẩu mới không khớp')
-            return
-        err = validate_password(new1.text())
-        if err:
-            msg_warn(self, 'Mật khẩu yếu', err)
-            return
-        gv_user_id = MOCK_TEACHER.get('user_id')
-        if not (DB_AVAILABLE and gv_user_id):
-            msg_warn(self, 'Lỗi', 'Không xác định được tài khoản. Hãy đăng nhập lại.')
-            return
-        try:
-            AuthService.change_password(gv_user_id, new1.text())
-            MOCK_TEACHER['password'] = new1.text()
-            msg_info(self, 'Thành công', 'Đổi mật khẩu thành công.')
-        except Exception as e:
-            msg_warn(self, 'Lỗi', f'Đổi mật khẩu thất bại:\n{e}')
+        show_change_password_dialog(self, MOCK_TEACHER, lambda: MOCK_TEACHER.get('user_id'))
 
 
 class EmployeeWindow(QtWidgets.QWidget):
@@ -15390,45 +15346,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         msg_info(self, 'Thành công', 'Đã lưu thông tin cá nhân.')
 
     def _emp_change_pass(self):
-        dlg = QtWidgets.QDialog(self)
-        style_dialog(dlg)
-        dlg.setWindowTitle('Đổi mật khẩu')
-        dlg.setFixedSize(420, 260)
-        form = QtWidgets.QFormLayout(dlg)
-        old = QtWidgets.QLineEdit(); old.setEchoMode(QtWidgets.QLineEdit.Password)
-        new1 = QtWidgets.QLineEdit(); new1.setEchoMode(QtWidgets.QLineEdit.Password)
-        new2 = QtWidgets.QLineEdit(); new2.setEchoMode(QtWidgets.QLineEdit.Password)
-        form.addRow('Mật khẩu cũ:', old)
-        form.addRow('Mật khẩu mới:', new1)
-        strength_lbl = attach_password_strength_indicator(new1)
-        form.addRow('', strength_lbl)
-        form.addRow('Nhập lại:', new2)
-        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        btns.accepted.connect(dlg.accept)
-        btns.rejected.connect(dlg.reject)
-        form.addRow(btns)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
-            return
-        if old.text() != MOCK_EMPLOYEE.get('password', ''):
-            msg_warn(self, 'Lỗi', 'Sai mật khẩu cũ')
-            return
-        if not new1.text() or new1.text() != new2.text():
-            msg_warn(self, 'Lỗi', 'Mật khẩu mới không khớp')
-            return
-        err = validate_password(new1.text())
-        if err:
-            msg_warn(self, 'Mật khẩu yếu', err)
-            return
-        emp_user_id = MOCK_EMPLOYEE.get('user_id')
-        if not (DB_AVAILABLE and emp_user_id):
-            msg_warn(self, 'Lỗi', 'Không xác định được tài khoản. Hãy đăng nhập lại.')
-            return
-        try:
-            AuthService.change_password(emp_user_id, new1.text())
-            MOCK_EMPLOYEE['password'] = new1.text()
-            msg_info(self, 'Thành công', 'Đổi mật khẩu thành công.')
-        except Exception as e:
-            msg_warn(self, 'Lỗi', f'Đổi mật khẩu thất bại:\n{e}')
+        show_change_password_dialog(self, MOCK_EMPLOYEE, lambda: MOCK_EMPLOYEE.get('user_id'))
 
 
 class App:
@@ -15654,69 +15572,43 @@ class App:
             u = self.login_win.txtUsername.text().strip()
             p = self.login_win.txtPassword.text().strip()
 
-            # uu tien DB - dung AuthService
-            if DB_AVAILABLE:
-                try:
-                    user_obj = AuthService.login(u, p)
-                    if user_obj:
-                        # set MOCK dict theo user that de sidebar/profile hien tai
-                        self._sync_mock_from_user(user_obj)
-                        save_last_username(u)
-                        self.login_win.close()
-                        window_cls = {
-                            'student': MainWindow, 'admin': AdminWindow,
-                            'teacher': TeacherWindow, 'employee': EmployeeWindow,
-                        }.get(user_obj.role)
-                        if window_cls:
-                            self.main_win = window_cls(self)
-                            self.main_win.current_user = user_obj
-                            # Append username + role vao title de phan biet khi multi-window
-                            cur_title = self.main_win.windowTitle()
-                            self.main_win.setWindowTitle(f'{cur_title}  •  {user_obj.full_name or user_obj.username} ({user_obj.role})')
-                            self.main_win.show()
-                            center_on_screen(self.main_win)
-                            return
-                    self.login_win.lblError.setText('Sai tài khoản hoặc mật khẩu!')
-                    return
-                except Exception as e:
-                    print(f'[AUTH] loi DB, fallback MOCK: {e}')
-                    # roi xuong fallback MOCK
+            if not DB_AVAILABLE:
+                self.login_win.lblError.setText(
+                    'Hệ thống chưa sẵn sàng. Hãy đảm bảo backend đang chạy '
+                    '(uvicorn backend.api.main:app --port 8000).'
+                )
+                return
 
-            # fallback: MOCK login
-            def _set_user_title(role):
-                cur_title = self.main_win.windowTitle()
-                self.main_win.setWindowTitle(f'{cur_title}  •  {u} ({role})')
+            try:
+                user_obj = AuthService.login(u, p)
+            except Exception as e:
+                print(f'[AUTH] API loi: {e}')
+                self.login_win.lblError.setText(
+                    'Không kết nối được hệ thống. Vui lòng kiểm tra kết nối '
+                    'rồi thử lại sau ít phút.'
+                )
+                return
 
-            if u == MOCK_USER['username'] and p == MOCK_USER['password']:
-                save_last_username(u)
-                self.login_win.close()
-                self.main_win = MainWindow(self)
-                self.main_win.show()
-                _set_user_title('student')
-                center_on_screen(self.main_win)
-            elif u == MOCK_ADMIN['username'] and p == MOCK_ADMIN['password']:
-                save_last_username(u)
-                self.login_win.close()
-                self.main_win = AdminWindow(self)
-                self.main_win.show()
-                _set_user_title('admin')
-                center_on_screen(self.main_win)
-            elif u == MOCK_TEACHER['username'] and p == MOCK_TEACHER['password']:
-                save_last_username(u)
-                self.login_win.close()
-                self.main_win = TeacherWindow(self)
-                self.main_win.show()
-                _set_user_title('teacher')
-                center_on_screen(self.main_win)
-            elif u == MOCK_EMPLOYEE['username'] and p == MOCK_EMPLOYEE['password']:
-                save_last_username(u)
-                self.login_win.close()
-                self.main_win = EmployeeWindow(self)
-                self.main_win.show()
-                _set_user_title('employee')
-                center_on_screen(self.main_win)
-            else:
+            if not user_obj:
                 self.login_win.lblError.setText('Sai tài khoản hoặc mật khẩu!')
+                return
+
+            # Login OK - set MOCK dict theo user that de sidebar/profile hien tai
+            self._sync_mock_from_user(user_obj)
+            save_last_username(u)
+            self.login_win.close()
+            window_cls = {
+                'student': MainWindow, 'admin': AdminWindow,
+                'teacher': TeacherWindow, 'employee': EmployeeWindow,
+            }.get(user_obj.role)
+            if window_cls:
+                self.main_win = window_cls(self)
+                self.main_win.current_user = user_obj
+                # Append username + role vao title de phan biet khi multi-window
+                cur_title = self.main_win.windowTitle()
+                self.main_win.setWindowTitle(f'{cur_title}  •  {user_obj.full_name or user_obj.username} ({user_obj.role})')
+                self.main_win.show()
+                center_on_screen(self.main_win)
 
         self.login_win.btnLogin.clicked.connect(on_login)
         self.login_win.txtPassword.returnPressed.connect(on_login)
