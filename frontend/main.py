@@ -98,6 +98,30 @@ def fmt_date(value, fmt='%d/%m/%Y', default='—'):
         return str(value)
 
 
+def parse_iso_date(value):
+    """Parse value (str/date/None) -> date object hoac None neu fail.
+
+    API tra ngay_dk/ngay_thi... duoi 2 dang: date object (Python serialize) hoac
+    str ISO 'YYYY-MM-DD' (JSON). Helper nay handle ca 2 case + truncate sau ky tu
+    thu 10 de bo time component neu co (vd '2026-05-06T10:00:00').
+
+    Replace duplicate pattern:
+        if isinstance(v, _date): d = v
+        else:
+            try: d = _date.fromisoformat(str(v)[:10])
+            except Exception: d = None
+    """
+    if value is None or value == '':
+        return None
+    from datetime import date as _date
+    if isinstance(value, _date):
+        return value
+    try:
+        return _date.fromisoformat(str(value)[:10])
+    except (ValueError, TypeError):
+        return None
+
+
 def msg_info(parent, title, text):
     box = QtWidgets.QMessageBox(parent)
     box.setIcon(QtWidgets.QMessageBox.Information)
@@ -180,11 +204,13 @@ def password_strength(pw: str):
     return ('Rất mạnh', '#16a34a', score)
 
 
-def attach_password_strength_indicator(line_edit, container_widget):
-    """Tao 1 label hien strength dong, append vao container layout.
-    container_widget thuong la dialog (or QFormLayout's parent).
+def attach_password_strength_indicator(line_edit):
+    """Tao 1 QLabel hien strength dong - cap nhat khi user go vao line_edit.
 
-    Returns: QLabel widget (caller co the manage neu can).
+    Caller tu append vao layout (form.addRow / vbox.addWidget) - khong tu add o day
+    de dialog co the dat label dung vi tri (vd ngay duoi field "Mat khau moi").
+
+    Returns: QLabel widget.
     """
     lbl = QtWidgets.QLabel('—')
     lbl.setStyleSheet('color: #a0aec0; font-size: 11px; padding: 2px 0; '
@@ -378,53 +404,6 @@ def center_on_screen(window):
         )
     except Exception:
         pass
-
-
-def add_connection_indicator(sidebar, x=15, y=58):
-    """Them 1 dot + label "Online/Offline" o sidebar header.
-
-    Tra ve tuple (lbl_dot, lbl_text) - caller co the cap nhat sau qua update_connection_indicator.
-    """
-    dot = QtWidgets.QLabel(sidebar)
-    dot.setObjectName('lblConnDot')
-    dot.setGeometry(x, y, 8, 8)
-    dot.setStyleSheet('background: #cbd5e0; border-radius: 4px;')  # default xam
-    text = QtWidgets.QLabel('Đang kiểm tra...', sidebar)
-    text.setObjectName('lblConnText')
-    text.setGeometry(x + 12, y - 2, 180, 14)
-    text.setStyleSheet('color: #a0aec0; font-size: 9px; background: transparent;')
-    return dot, text
-
-
-def update_connection_indicator(window):
-    """Update dot color + text dua tren is_alive(). An toan goi nhieu lan."""
-    dot = window.findChild(QtWidgets.QLabel, 'lblConnDot')
-    text = window.findChild(QtWidgets.QLabel, 'lblConnText')
-    if not (dot and text):
-        return
-    online = False
-    try:
-        online = bool(DB_AVAILABLE and is_alive())
-    except Exception:
-        pass
-    if online:
-        dot.setStyleSheet('background: #38a169; border-radius: 4px;')  # xanh
-        text.setText('Đã kết nối máy chủ')
-        text.setStyleSheet('color: #276749; font-size: 9px; background: transparent;')
-    else:
-        dot.setStyleSheet('background: #c53030; border-radius: 4px;')  # do
-        text.setText('Mất kết nối máy chủ')
-        text.setStyleSheet('color: #c53030; font-size: 9px; background: transparent;')
-
-
-def install_periodic_connection_check(window, interval_ms=30000):
-    """Check connection moi 30s qua QTimer (safe khi window closed - timer auto-stop)."""
-    from PyQt5.QtCore import QTimer
-    update_connection_indicator(window)
-    timer = QTimer(window)  # parent = window -> auto delete khi window destroy
-    timer.timeout.connect(lambda: update_connection_indicator(window))
-    timer.start(interval_ms)
-    window._conn_check_timer = timer  # lifetime ref
 
 
 def install_refresh_shortcut(window):
@@ -956,10 +935,7 @@ def export_class_full_schedule_pdf(parent, lop_id, ten_mon, schedules,
     # Stats: tong / da dien ra / sap toi / huy
     n_done = n_upcoming = n_cancel = 0
     for s in rows:
-        ng = s.get('ngay', '')
-        if isinstance(ng, str):
-            try: ng = _date.fromisoformat(ng[:10])
-            except Exception: ng = None
+        ng = parse_iso_date(s.get('ngay', ''))
         st = s.get('trang_thai') or ''
         if st == 'cancelled':
             n_cancel += 1
@@ -973,14 +949,7 @@ def export_class_full_schedule_pdf(parent, lop_id, ten_mon, schedules,
         zebra = '#f7fafc' if i % 2 == 0 else 'white'
         buoi_so = sc.get('buoi_so') or i
         ngay_v = sc.get('ngay', '')
-        ngay_d = None
-        if isinstance(ngay_v, _date):
-            ngay_d = ngay_v
-        else:
-            try:
-                ngay_d = _date.fromisoformat(str(ngay_v)[:10])
-            except Exception:
-                ngay_d = None
+        ngay_d = parse_iso_date(ngay_v)
         ngay_str = ngay_d.strftime('%d/%m/%Y') if ngay_d else (str(ngay_v)[:10] or '—')
         thu_str = days_vn_short[ngay_d.weekday()] if ngay_d else '—'
         gio_bd = str(sc.get('gio_bat_dau', ''))[:5]
@@ -1137,10 +1106,7 @@ def export_exam_schedule_pdf(parent, exams: list, owner_role='hv',
 
     n_done = n_upcoming = 0
     for s in rows:
-        ng = s.get('ngay_thi') or s.get('ngay', '')
-        if isinstance(ng, str):
-            try: ng = _date.fromisoformat(ng[:10])
-            except Exception: ng = None
+        ng = parse_iso_date(s.get('ngay_thi') or s.get('ngay', ''))
         if ng and ng < today:
             n_done += 1
         else:
@@ -1153,12 +1119,7 @@ def export_exam_schedule_pdf(parent, exams: list, owner_role='hv',
         ma_lop = ex.get('lop_id', '') or ex.get('ma_mon', '') or '—'
         ten_mon = ex.get('ten_mon', '') or '—'
         ngay_v = ex.get('ngay_thi') or ex.get('ngay', '')
-        ngay_d = None
-        if isinstance(ngay_v, _date):
-            ngay_d = ngay_v
-        else:
-            try: ngay_d = _date.fromisoformat(str(ngay_v)[:10])
-            except Exception: ngay_d = None
+        ngay_d = parse_iso_date(ngay_v)
         ngay_str = ngay_d.strftime('%d/%m/%Y') if ngay_d else (str(ngay_v)[:10] or '—')
         thu_str = days_vn_short[ngay_d.weekday()] if ngay_d else '—'
         ca = ex.get('ca_thi', '') or ''
@@ -1520,11 +1481,16 @@ _AVATAR_PALETTE = [
 
 
 def avatar_style(initials: str) -> str:
-    """Sinh QSS background+color cho lblAvatar dua tren hash(initials).
-    Cung 1 user -> cung 1 mau, khac user -> mau khac (deterministic).
+    """Sinh QSS background+color cho lblAvatar dua tren initials.
+
+    Cung 1 user -> cung 1 mau qua moi lan run app (deterministic).
+    Truoc dung Python builtin hash() nhung no co PYTHONHASHSEED random nen
+    moi run cho mau khac nhau - DH co the la xanh hom nay, vang ngay mai...
+    Nay dung sum(ord(c)) deterministic - khong can hashlib (overkill cho 8 mau).
     """
     key = (initials or '?').strip().upper() or '?'
-    bg, fg = _AVATAR_PALETTE[hash(key) % len(_AVATAR_PALETTE)]
+    idx = sum(ord(c) for c in key) % len(_AVATAR_PALETTE)
+    bg, fg = _AVATAR_PALETTE[idx]
     return (f'background: {bg}; border-radius: 19px; color: {fg}; '
             f'font-size: 13px; font-weight: bold;')
 
@@ -1588,6 +1554,27 @@ def _status_normalize(text: str) -> str:
     s = unicodedata.normalize('NFD', text or '')
     s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
     return s.lower().strip().replace('đ', 'd')
+
+
+def score_to_letter(total) -> str:
+    """Quy doi diem TK (thang 10) sang xep loai chu A+/A/.../F.
+
+    Bac thang theo quy che dao tao: A+ ≥9, A ≥8.5, B+ ≥8, B ≥6.5, C+ ≥5.5,
+    C ≥5, D ≥4, con lai F. Dung chung cho dialog nhap diem + auto-recalc khi
+    user sua o cot QT/Thi truc tiep tren bang.
+    """
+    try:
+        s = float(total)
+    except (TypeError, ValueError):
+        return ''
+    if s >= 9: return 'A+'
+    if s >= 8.5: return 'A'
+    if s >= 8: return 'B+'
+    if s >= 6.5: return 'B'
+    if s >= 5.5: return 'C+'
+    if s >= 5: return 'C'
+    if s >= 4: return 'D'
+    return 'F'
 
 
 def make_status_badge(text: str) -> 'QtWidgets.QWidget':
@@ -1668,6 +1655,56 @@ def set_sidebar_badge(lbl, count: int, cap: int = 99):
         lbl.show()
     else:
         lbl.hide()
+
+
+def cleanup_banner(parent, name: str, kind=None):
+    """Remove tat ca QFrame con co objectName = name (cho re-render banner an toan).
+
+    Qt deleteLater() khong xoa instant - re-render lien tiep (vd nav qua lai
+    HV dashboard) co the de lai banner cu chong banner moi. Helper nay tim
+    TAT CA child match name + setParent(None) + deleteLater() de schedule
+    cleanup ngay cycle event loop tiep theo.
+
+    Args:
+        parent: widget cha (page/QWidget)
+        name: objectName cua banner can xoa
+        kind: optional widget class (default QFrame) - co the truyen QLabel...
+    """
+    klass = kind or QtWidgets.QFrame
+    for old in parent.findChildren(klass):
+        if old.objectName() == name:
+            old.setParent(None)
+            old.deleteLater()
+
+
+def count_overdue_pending_registrations(threshold_days: int = 7) -> int:
+    """Dem so dang ky 'pending_payment' qua han thanh toan (>threshold_days ngay tu ngay_dk).
+
+    Dung chung cho sidebar badge: Adm reg overdue + NV pay overdue (truoc duplicate
+    20+ dong loop). Trahve 0 neu DB chua available hoac API loi.
+
+    Args:
+        threshold_days: nguong ngay (default 7) - moi DK 'pending_payment' co
+            ngay_dk cu hon threshold_days se duoc dem.
+    """
+    if not (DB_AVAILABLE and RegistrationService):
+        return 0
+    from datetime import date as _date
+    n = 0
+    try:
+        rows = RegistrationService.get_all_registrations(limit=500) or []
+        today_d = _date.today()
+        for r in rows:
+            if r.get('trang_thai') != 'pending_payment':
+                continue
+            ng = parse_iso_date(r.get('ngay_dk'))
+            if ng is None:
+                continue
+            if (today_d - ng).days > threshold_days:
+                n += 1
+    except Exception as e:
+        print(f'[BADGE] count_overdue_pending_registrations loi: {e}')
+    return n
 
 
 def set_table_empty_state(tbl, message='Chưa có dữ liệu', row_height=50,
@@ -2107,16 +2144,8 @@ def show_exam_detail_dialog(parent, exam_row, role='hv'):
     """
     from datetime import date as _date
     ngay_v = exam_row.get('ngay_thi') or exam_row.get('ngay', '')
-    ngay_d = None
-    if isinstance(ngay_v, _date):
-        ngay_d = ngay_v
-        ngay_str = ngay_v.strftime('%d/%m/%Y')
-    else:
-        try:
-            ngay_d = _date.fromisoformat(str(ngay_v)[:10])
-            ngay_str = ngay_d.strftime('%d/%m/%Y')
-        except Exception:
-            ngay_str = str(ngay_v)[:10] or '—'
+    ngay_d = parse_iso_date(ngay_v)
+    ngay_str = ngay_d.strftime('%d/%m/%Y') if ngay_d else (str(ngay_v)[:10] or '—')
     if ngay_d:
         thu_vn = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm',
                    'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][ngay_d.weekday()]
@@ -2361,12 +2390,7 @@ def show_class_full_schedule_dialog(parent, lop_id, ten_mon, schedules, role='hv
     upcoming_count = 0
     cancelled_count = 0
     for s in rows:
-        ngay = s.get('ngay', '')
-        if isinstance(ngay, str):
-            try:
-                ngay = _date.fromisoformat(ngay[:10])
-            except Exception:
-                ngay = None
+        ngay = parse_iso_date(s.get('ngay', ''))
         st = s.get('trang_thai') or ''
         if st == 'cancelled':
             cancelled_count += 1
@@ -2441,16 +2465,8 @@ def show_class_full_schedule_dialog(parent, lop_id, ten_mon, schedules, role='hv
             tbl.setItem(r, 0, it_buoi)
 
             ngay_v = sc.get('ngay', '')
-            ngay_d = None
-            if isinstance(ngay_v, _date):
-                ngay_d = ngay_v
-                ngay_str = ngay_v.strftime('%d/%m/%Y')
-            else:
-                try:
-                    ngay_d = _date.fromisoformat(str(ngay_v)[:10])
-                    ngay_str = ngay_d.strftime('%d/%m/%Y')
-                except Exception:
-                    ngay_str = str(ngay_v)[:10] or '—'
+            ngay_d = parse_iso_date(ngay_v)
+            ngay_str = ngay_d.strftime('%d/%m/%Y') if ngay_d else (str(ngay_v)[:10] or '—')
             it_ngay = QtWidgets.QTableWidgetItem(ngay_str)
             it_ngay.setTextAlignment(Qt.AlignCenter)
             # Highlight today
@@ -3185,7 +3201,6 @@ class MainWindow(QtWidgets.QWidget):
 
         # F5/Ctrl+R: refresh trang hien tai
         install_refresh_shortcut(self)
-        # connection indicator removed per user feedback
 
     def _update_notif_badge(self):
         """Update tat ca badges sidebar HV: notif + exam (≤7 ngay) + bai tap chua nop."""
@@ -3209,15 +3224,12 @@ class MainWindow(QtWidgets.QWidget):
                 today = _date.today()
                 exams = ExamService.get_for_student(hv_id) or []
                 for e in exams:
-                    ngay_v = e.get('ngay_thi') or e.get('ngay', '')
-                    ngay_d = ngay_v if isinstance(ngay_v, _date) else None
+                    ngay_d = parse_iso_date(e.get('ngay_thi') or e.get('ngay', ''))
                     if ngay_d is None:
-                        try: ngay_d = _date.fromisoformat(str(ngay_v)[:10])
-                        except Exception: continue
-                    if ngay_d:
-                        dl = (ngay_d - today).days
-                        if 0 <= dl <= 7:
-                            n_exam_soon += 1
+                        continue
+                    dl = (ngay_d - today).days
+                    if 0 <= dl <= 7:
+                        n_exam_soon += 1
             except Exception as e:
                 print(f'[STU_BADGE] exam loi: {e}')
         set_sidebar_badge(getattr(self, 'lblExamBadge', None), n_exam_soon)
@@ -3781,10 +3793,7 @@ class MainWindow(QtWidgets.QWidget):
         from datetime import date as _date, timedelta as _td
 
         # Cleanup TAT CA banner cu (deleteLater khong immediate -> can find all)
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'todayBanner':
-                old.setParent(None)
-                old.deleteLater()
+        cleanup_banner(page, 'todayBanner')
 
         today = _date.today()
         # Monday cua tuan hien tai
@@ -3906,9 +3915,7 @@ class MainWindow(QtWidgets.QWidget):
         from datetime import datetime as _dt
 
         # Cleanup banner cu
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'asgBanner':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'asgBanner')
 
         rows = []
         if DB_AVAILABLE and hv_id and AssignmentService:
@@ -4002,9 +4009,7 @@ class MainWindow(QtWidgets.QWidget):
         Caller phai set self._stu_pending_pay = (n, total_fee) truoc khi goi.
         """
         # Cleanup banner cu
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'pendingPayBanner':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'pendingPayBanner')
 
         n_pending, total_fee = getattr(self, '_stu_pending_pay', (0, 0))
         if n_pending <= 0:
@@ -4059,9 +4064,7 @@ class MainWindow(QtWidgets.QWidget):
         """
         from datetime import date as _date
         # Cleanup banner cu
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'examAlertBanner':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'examAlertBanner')
 
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
         n_today = n_3 = n_7 = 0
@@ -4070,13 +4073,7 @@ class MainWindow(QtWidgets.QWidget):
                 today_d = _date.today()
                 rows = ExamService.get_for_student(hv_id) or []
                 for r in rows:
-                    ngay_v = r.get('ngay_thi') or r.get('ngay', '')
-                    ngay_d = None
-                    if isinstance(ngay_v, _date):
-                        ngay_d = ngay_v
-                    else:
-                        try: ngay_d = _date.fromisoformat(str(ngay_v)[:10])
-                        except Exception: continue
+                    ngay_d = parse_iso_date(r.get('ngay_thi') or r.get('ngay', ''))
                     if not ngay_d:
                         continue
                     dl = (ngay_d - today_d).days
@@ -4318,11 +4315,9 @@ class MainWindow(QtWidgets.QWidget):
         if DB_AVAILABLE and hv_id:
             try:
                 near = ScheduleService.nearest_week_for_student(hv_id, today.toPyDate())
-                if near:
-                    from datetime import date as _date
-                    if isinstance(near, str):
-                        near = _date.fromisoformat(near)
-                    self._stu_current_monday = QDate(near.year, near.month, near.day)
+                near_d = parse_iso_date(near)
+                if near_d:
+                    self._stu_current_monday = QDate(near_d.year, near_d.month, near_d.day)
             except Exception as e:
                 print(f'[STU_SCHED] nearest_week loi: {e}')
         self._load_student_schedule_week(page, tbl, self._stu_current_monday, hours, days_vn)
@@ -4493,7 +4488,9 @@ class MainWindow(QtWidgets.QWidget):
                 from datetime import date as _date
                 for r in rows:
                     try:
-                        d = r['ngay'] if isinstance(r['ngay'], _date) else _date.fromisoformat(str(r['ngay'])[:10])
+                        d = parse_iso_date(r.get('ngay'))
+                        if d is None:
+                            continue
                         wd = d.weekday()
                         if wd > 5:
                             continue
@@ -4691,14 +4688,7 @@ class MainWindow(QtWidgets.QWidget):
                 ngay_d = None
                 if r < len(self._stu_exam_rows_cache):
                     raw = self._stu_exam_rows_cache[r]
-                    ngay_v = raw.get('ngay_thi') or raw.get('ngay', '')
-                    if isinstance(ngay_v, _date):
-                        ngay_d = ngay_v
-                    else:
-                        try:
-                            ngay_d = _date.fromisoformat(str(ngay_v)[:10])
-                        except Exception:
-                            ngay_d = None
+                    ngay_d = parse_iso_date(raw.get('ngay_thi') or raw.get('ngay', ''))
                     if ngay_d:
                         days_left = (ngay_d - today).days
 
@@ -4798,9 +4788,7 @@ class MainWindow(QtWidgets.QWidget):
 
         # === Banner summary mon thi sap toi (≤7 ngay) ===
         # Cleanup banner cu (truoc khi tao moi)
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'examTodayBanner':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'examTodayBanner')
 
         n_total_soon = n_today + n_soon_3 + n_soon_7
         if n_total_soon > 0:
@@ -5174,10 +5162,6 @@ class MainWindow(QtWidgets.QWidget):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblGrades')
         if not tbl:
             return
-        grade_colors = {'A+': COLORS['green'], 'A': COLORS['green'],
-                        'B+': COLORS['navy'], 'B': COLORS['navy'],
-                        'C+': COLORS['orange'], 'C': COLORS['orange'],
-                        'D': COLORS['red'], 'F': COLORS['red']}
         # Gop tat ca diem - khong them cot HK
         all_rows = []
         if sem_id and sem_id in self._student_grades_by_sem:
@@ -5965,9 +5949,7 @@ class MainWindow(QtWidgets.QWidget):
     def _build_stu_profile_stats(self, page):
         """Card 'Thong ke hoc tap' o phia duoi profile (4 stat: lop / hoan thanh / hoc phi / GPA)."""
         # Cleanup old (de re-fill voi data moi neu user vao lai page)
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'profileStatsCard':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'profileStatsCard')
 
         # Lay du lieu: classes + grades
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
@@ -6080,7 +6062,7 @@ class MainWindow(QtWidgets.QWidget):
         form.addRow('Mật khẩu cũ:', old)
         form.addRow('Mật khẩu mới:', new1)
         # Strength indicator append duoi field new1
-        strength_lbl = attach_password_strength_indicator(new1, dlg)
+        strength_lbl = attach_password_strength_indicator(new1)
         form.addRow('', strength_lbl)
         form.addRow('Nhập lại:', new2)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
@@ -6148,7 +6130,6 @@ class AdminWindow(QtWidgets.QWidget):
         install_refresh_shortcut(self)
         # Badge sidebar: pending DK qua han + lop chua co GV
         self._update_adm_badges()
-        # connection indicator removed per user feedback
 
     def _build_sidebar(self):
         sidebar = QtWidgets.QFrame()
@@ -6171,7 +6152,6 @@ class AdminWindow(QtWidgets.QWidget):
         lbl_sub = QtWidgets.QLabel('Quản trị hệ thống', sidebar)
         lbl_sub.setGeometry(68, 40, 120, 16)
         lbl_sub.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 11px; background: transparent;')
-# add_connection_indicator removed
         add_maximize_button(sidebar, self)
         add_reload_button(sidebar, self)
 
@@ -6298,7 +6278,7 @@ class AdminWindow(QtWidgets.QWidget):
         new2 = QtWidgets.QLineEdit(); new2.setEchoMode(QtWidgets.QLineEdit.Password)
         form.addRow('Mật khẩu cũ:', old)
         form.addRow('Mật khẩu mới:', new1)
-        strength_lbl = attach_password_strength_indicator(new1, dlg)
+        strength_lbl = attach_password_strength_indicator(new1)
         form.addRow('', strength_lbl)
         form.addRow('Nhập lại:', new2)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
@@ -6381,27 +6361,9 @@ class AdminWindow(QtWidgets.QWidget):
 
     def _update_adm_badges(self):
         """Update sidebar Admin: dem DK pending qua han + lop chua co GV."""
-        from datetime import date as _date
         # Badge 1: pending DK qua 7 ngay
-        n_overdue = 0
-        if DB_AVAILABLE and RegistrationService and hasattr(self, 'lblAdmRegBadge'):
-            try:
-                rows = RegistrationService.get_all_registrations(limit=500) or []
-                today_d = _date.today()
-                for r in rows:
-                    if r.get('trang_thai') != 'pending_payment':
-                        continue
-                    ng = r.get('ngay_dk')
-                    if isinstance(ng, str):
-                        try: ng = _date.fromisoformat(ng[:10])
-                        except Exception: continue
-                    elif not isinstance(ng, _date):
-                        continue
-                    if (today_d - ng).days > 7:
-                        n_overdue += 1
-            except Exception as e:
-                print(f'[ADM_REG_BADGE] loi: {e}')
-            set_sidebar_badge(self.lblAdmRegBadge, n_overdue)
+        if hasattr(self, 'lblAdmRegBadge'):
+            set_sidebar_badge(self.lblAdmRegBadge, count_overdue_pending_registrations())
 
         # Badge 2: lop chua co GV (gv_id IS NULL)
         n_no_gv = 0
@@ -6651,9 +6613,7 @@ class AdminWindow(QtWidgets.QWidget):
         xuong 42px neu show, reset neu khong.
         """
         # Cleanup banner cu
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'noTeacherBannerAdmin':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'noTeacherBannerAdmin')
 
         n_no_gv = 0
         sample_lops = []  # vài mã lớp đầu tiên de show trong tooltip
@@ -10059,7 +10019,6 @@ class TeacherWindow(QtWidgets.QWidget):
 
         # F5/Ctrl+R: refresh trang hien tai
         install_refresh_shortcut(self)
-        # connection indicator removed per user feedback
 
         # Update sidebar badges initially
         self._update_tea_badges()
@@ -10083,7 +10042,6 @@ class TeacherWindow(QtWidgets.QWidget):
         lbl_sub = QtWidgets.QLabel('Giảng viên', sidebar)
         lbl_sub.setGeometry(68, 40, 120, 16)
         lbl_sub.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 11px; background: transparent;')
-# add_connection_indicator removed
         add_maximize_button(sidebar, self)
         add_reload_button(sidebar, self)
 
@@ -10871,9 +10829,7 @@ class TeacherWindow(QtWidgets.QWidget):
         xuong 36px neu show, reset neu khong.
         """
         # Cleanup banner cu
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'gradeAlertBannerGV':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'gradeAlertBannerGV')
 
         gv_id = MOCK_TEACHER.get('user_id')
         n_to_grade = 0
@@ -11109,11 +11065,9 @@ class TeacherWindow(QtWidgets.QWidget):
         if DB_AVAILABLE and gv_id:
             try:
                 near = ScheduleService.nearest_week_for_teacher(gv_id, today.toPyDate())
-                if near:
-                    from datetime import date as _date
-                    if isinstance(near, str):
-                        near = _date.fromisoformat(near)
-                    self._tea_current_monday = QDate(near.year, near.month, near.day)
+                near_d = parse_iso_date(near)
+                if near_d:
+                    self._tea_current_monday = QDate(near_d.year, near_d.month, near_d.day)
             except Exception as e:
                 print(f'[TEA_SCHED] nearest_week loi: {e}')
         self._load_teacher_schedule_week(page, tbl, self._tea_current_monday, hours, days_vn)
@@ -11272,7 +11226,8 @@ class TeacherWindow(QtWidgets.QWidget):
                 from datetime import date as _date
                 for r in rows:
                     try:
-                        d = r['ngay'] if isinstance(r['ngay'], _date) else _date.fromisoformat(str(r['ngay'])[:10])
+                        d = parse_iso_date(r.get('ngay'))
+                        if d is None: continue
                         wd = d.weekday()
                         if wd > 5: continue
                         col = wd + 1
@@ -12098,39 +12053,41 @@ class TeacherWindow(QtWidgets.QWidget):
             return
 
         self._grades_recalc_lock = True
-        n_filled = 0       # so HV duoc fill CC tu diem danh thuc te
-        n_no_data = 0      # so HV chua co diem danh
-        n_no_db = 0        # so HV khong tim thay trong DB
-        n_total = tbl.rowCount()
+        try:
+            n_filled = 0       # so HV duoc fill CC tu diem danh thuc te
+            n_no_data = 0      # so HV chua co diem danh
+            n_no_db = 0        # so HV khong tim thay trong DB
+            n_total = tbl.rowCount()
 
-        for r in range(n_total):
-            it_msv = tbl.item(r, 1)
-            it_cc = tbl.item(r, 3)
-            if not (it_msv and it_cc): continue
-            msv = it_msv.text().strip()
-            if not msv: continue
-            try:
-                if msv in rates_by_msv:
-                    rate = rates_by_msv[msv]
-                    cc = round(rate / 10, 1)
-                    it_cc.setText(f'{cc:.1f}')
-                    n_filled += 1
-                    print(f'[SYNC_CC] {msv}: rate={rate}% -> CC={cc}')
-                else:
-                    # check xem msv co trong DB khong qua API
-                    try:
-                        hv = StudentService.get_by_msv(msv)
-                    except Exception:
-                        hv = None
-                    if hv:
-                        n_no_data += 1
-                        print(f'[SYNC_CC] {msv}: chua co diem danh nao')
+            for r in range(n_total):
+                it_msv = tbl.item(r, 1)
+                it_cc = tbl.item(r, 3)
+                if not (it_msv and it_cc): continue
+                msv = it_msv.text().strip()
+                if not msv: continue
+                try:
+                    if msv in rates_by_msv:
+                        rate = rates_by_msv[msv]
+                        cc = round(rate / 10, 1)
+                        it_cc.setText(f'{cc:.1f}')
+                        n_filled += 1
+                        print(f'[SYNC_CC] {msv}: rate={rate}% -> CC={cc}')
                     else:
-                        n_no_db += 1
-                        print(f'[SYNC_CC] {msv}: khong co trong DB students (mock?)')
-            except Exception as e:
-                print(f'[SYNC_CC] {msv} exception: {e}')
-        self._grades_recalc_lock = False
+                        # check xem msv co trong DB khong qua API
+                        try:
+                            hv = StudentService.get_by_msv(msv)
+                        except Exception:
+                            hv = None
+                        if hv:
+                            n_no_data += 1
+                            print(f'[SYNC_CC] {msv}: chua co diem danh nao')
+                        else:
+                            n_no_db += 1
+                            print(f'[SYNC_CC] {msv}: khong co trong DB students (mock?)')
+                except Exception as e:
+                    print(f'[SYNC_CC] {msv} exception: {e}')
+        finally:
+            self._grades_recalc_lock = False
 
         # Bao cao chi tiet
         if n_filled > 0:
@@ -12178,45 +12135,49 @@ class TeacherWindow(QtWidgets.QWidget):
                     data.append(_norm(stt, r, suffix=f'  ({lop})'))
                     stt += 1
 
+        # Lock cellChanged signal trong khi fill table - tranh _recalc_grade_row
+        # bi trigger sai khi chua fill xong toan bo row. try/finally de release du loi
         self._grades_recalc_lock = True
-        tbl.setRowCount(len(data))
-        # Clear cellWidgets cu (xep loai cot 7) tranh leak khi re-render
-        for r in range(tbl.rowCount()):
-            tbl.removeCellWidget(r, 7)
-        for r, row in enumerate(data):
-            # Row 44px - du cho chu xep loai (khong pill nua)
-            tbl.setRowHeight(r, 44)
-            for c, val in enumerate(row):
-                item = QtWidgets.QTableWidgetItem(str(val))
-                item.setTextAlignment(Qt.AlignCenter if c != 2 else Qt.AlignLeft | Qt.AlignVCenter)
-                # cot CC (3), QT (4), Thi (5) cho edit truc tiep tren bang
-                if c not in (3, 4, 5):
-                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                # Cot 7 (xep loai): style mau + bold truc tiep tren item
-                if c == 7 and val:
-                    style_status_item(item, val)
-                tbl.setItem(r, c, item)
-        # resize columns - them cot Chuyen can va day Thao tac sang phai
-        tbl.setColumnCount(9)
-        tbl.setHorizontalHeaderItem(3, QtWidgets.QTableWidgetItem('Chuyên cần'))
-        tbl.setHorizontalHeaderItem(4, QtWidgets.QTableWidgetItem('Điểm QT'))
-        tbl.setHorizontalHeaderItem(5, QtWidgets.QTableWidgetItem('Điểm thi'))
-        tbl.setHorizontalHeaderItem(6, QtWidgets.QTableWidgetItem('Tổng kết'))
-        tbl.setHorizontalHeaderItem(7, QtWidgets.QTableWidgetItem('Xếp loại'))
-        tbl.setHorizontalHeaderItem(8, QtWidgets.QTableWidgetItem('Thao tác'))
-        # Col widths: 8 cot dau fixed, cot Thao tac (last) auto-stretch
-        # Cot 7 (XL badge): 95 de fit "B+"/"A+"
-        for c, cw in enumerate([40, 95, 175, 70, 70, 70, 70, 95]):
-            tbl.setColumnWidth(c, cw)
-        tbl.horizontalHeader().setStretchLastSection(True)
-        tbl.verticalHeader().setVisible(False)
-        for r in range(len(data)):
-            # rowHeight da set o vong loop tren - khong can set lai
-            # Nut Nhap diem - dung pattern chuan
-            cell, (btn_enter,) = make_action_cell([('Nhập điểm', 'navy')])
-            tbl.setCellWidget(r, 8, cell)
-            btn_enter.clicked.connect(lambda ch, rr=r: self._tea_grade_dialog(tbl, rr))
-        self._grades_recalc_lock = False
+        try:
+            tbl.setRowCount(len(data))
+            # Clear cellWidgets cu (xep loai cot 7) tranh leak khi re-render
+            for r in range(tbl.rowCount()):
+                tbl.removeCellWidget(r, 7)
+            for r, row in enumerate(data):
+                # Row 44px - du cho chu xep loai (khong pill nua)
+                tbl.setRowHeight(r, 44)
+                for c, val in enumerate(row):
+                    item = QtWidgets.QTableWidgetItem(str(val))
+                    item.setTextAlignment(Qt.AlignCenter if c != 2 else Qt.AlignLeft | Qt.AlignVCenter)
+                    # cot CC (3), QT (4), Thi (5) cho edit truc tiep tren bang
+                    if c not in (3, 4, 5):
+                        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                    # Cot 7 (xep loai): style mau + bold truc tiep tren item
+                    if c == 7 and val:
+                        style_status_item(item, val)
+                    tbl.setItem(r, c, item)
+            # resize columns - them cot Chuyen can va day Thao tac sang phai
+            tbl.setColumnCount(9)
+            tbl.setHorizontalHeaderItem(3, QtWidgets.QTableWidgetItem('Chuyên cần'))
+            tbl.setHorizontalHeaderItem(4, QtWidgets.QTableWidgetItem('Điểm QT'))
+            tbl.setHorizontalHeaderItem(5, QtWidgets.QTableWidgetItem('Điểm thi'))
+            tbl.setHorizontalHeaderItem(6, QtWidgets.QTableWidgetItem('Tổng kết'))
+            tbl.setHorizontalHeaderItem(7, QtWidgets.QTableWidgetItem('Xếp loại'))
+            tbl.setHorizontalHeaderItem(8, QtWidgets.QTableWidgetItem('Thao tác'))
+            # Col widths: 8 cot dau fixed, cot Thao tac (last) auto-stretch
+            # Cot 7 (XL badge): 95 de fit "B+"/"A+"
+            for c, cw in enumerate([40, 95, 175, 70, 70, 70, 70, 95]):
+                tbl.setColumnWidth(c, cw)
+            tbl.horizontalHeader().setStretchLastSection(True)
+            tbl.verticalHeader().setVisible(False)
+            for r in range(len(data)):
+                # rowHeight da set o vong loop tren - khong can set lai
+                # Nut Nhap diem - dung pattern chuan
+                cell, (btn_enter,) = make_action_cell([('Nhập điểm', 'navy')])
+                tbl.setCellWidget(r, 8, cell)
+                btn_enter.clicked.connect(lambda ch, rr=r: self._tea_grade_dialog(tbl, rr))
+        finally:
+            self._grades_recalc_lock = False
 
     def _tea_grade_dialog(self, tbl, row_idx):
         """Dialog nhap CC + QT + Thi cho 1 HV, tu dong tinh TK + xep loai
@@ -12289,40 +12250,28 @@ class TeacherWindow(QtWidgets.QWidget):
 
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
-        # cap nhat table
+        # cap nhat table - dung try/finally de lock luon duoc release du co exception
         self._grades_recalc_lock = True
-        qt_val = sp_qt.value()
-        thi_val = sp_thi.value()
-        total = round(qt_val * 0.3 + thi_val * 0.7, 2)
-        if total >= 9: letter = 'A+'
-        elif total >= 8.5: letter = 'A'
-        elif total >= 8: letter = 'B+'
-        elif total >= 6.5: letter = 'B'
-        elif total >= 5.5: letter = 'C+'
-        elif total >= 5: letter = 'C'
-        elif total >= 4: letter = 'D'
-        else: letter = 'F'
+        try:
+            qt_val = sp_qt.value()
+            thi_val = sp_thi.value()
+            total = round(qt_val * 0.3 + thi_val * 0.7, 2)
+            letter = score_to_letter(total)
 
-        grade_colors = {'A+': COLORS['green'], 'A': COLORS['green'],
-                        'B+': COLORS['navy'], 'B': COLORS['navy'],
-                        'C+': COLORS['orange'], 'C': COLORS['orange'],
-                        'D': COLORS['red'], 'F': COLORS['red']}
-
-        cc_val = sp_cc.value()
-        tbl.item(row_idx, 3).setText(f'{cc_val:.1f}' if cc_val > 0 else '')
-        tbl.item(row_idx, 4).setText(f'{qt_val:.1f}')
-        tbl.item(row_idx, 5).setText(f'{thi_val:.1f}')
-        it_tk = QtWidgets.QTableWidgetItem(f'{total:.1f}')
-        it_tk.setTextAlignment(Qt.AlignCenter)
-        it_tk.setFlags(it_tk.flags() & ~Qt.ItemIsEditable)
-        tbl.setItem(row_idx, 6, it_tk)
-        it_xl = QtWidgets.QTableWidgetItem(letter)
-        it_xl.setTextAlignment(Qt.AlignCenter)
-        it_xl.setFont(QFont('Segoe UI', 11, QFont.Bold))
-        it_xl.setForeground(QColor(grade_colors.get(letter, COLORS['text_mid'])))
-        it_xl.setFlags(it_xl.flags() & ~Qt.ItemIsEditable)
-        tbl.setItem(row_idx, 7, it_xl)
-        self._grades_recalc_lock = False
+            cc_val = sp_cc.value()
+            tbl.item(row_idx, 3).setText(f'{cc_val:.1f}' if cc_val > 0 else '')
+            tbl.item(row_idx, 4).setText(f'{qt_val:.1f}')
+            tbl.item(row_idx, 5).setText(f'{thi_val:.1f}')
+            it_tk = QtWidgets.QTableWidgetItem(f'{total:.1f}')
+            it_tk.setTextAlignment(Qt.AlignCenter)
+            it_tk.setFlags(it_tk.flags() & ~Qt.ItemIsEditable)
+            tbl.setItem(row_idx, 6, it_tk)
+            it_xl = QtWidgets.QTableWidgetItem(letter)
+            style_status_item(it_xl, letter)  # color + bold + center theo _STATUS_BADGE_MAP
+            it_xl.setFlags(it_xl.flags() & ~Qt.ItemIsEditable)
+            tbl.setItem(row_idx, 7, it_xl)
+        finally:
+            self._grades_recalc_lock = False
         msg_info(self, 'Đã cập nhật', f'Điểm của {tbl.item(row_idx,2).text()}: {total} ({letter})')
 
     def _recalc_grade_row(self, item):
@@ -12344,27 +12293,19 @@ class TeacherWindow(QtWidgets.QWidget):
         except Exception:
             return
         total = round(qt * 0.3 + thi * 0.7, 2)
-        if total >= 9: letter = 'A+'
-        elif total >= 8.5: letter = 'A'
-        elif total >= 8: letter = 'B+'
-        elif total >= 6.5: letter = 'B'
-        elif total >= 5.5: letter = 'C+'
-        elif total >= 5: letter = 'C'
-        elif total >= 4: letter = 'D'
-        else: letter = 'F'
+        letter = score_to_letter(total)
         self._grades_recalc_lock = True
-        it_tot = QtWidgets.QTableWidgetItem(f'{total:.1f}')
-        it_tot.setTextAlignment(Qt.AlignCenter)
-        it_tot.setFlags(it_tot.flags() & ~Qt.ItemIsEditable)
-        tbl.setItem(r, 6, it_tot)
-        grade_colors = {'A+': COLORS['green'], 'A': COLORS['green'], 'B+': COLORS['navy'], 'B': COLORS['navy'],
-                        'C+': COLORS['orange'], 'C': COLORS['orange'], 'D': COLORS['red'], 'F': COLORS['red']}
-        it_let = QtWidgets.QTableWidgetItem(letter)
-        it_let.setTextAlignment(Qt.AlignCenter)
-        it_let.setForeground(QColor(grade_colors.get(letter, COLORS['text_mid'])))
-        it_let.setFlags(it_let.flags() & ~Qt.ItemIsEditable)
-        tbl.setItem(r, 7, it_let)
-        self._grades_recalc_lock = False
+        try:
+            it_tot = QtWidgets.QTableWidgetItem(f'{total:.1f}')
+            it_tot.setTextAlignment(Qt.AlignCenter)
+            it_tot.setFlags(it_tot.flags() & ~Qt.ItemIsEditable)
+            tbl.setItem(r, 6, it_tot)
+            it_let = QtWidgets.QTableWidgetItem(letter)
+            style_status_item(it_let, letter)
+            it_let.setFlags(it_let.flags() & ~Qt.ItemIsEditable)
+            tbl.setItem(r, 7, it_let)
+        finally:
+            self._grades_recalc_lock = False
 
     def _save_tea_grades(self):
         if not msg_confirm(self, 'Lưu điểm', 'Xác nhận lưu điểm cho tất cả học viên trong bảng?'):
@@ -13227,16 +13168,8 @@ class TeacherWindow(QtWidgets.QWidget):
                     ca_full = f'{ca_full}\n{gio_bd}-{gio_kt}'
 
                 # Tinh days_left
-                days_left = None
-                ngay_v = row.get('ngay_thi') or row.get('ngay', '')
-                if isinstance(ngay_v, _date):
-                    days_left = (ngay_v - today_d).days
-                else:
-                    try:
-                        d_parsed = _date.fromisoformat(str(ngay_v)[:10])
-                        days_left = (d_parsed - today_d).days
-                    except Exception:
-                        pass
+                d_parsed = parse_iso_date(row.get('ngay_thi') or row.get('ngay', ''))
+                days_left = (d_parsed - today_d).days if d_parsed else None
 
                 bg_color = None
                 fg_color = None
@@ -13315,9 +13248,7 @@ class TeacherWindow(QtWidgets.QWidget):
             self._tea_exam_dblclick_wired = True
 
         # === Banner summary mon thi sap toi (≤7 ngay) ===
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'examTodayBannerTea':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'examTodayBannerTea')
         n_total_soon = n_today + n_soon_3 + n_soon_7
         if n_total_soon > 0:
             banner = QtWidgets.QFrame(page)
@@ -13571,9 +13502,7 @@ class TeacherWindow(QtWidgets.QWidget):
 
     def _build_tea_profile_stats(self, page):
         """Card 'Thong ke giang day' GV (4 stat: lop / HV / so buoi / diem TB review)."""
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'profileTeaStatsCard':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'profileTeaStatsCard')
 
         gv_id = MOCK_TEACHER.get('user_id')
         n_classes = 0
@@ -13692,7 +13621,7 @@ class TeacherWindow(QtWidgets.QWidget):
         new2 = QtWidgets.QLineEdit(); new2.setEchoMode(QtWidgets.QLineEdit.Password)
         form.addRow('Mật khẩu cũ:', old)
         form.addRow('Mật khẩu mới:', new1)
-        strength_lbl = attach_password_strength_indicator(new1, dlg)
+        strength_lbl = attach_password_strength_indicator(new1)
         form.addRow('', strength_lbl)
         form.addRow('Nhập lại:', new2)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
@@ -13758,7 +13687,6 @@ class EmployeeWindow(QtWidgets.QWidget):
 
         # F5/Ctrl+R: refresh trang hien tai
         install_refresh_shortcut(self)
-        # connection indicator removed per user feedback
 
         # Update sidebar badges initially
         self._update_emp_badges()
@@ -13782,7 +13710,6 @@ class EmployeeWindow(QtWidgets.QWidget):
         lbl_sub = QtWidgets.QLabel('Nhân viên', sidebar)
         lbl_sub.setGeometry(68, 40, 120, 16)
         lbl_sub.setStyleSheet(f'color: {COLORS["text_mid"]}; font-size: 11px; background: transparent;')
-# add_connection_indicator removed
         add_maximize_button(sidebar, self)
         add_reload_button(sidebar, self)
 
@@ -13870,26 +13797,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         """Update sidebar NV badges - count DK pending_payment qua 7 ngay."""
         if not hasattr(self, 'lblEmpPayBadge'):
             return
-        from datetime import date as _date
-        n_overdue = 0
-        if DB_AVAILABLE and RegistrationService:
-            try:
-                rows = RegistrationService.get_all_registrations(limit=500) or []
-                today_d = _date.today()
-                for r in rows:
-                    if r.get('trang_thai') != 'pending_payment':
-                        continue
-                    ng = r.get('ngay_dk')
-                    if isinstance(ng, str):
-                        try: ng = _date.fromisoformat(ng[:10])
-                        except Exception: continue
-                    elif not isinstance(ng, _date):
-                        continue
-                    if (today_d - ng).days > 7:
-                        n_overdue += 1
-            except Exception as e:
-                print(f'[EMP_BADGE] loi: {e}')
-        set_sidebar_badge(self.lblEmpPayBadge, n_overdue)
+        set_sidebar_badge(self.lblEmpPayBadge, count_overdue_pending_registrations())
 
     def _load_page(self, ui_file):
         temp = uic.loadUi(os.path.join(UI, ui_file))
@@ -14075,9 +13983,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         """
         from datetime import date as _date
         # Cleanup banner cu
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'overduePayBannerEmp':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'overduePayBannerEmp')
 
         # Đếm: pending_payment + ngay_dk > 7 ngay truoc
         n_overdue = 0
@@ -14089,11 +13995,8 @@ class EmployeeWindow(QtWidgets.QWidget):
                 for r in rows:
                     if r.get('trang_thai') != 'pending_payment':
                         continue
-                    ng = r.get('ngay_dk')
-                    if isinstance(ng, str):
-                        try: ng = _date.fromisoformat(ng[:10])
-                        except Exception: continue
-                    elif not isinstance(ng, _date):
+                    ng = parse_iso_date(r.get('ngay_dk'))
+                    if ng is None:
                         continue
                     days = (today_d - ng).days
                     if days > 7:
@@ -15393,9 +15296,7 @@ class EmployeeWindow(QtWidgets.QWidget):
 
     def _build_emp_profile_stats(self, page):
         """Card 'Thong ke cong viec' NV (4 stat: don dang ky / TT xac nhan / tong thu / TB/ngay)."""
-        for old in page.findChildren(QtWidgets.QFrame):
-            if old.objectName() == 'profileEmpStatsCard':
-                old.setParent(None); old.deleteLater()
+        cleanup_banner(page, 'profileEmpStatsCard')
 
         emp_id = MOCK_EMPLOYEE.get('user_id') or MOCK_EMPLOYEE.get('id')
         n_reg = 0
@@ -15499,7 +15400,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         new2 = QtWidgets.QLineEdit(); new2.setEchoMode(QtWidgets.QLineEdit.Password)
         form.addRow('Mật khẩu cũ:', old)
         form.addRow('Mật khẩu mới:', new1)
-        strength_lbl = attach_password_strength_indicator(new1, dlg)
+        strength_lbl = attach_password_strength_indicator(new1)
         form.addRow('', strength_lbl)
         form.addRow('Nhập lại:', new2)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
