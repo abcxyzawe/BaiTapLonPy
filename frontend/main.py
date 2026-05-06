@@ -1714,6 +1714,11 @@ def set_table_empty_state(tbl, message='Chưa có dữ liệu', row_height=50,
         cta_callback: callable () -> None khi click CTA button
         icon: emoji icon (default 📭 hop thu rong)
     """
+    # Cleanup: xoa toan bo cellWidget cu (button rac tu fill truoc) - tranh
+    # leftover button hien chong len empty state msg
+    for r in range(tbl.rowCount()):
+        for c in range(tbl.columnCount()):
+            tbl.removeCellWidget(r, c)
     tbl.setRowCount(1)
     tbl.clearSpans()
     if tbl.columnCount() > 1:
@@ -4387,11 +4392,13 @@ class MainWindow(QtWidgets.QWidget):
             tbl.setItem(r, 0, item)
 
         # Khoi tao label hien thi tuan dang xem (ngay tren scheduleFrame, ke tieu de)
+        # Title 'Lich hoc' o (25, 0, 200, 56) -> ket thuc x=225. Truoc wr o
+        # (180, 0, 450, 56) overlap title 45px khien text wr de len title -> roi
         title = page.findChild(QtWidgets.QLabel, 'lblPageTitle')
         if title and not page.findChild(QtWidgets.QLabel, 'lblWeekRange'):
             wr = QtWidgets.QLabel(page)
             wr.setObjectName('lblWeekRange')
-            wr.setGeometry(180, 0, 450, 56)
+            wr.setGeometry(240, 0, 480, 56)  # x=240 (sau title 225+15 gap)
             wr.setStyleSheet('color: #4a5568; font-size: 13px; background: transparent;')
             wr.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             wr.show()
@@ -4495,9 +4502,10 @@ class MainWindow(QtWidgets.QWidget):
                     f = hi.font(); f.setBold(False); hi.setFont(f)
         wr_lbl = page.findChild(QtWidgets.QLabel, 'lblWeekRange')
         if wr_lbl:
-            # Set format=RichText 1 lan o day - sau setText voi HTML moi parse dung
+            # Bo phan 'Tuan: dd/mm -> dd/mm' (info da co o panel 'Dieu huong tuan'
+            # ben phai roi). Chi giu 'X buoi · Y lop' update khi load data
             wr_lbl.setTextFormat(Qt.RichText)
-            wr_lbl.setText(f'Tuần: {monday.toString("dd/MM/yyyy")} → {monday.addDays(5).toString("dd/MM/yyyy")}')
+            wr_lbl.setText('')
         # Update label nav week
         nav_lbl = page.findChild(QtWidgets.QLabel, 'lblNavWeek')
         if nav_lbl:
@@ -4648,17 +4656,16 @@ class MainWindow(QtWidgets.QWidget):
                 tbl.setCellWidget(rs, col, mk_card(ma_lop, ten_mon, ts, phong, gv, color, ngay_str, raw))
                 tbl.setSpan(rs, col, span, 1)
 
-        # Update lblWeekRange voi count "X buoi · Y lop"
+        # Update lblWeekRange chi voi count "X buoi · Y lop" (bo 'Tuan: dd/mm
+        # -> dd/mm' vi info do da co o panel 'Dieu huong tuan' ben phai - thua thai)
         if wr_lbl:
             n_sessions = len(sched)
             n_lops = len({tup[3] for tup in sched if len(tup) > 3 and tup[3]})
-            base = f'Tuần: {monday.toString("dd/MM/yyyy")} → {monday.addDays(5).toString("dd/MM/yyyy")}'
-            # textFormat=RichText da set o tren khi findChild
             if n_sessions > 0:
-                wr_lbl.setText(f'{base}  ·  <b style="color:#002060;">{n_sessions}</b> buổi'
+                wr_lbl.setText(f'<b style="color:#002060;">{n_sessions}</b> buổi'
                                  f'  ·  <b style="color:#c05621;">{n_lops}</b> lớp')
             else:
-                wr_lbl.setText(f'{base}  ·  <span style="color:#a0aec0;">không có buổi</span>')
+                wr_lbl.setText('<span style="color:#a0aec0;">Tuần này không có buổi học</span>')
 
         # Update legend frame voi cac lop dang hien thi
         self._update_schedule_legend(page, sched)
@@ -7806,6 +7813,10 @@ class AdminWindow(QtWidgets.QWidget):
             print(f'[ADM_TOGGLE_SEM] DB loi: {e}')
             msg_warn(self, 'Lỗi', f'Không cập nhật được trạng thái:\n{api_error_msg(e)}')
             return
+        # Refresh cache MOCK_SEM_STATUS de is_class_active() o NV/GV thay status
+        # moi ngay (truoc cache stale cho den restart -> NV cho dang ky vao lop
+        # cua sem da bi admin dong, hoac filter active sem khac voi reality)
+        _load_sem_status()
         # Re-fill bang de cap nhat ca cot trang thai (cot 5) lan button (cot 6)
         self.pages_filled[6] = False
         self._fill_admin_semester()
@@ -7868,6 +7879,9 @@ class AdminWindow(QtWidgets.QWidget):
             print(f'[ADM_ADD_SEM] DB loi: {e}')
             msg_warn(self, 'Không thêm được', api_error_msg(e))
             return
+        # Refresh cache MOCK_SEM_STATUS de cac trang khac (NV register, GV
+        # filter) thay sem moi ngay
+        _load_sem_status()
         # DB OK -> re-fill bang
         self.pages_filled[6] = False
         self._fill_admin_semester()
@@ -8176,23 +8190,36 @@ class AdminWindow(QtWidgets.QWidget):
             return
 
         # Lay unique dot tu curriculum hien co (de admin chon nhanh) hoac nhap moi
+        # + tap ma_mon DA TRONG khung CT cua nganh CNTT (de filter combo, tranh
+        # 409 UNIQUE conflict khi user chon khoa da co san)
         existing_dots = set()
+        existing_ma_mon = set()
         try:
             curr_items = CurriculumService.get_all() or []
             for it in curr_items:
                 d = it.get('hoc_ky_de_nghi')
                 if d: existing_dots.add(str(d))
+                if (it.get('nganh') or 'CNTT') == 'CNTT' and it.get('ma_mon'):
+                    existing_ma_mon.add(it['ma_mon'])
         except Exception:
             pass
+
+        # Loc courses chua co trong khung CT cua nganh CNTT
+        available_courses = [c for c in courses if c['ma_mon'] not in existing_ma_mon]
+        if not available_courses:
+            msg_warn(self, 'Đã đầy đủ',
+                     f'Tất cả {len(courses)} khoá học đã có trong lộ trình CNTT.\n\n'
+                     'Để sửa thông tin, click "Sửa" trên dòng tương ứng.')
+            return
 
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle('Thêm khoá vào lộ trình học')
         dlg.setFixedSize(460, 380)
         form = QtWidgets.QFormLayout(dlg)
-        # Combobox chon khoa (chi khoa co san trong courses)
+        # Combobox chi liet ke khoa CHUA TRONG khung CT (tranh thêm trùng)
         cbo_mon = QtWidgets.QComboBox()
-        for c in courses:
+        for c in available_courses:
             cbo_mon.addItem(f"{c['ma_mon']} - {c.get('ten_mon', '')}", c['ma_mon'])
         txt_tc = QtWidgets.QLineEdit('3')
         cbo_loai = QtWidgets.QComboBox(); cbo_loai.addItems(['Cơ bản', 'Nâng cao', 'Định hướng'])
@@ -8810,6 +8837,7 @@ class AdminWindow(QtWidgets.QWidget):
                     'login': 'Đăng nhập',
                     'login_failed': 'Đăng nhập thất bại',
                     'logout': 'Đăng xuất',
+                    'change_password': 'Đổi mật khẩu',
                 }
                 data = []
                 for l in rows:
@@ -8851,6 +8879,7 @@ class AdminWindow(QtWidgets.QWidget):
         action_colors = {
             'Đăng nhập': COLORS['green'], 'Đăng nhập thất bại': COLORS['red'],
             'Đăng xuất': COLORS['text_mid'],
+            'Đổi mật khẩu': COLORS['orange'],  # action sensitive
             'Đăng ký': COLORS['navy'],
             'Tạo đăng ký': COLORS['navy'], 'Huỷ đăng ký': COLORS['orange'],
             'Cập nhật ĐK': COLORS['text_mid'],
@@ -10768,8 +10797,10 @@ class TeacherWindow(QtWidgets.QWidget):
                 try:
                     today_rows = ScheduleService.get_today() or []
                     for r in today_rows:
-                        # filter buoi cua gv hien tai
-                        if r.get('gv_id') and r.get('gv_id') != gv_id:
+                        # Filter STRICT: chi giu buoi co gv_id = current gv. Truoc
+                        # `if gv_id and != gv_id` -> None (lop chua phan GV) bypass
+                        # check -> moi GV thay buoi cua lop chua co GV tren dashboard
+                        if r.get('gv_id') != gv_id:
                             continue
                         today_raw.append(r)
                         gio_bd = str(r.get('gio_bat_dau', ''))[:5]
@@ -11262,9 +11293,10 @@ class TeacherWindow(QtWidgets.QWidget):
                     f = hi.font(); f.setBold(False); hi.setFont(f)
         wr_lbl = page.findChild(QtWidgets.QLabel, 'lblWeekRange')
         if wr_lbl:
-            # Set format=RichText 1 lan o day - sau setText voi HTML moi parse dung
+            # Bo phan 'Tuan: dd/mm -> dd/mm' (info da co o panel 'Dieu huong tuan'
+            # ben phai roi). Chi giu 'X buoi · Y lop' update khi load data
             wr_lbl.setTextFormat(Qt.RichText)
-            wr_lbl.setText(f'Tuần: {monday.toString("dd/MM/yyyy")} → {monday.addDays(5).toString("dd/MM/yyyy")}')
+            wr_lbl.setText('')
         nav_lbl = page.findChild(QtWidgets.QLabel, 'lblNavWeek')
         if nav_lbl:
             nav_lbl.setText(f'{monday.toString("dd/MM/yyyy")}\n→ {monday.addDays(5).toString("dd/MM/yyyy")}')
@@ -12558,40 +12590,58 @@ class TeacherWindow(QtWidgets.QWidget):
         self._reload_tea_assignments(page)
 
     def _build_tea_assignments_ui(self, page):
-        """Build UI 1 lan: header + bang ds bai tap + nut tao."""
+        """Build UI 1 lan: header + bang ds bai tap + nut tao.
+        Layout header copy theo Lich day (schedule.ui): title trai +
+        filter giua + 'In/Export' khac + nut + chinh phai. Widget
+        .show() explicit de dam bao render trong QStackedWidget."""
         # Header bar
         hb = QtWidgets.QFrame(page)
         hb.setObjectName('headerBar')
         hb.setGeometry(0, 0, 870, 56)
         hb.setStyleSheet('QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }')
+        hb.show()
+
+        # Title
         title = QtWidgets.QLabel('Giao bài tập', hb)
+        title.setObjectName('lblPageTitle')
         title.setGeometry(25, 0, 200, 56)
         title.setStyleSheet('color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;')
+        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        title.show()
 
-        # Search box
-        txt_s = QtWidgets.QLineEdit(hb)
-        txt_s.setObjectName('txtTeaAsgSearch')
-        txt_s.setGeometry(240, 12, 220, 32)
-        txt_s.setPlaceholderText('🔍 Tìm tiêu đề / lớp / khóa...')
-        txt_s.setClearButtonEnabled(True)
-        txt_s.setStyleSheet('QLineEdit { background: white; border: 1px solid #d2d6dc; '
-                             'border-radius: 6px; padding: 4px 10px; font-size: 12px; } '
-                             'QLineEdit:focus { border-color: #002060; }')
+        # Filter label + combo
+        lbl_f = QtWidgets.QLabel('Lọc:', hb)
+        lbl_f.setObjectName('lblTeaAsgFilter')
+        lbl_f.setGeometry(220, 18, 38, 24)
+        lbl_f.setStyleSheet('color: #4a5568; font-size: 12px; font-weight: bold; background: transparent;')
+        lbl_f.show()
 
-        # Filter combo theo lop
         cbo = QtWidgets.QComboBox(hb)
         cbo.setObjectName('cboTeaAsgClass')
-        cbo.setGeometry(470, 12, 220, 32)
+        cbo.setGeometry(258, 12, 180, 32)
         cbo.setCursor(Qt.PointingHandCursor)
         cbo.addItem('Tất cả lớp', None)
         cbo.setStyleSheet('QComboBox { background: white; border: 1px solid #d2d6dc; '
                            'border-radius: 6px; padding: 4px 10px; font-size: 11px; } '
                            'QComboBox:hover { border-color: #002060; } '
                            'QComboBox::drop-down { border: none; padding-right: 4px; }')
+        cbo.show()
 
+        # Search box - canh giua + de
+        txt_s = QtWidgets.QLineEdit(hb)
+        txt_s.setObjectName('txtTeaAsgSearch')
+        txt_s.setGeometry(450, 12, 240, 32)
+        txt_s.setPlaceholderText('🔍 Tìm tiêu đề / khóa...')
+        txt_s.setClearButtonEnabled(True)
+        txt_s.setStyleSheet('QLineEdit { background: white; border: 1px solid #d2d6dc; '
+                             'border-radius: 6px; padding: 4px 10px; font-size: 12px; } '
+                             'QLineEdit:focus { border-color: #002060; }')
+        txt_s.show()
+
+        # Nut tao bai moi - goc phai
         btn_new = QtWidgets.QPushButton('+ Giao bài mới', hb)
         btn_new.setObjectName('btnNewAssign')
-        btn_new.setGeometry(710, 12, 140, 32)
+        btn_new.setGeometry(700, 12, 150, 32)
         btn_new.setCursor(Qt.PointingHandCursor)
         btn_new.setStyleSheet(
             'QPushButton { background: #002060; color: white; border: none; '
@@ -12599,11 +12649,14 @@ class TeacherWindow(QtWidgets.QWidget):
             'QPushButton:hover { background: #001a50; }'
         )
         btn_new.clicked.connect(self._tea_dialog_new_assignment)
+        btn_new.show()
 
-        # Bang ds bai tap
+        # Bang ds bai tap - tang chieu cao 615 -> 625 + day y=70 -> y=66
+        # de tang vung hien thi them ~20px (page 700 - header 56 - tbl bottom)
+        # Tong vung tbl: y=66 -> y=691, height 625 (truoc 70-685, 615)
         tbl = QtWidgets.QTableWidget(page)
         tbl.setObjectName('tblAssignments')
-        tbl.setGeometry(15, 70, 840, 615)
+        tbl.setGeometry(15, 66, 840, 625)
         tbl.setColumnCount(7)
         tbl.setHorizontalHeaderLabels(['#', 'Tiêu đề', 'Lớp', 'Khóa học',
                                        'Hạn nộp', 'Đã nộp / Đã chấm', 'Thao tác'])
@@ -12656,15 +12709,20 @@ class TeacherWindow(QtWidgets.QWidget):
             cbo.blockSignals(False)
 
         if not rows:
+            # Khong them CTA - header da co nut '+ Giao bai moi' o goc phai
+            # (truoc duplicate CTA cung leftover action cells khien UI roi
+            # nut navy chong len nut do o empty state)
             set_table_empty_state(
-                tbl, 'Chưa có bài tập nào',
-                icon='📝',
-                cta_text='+ Giao bài mới',
-                cta_callback=self._tea_dialog_new_assignment)
+                tbl, 'Chưa có bài tập nào — bấm "+ Giao bài mới" ở header để tạo',
+                icon='📝')
         else:
+            # Clear spans tu empty state truoc do (set_table_empty_state goi
+            # setSpan(0, 0, 1, columnCount) merge cells -> neu khong clear,
+            # hang du lieu moi van bi span -> cellWidget col 6 hien thi sai vi tri)
+            tbl.clearSpans()
             tbl.setRowCount(len(rows))
             for r, row in enumerate(rows):
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)  # row cao 58px (truoc 44) - thoang hon
                 han = fmt_date(row.get('han_nop'), fmt='%d/%m/%Y %H:%M', default='Không hạn')
                 so_nop = int(row.get('so_nop', 0) or 0)
                 so_cham = int(row.get('so_cham', 0) or 0)
@@ -12911,6 +12969,8 @@ class TeacherWindow(QtWidgets.QWidget):
                 f'Tối đa <b>{asg.get("diem_toi_da", 10)}</b> điểm'
             )
             lbl_desc.setText(asg.get('mo_ta', '') or '<i style="color:#a0aec0;">(không có mô tả)</i>')
+            # ClearSpans phong truong hop reload sau empty state
+            tbl.clearSpans()
             tbl.setRowCount(len(subs))
             for r, s in enumerate(subs):
                 tbl.setRowHeight(r, 44)
@@ -12927,35 +12987,21 @@ class TeacherWindow(QtWidgets.QWidget):
                     if c == 2:  # status
                         style_status_item(item, status)
                     tbl.setItem(r, c, item)
-                # Action button - tu style cho dialog nay (font 10pt + padding rong + hover)
+                # Action button - dung make_action_cell chuan (giong moi cho khac
+                # trong codebase) thay vi tu custom -> btn fix 85x28, nhat quan
                 if has_sub:
                     btn_text = 'Sửa điểm' if graded else 'Chấm bài'
-                    cell_w = QtWidgets.QWidget()
-                    hl = QtWidgets.QHBoxLayout(cell_w)
-                    hl.setContentsMargins(6, 4, 6, 4)
-                    hl.setAlignment(Qt.AlignCenter)
-                    btn = QtWidgets.QPushButton(btn_text)
-                    btn.setCursor(Qt.PointingHandCursor)
-                    btn.setFixedSize(110, 32)
-                    btn.setStyleSheet(
-                        'QPushButton { font-family: "Segoe UI", "Inter", sans-serif; '
-                        'font-size: 13px; font-weight: bold; color: white; '
-                        'background: #002060; border: none; border-radius: 4px; '
-                        'padding: 6px 14px; } '
-                        'QPushButton:hover { background: #1e3a8a; } '
-                        'QPushButton:pressed { background: #001640; }'
-                    )
+                    cell_w, (btn,) = make_action_cell([(btn_text, 'navy')])
                     btn.clicked.connect(lambda ch, sub=dict(s), a=dict(asg):
                                         self._tea_dialog_grade(sub, a, reload_subs))
-                    hl.addWidget(btn)
                     tbl.setCellWidget(r, 5, cell_w)
                 else:
                     no_lbl = QtWidgets.QLabel('—')
                     no_lbl.setAlignment(Qt.AlignCenter)
                     no_lbl.setStyleSheet('color: #a0aec0; font-size: 13px;')
                     tbl.setCellWidget(r, 5, no_lbl)
-            # Tong width: 90+180+90+130+60+250 = 800 (dialog 820 - margins)
-            for c, w in enumerate([90, 180, 90, 130, 60, 250]):
+            # Tong width: 90+180+100+130+60+228 = 788 (dialog 820 - body margins 16x2)
+            for c, w in enumerate([90, 180, 100, 130, 60, 228]):
                 tbl.setColumnWidth(c, w)
             tbl.horizontalHeader().setStretchLastSection(False)
 
@@ -13422,13 +13468,14 @@ class TeacherWindow(QtWidgets.QWidget):
 
         if not rows:
             set_table_empty_state(
-                tbl, 'Chưa có lịch thi nào',
-                icon='📋',
-                cta_text='+ Tạo lịch thi mới',
-                cta_callback=self._tea_dialog_new_exam)
+                tbl, 'Chưa có lịch thi nào — bấm "+ Tạo lịch thi" ở header để tạo',
+                icon='📋')
         else:
             from datetime import date as _date
             today_d = _date.today()
+            # Clear span tu empty state truoc do (neu co) - tranh cellWidget
+            # action o cot cuoi bi displaced khi span 0,0 1,N van con
+            tbl.clearSpans()
             tbl.setRowCount(len(rows))
             for r, row in enumerate(rows):
                 ngay = fmt_date(row.get('ngay_thi'))
@@ -14454,6 +14501,14 @@ class EmployeeWindow(QtWidgets.QWidget):
             msg_warn(self, 'Thiếu MSV', 'Hãy nhập MSV để tra cứu')
             return
         msv = txt_msv.text().strip().upper()
+        # Pre-validate MSV format - tranh user nhap mã DK ('DK016') vao field
+        # MSV roi nhan 404 confusing
+        if msv.startswith('DK'):
+            msg_warn(self, 'Sai trường nhập',
+                     f'"{msv}" có vẻ là <b>Mã đăng ký</b>, không phải MSV.\n\n'
+                     'MSV (Mã sinh viên) thường có dạng <b>HV2024XXX</b>.\n'
+                     'Để xem chi tiết đăng ký, vào trang "Quản lý đăng ký".')
+            return
         ten = email = sdt = None
         # tra cuu qua API
         if DB_AVAILABLE:
@@ -14464,9 +14519,14 @@ class EmployeeWindow(QtWidgets.QWidget):
                     email = hv.get('email') or ''
                     sdt = hv.get('sdt') or ''
             except Exception as e:
-                print(f'[EMP_LOOKUP] loi: {e}')
+                # 404 la case binh thuong (msv khong ton tai) - khong log noisy
+                err_str = str(e)
+                if '404' not in err_str:
+                    print(f'[EMP_LOOKUP] loi: {e}')
         if not ten:
-            msg_warn(self, 'Không tìm thấy', f'Không tìm thấy học viên với MSV: {msv}')
+            msg_warn(self, 'Không tìm thấy',
+                     f'Không có học viên với MSV: <b>{msv}</b>\n\n'
+                     'Vui lòng kiểm tra lại hoặc thêm HV mới qua trang Admin.')
             return
         for attr, val in [('txtHoTen', ten), ('txtEmail', email or ''), ('txtSDT', sdt or '')]:
             w = page.findChild(QtWidgets.QLineEdit, attr)
@@ -14542,27 +14602,47 @@ class EmployeeWindow(QtWidgets.QWidget):
 
         if not msg_confirm(self, 'Xác nhận', f'Đăng ký {hoten.text()} vào lớp {cbo_cls.currentText()}?'):
             return
-        # ghi DB
+        # ghi DB - pre-validate msv format truoc khi goi API
+        msv_text = msv.text().strip().upper()
+        if msv_text.startswith('DK'):
+            msg_warn(self, 'Sai MSV',
+                     f'"{msv_text}" la <b>Ma dang ky</b>, khong phai MSV.\n'
+                     'MSV thuong co dang <b>HV2024XXX</b>.')
+            return
         saved_id = None
         if DB_AVAILABLE:
             try:
-                hv_row = StudentService.get_by_msv(msv.text().strip())
-                nv_id = MOCK_EMPLOYEE.get('user_id')
-                if hv_row and nv_id:
-                    hv_uid = hv_row.get('user_id') or hv_row.get('id')
-                    saved_id = RegistrationService.register_student(
-                        hv_uid, lop_code, nv_id
-                    )
+                hv_row = StudentService.get_by_msv(msv_text)
+            except Exception as e:
+                err_s = str(e)
+                if '404' in err_s:
+                    msg_warn(self, 'Khong tim thay HV',
+                             f'Khong co hoc vien voi MSV: <b>{msv_text}</b>\n\n'
+                             'Vui long kiem tra lai hoac them HV moi qua trang Admin.')
+                else:
+                    print(f'[REG] lookup HV loi: {e}')
+                    msg_warn(self, 'Loi tra cuu HV', api_error_msg(e))
+                return
+            if not hv_row:
+                msg_warn(self, 'Khong tim thay HV', f'MSV <b>{msv_text}</b> khong ton tai.')
+                return
+            nv_id = MOCK_EMPLOYEE.get('user_id')
+            if not nv_id:
+                msg_warn(self, 'Loi', 'Khong xac dinh duoc nhan vien thu tien. Hay dang nhap lai.')
+                return
+            hv_uid = hv_row.get('user_id') or hv_row.get('id')
+            try:
+                saved_id = RegistrationService.register_student(hv_uid, lop_code, nv_id)
             except Exception as e:
                 print(f'[REG] loi: {e}')
-                msg_warn(self, 'Lỗi', f'Đăng ký thất bại:\n{api_error_msg(e)}')
+                msg_warn(self, 'Dang ky that bai', api_error_msg(e))
                 return
         if saved_id:
             # Refresh cache MOCK_CLASSES de siso_hien_tai update (DB trigger da update)
             _refresh_cache()
-            msg_info(self, 'Thành công', f'Đã đăng ký cho {hoten.text()} - Mã đăng ký #{saved_id}')
+            msg_info(self, 'Thanh cong', f'Da dang ky cho {hoten.text()} - Ma dang ky #{saved_id}')
         else:
-            msg_warn(self, 'Lỗi', 'Không xác định được học viên hoặc nhân viên. Hãy kiểm tra MSV.')
+            msg_warn(self, 'Loi', 'Khong xac dinh duoc hoc vien hoac nhan vien.')
             return
         self._emp_reset_form()
 

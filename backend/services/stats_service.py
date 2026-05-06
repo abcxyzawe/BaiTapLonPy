@@ -224,16 +224,24 @@ class StatsService:
     # ===== Teacher dashboard =====
     @staticmethod
     def teacher_overview(gv_id: int):
-        """Optimize: 3 query -> 1 sub-select query (giam 3x round-trip DB)."""
+        """Optimize: 4 query -> 1 sub-select query (giam 4x round-trip DB).
+        buoi_tuan = so buoi GV day TUAN NAY (T2-CN). Truoc hardcode = 12 (fake)
+        vi 'chua co bang schedule thuc' - gio da co bang schedules nen lay
+        COUNT thuc te."""
         row = db.fetch_one("""
             SELECT
               (SELECT COUNT(*) FROM classes WHERE gv_id = %s) AS so_lop,
               (SELECT COALESCE(SUM(siso_hien_tai), 0) FROM classes WHERE gv_id = %s) AS tong_hv,
-              (SELECT COALESCE(AVG(diem), 0) FROM reviews WHERE gv_id = %s) AS diem_tb
-        """, (gv_id, gv_id, gv_id)) or {}
+              (SELECT COALESCE(AVG(diem), 0) FROM reviews WHERE gv_id = %s) AS diem_tb,
+              (SELECT COUNT(*) FROM schedules sc JOIN classes c ON c.ma_lop = sc.lop_id
+                WHERE c.gv_id = %s
+                  AND sc.ngay >= date_trunc('week', CURRENT_DATE)::date
+                  AND sc.ngay <  date_trunc('week', CURRENT_DATE)::date + INTERVAL '7 days'
+              ) AS buoi_tuan
+        """, (gv_id, gv_id, gv_id, gv_id)) or {}
         return dict(
             so_lop=row.get('so_lop', 0) or 0,
             tong_hv=int(row.get('tong_hv', 0) or 0),
-            buoi_tuan=12,  # fake so tuong doi, chua co bang schedule thuc
+            buoi_tuan=int(row.get('buoi_tuan', 0) or 0),
             diem_danh_gia=round(float(row.get('diem_tb', 0) or 0), 1),
         )

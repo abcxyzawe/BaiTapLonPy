@@ -38,10 +38,13 @@ class AuditService:
         )
 
     @staticmethod
-    def log_login(user_id: int, username: str, role: str,
+    def log_login(user_id=None, username: str = None, role: str = None,
                   success: bool = True, ip: str = None):
+        """Log login attempt. user_id Optional[int] - None khi login fail
+        (chua xac dinh duoc user). Description co dau tieng Viet dong nhat
+        voi cac log khac."""
         action = 'login' if success else 'login_failed'
-        desc = 'Dang nhap thanh cong' if success else 'Dang nhap that bai'
+        desc = 'Đăng nhập thành công' if success else 'Đăng nhập thất bại'
         AuditService.log(action, user_id, username, role,
                          description=desc, ip_address=ip)
 

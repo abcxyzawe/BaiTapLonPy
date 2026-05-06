@@ -183,13 +183,35 @@ async def fk_violation_handler(request: Request, exc):
     return JSONResponse(status_code=409, content={'detail': msg, 'constraint': cn})
 
 
+_UNIQUE_MESSAGES = {
+    'users_username_key': 'Tên đăng nhập đã được sử dụng. Hãy chọn tên khác.',
+    'students_msv_key': 'Mã sinh viên đã tồn tại trong hệ thống.',
+    'teachers_ma_gv_key': 'Mã giảng viên đã tồn tại trong hệ thống.',
+    'employees_ma_nv_key': 'Mã nhân viên đã tồn tại trong hệ thống.',
+    'admins_ma_admin_key': 'Mã quản trị viên đã tồn tại.',
+    'courses_pkey': 'Mã khoá học đã tồn tại. Hãy chọn mã khác.',
+    'classes_pkey': 'Mã lớp đã tồn tại. Hãy chọn mã khác.',
+    'semesters_pkey': 'Mã đợt đã tồn tại. Hãy chọn mã khác.',
+    'curriculum_ma_mon_nganh_key': 'Khoá học này đã có trong khung lộ trình của ngành. Hãy sửa entry hiện có thay vì tạo mới.',
+    'registrations_hv_id_lop_id_key': 'Học viên đã đăng ký lớp này rồi (hoặc trước đây đã đăng ký rồi huỷ - dùng đăng ký lại sẽ revive).',
+    'reviews_hv_id_gv_id_lop_id_key': 'Bạn đã đánh giá GV này cho lớp này rồi (hệ thống tự cập nhật review cũ).',
+    'submissions_assignment_id_hv_id_key': 'Bạn đã nộp bài này rồi (re-submit sẽ ghi đè).',
+    'attendance_schedule_id_hv_id_key': 'Đã có điểm danh cho HV này ở buổi học này (UPSERT).',
+    'schedules_lop_id_ngay_gio_bat_dau_key': 'Đã có buổi học cho lớp này vào cùng ngày + giờ bắt đầu.',
+    'exam_schedules_lop_id_ngay_thi_ca_thi_key': 'Đã có lịch thi cho lớp này vào cùng ngày + ca.',
+    'payments_so_bien_lai_key': 'Số biên lai đã tồn tại.',
+}
+
+
 @app.exception_handler(psycopg2.errors.UniqueViolation)
 async def unique_violation_handler(request: Request, exc):
-    """Tra ve 409 Conflict khi vi pham unique."""
+    """Tra ve 409 Conflict khi vi pham unique. Map constraint name -> msg
+    tieng Viet ro rang thay vi 'Du lieu trung: {raw_constraint_name}'."""
     cn = exc.diag.constraint_name if exc.diag else None
+    msg = _UNIQUE_MESSAGES.get(cn, f'Dữ liệu trùng (đã tồn tại): {cn}')
     return JSONResponse(
         status_code=409,
-        content={'detail': f'Dữ liệu trùng (đã tồn tại): {cn}', 'constraint': cn},
+        content={'detail': msg, 'constraint': cn},
     )
 
 
