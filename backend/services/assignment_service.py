@@ -123,7 +123,7 @@ class AssignmentService:
         """GV xem tat ca bai HV da nop cho 1 assignment.
         Bao gom HV CHUA nop (LEFT JOIN students -> registrations)."""
         sql = """
-            SELECT s.user_id AS hv_id, st.msv, u.full_name,
+            SELECT s.user_id AS hv_id, s.msv, u.full_name,
                    sub.id AS submission_id, sub.noi_dung, sub.file_url,
                    sub.nop_luc, sub.diem, sub.nhan_xet, sub.cham_luc
               FROM students s
@@ -132,7 +132,6 @@ class AssignmentService:
                                   AND r.lop_id = (SELECT lop_id FROM assignments WHERE id = %s)
                                   AND r.trang_thai IN ('paid', 'completed')
          LEFT JOIN submissions sub ON sub.assignment_id = %s AND sub.hv_id = s.user_id
-              JOIN students st ON st.user_id = s.user_id
              ORDER BY u.full_name
         """
         return db.fetch_all(sql, (assignment_id, assignment_id))

@@ -3,7 +3,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt5 import QtWidgets, uic, QtCore
-from PyQt5.QtGui import QPixmap, QIcon, QColor, QFont, QFontMetrics
+from PyQt5.QtGui import QPixmap, QIcon, QColor, QFont
 from PyQt5.QtCore import Qt, QDate
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
@@ -99,11 +99,14 @@ def fmt_date(value, fmt='%d/%m/%Y', default='—'):
 
 
 def parse_iso_date(value):
-    """Parse value (str/date/None) -> date object hoac None neu fail.
+    """Parse value (str/date/datetime/None) -> date object hoac None neu fail.
 
     API tra ngay_dk/ngay_thi... duoi 2 dang: date object (Python serialize) hoac
     str ISO 'YYYY-MM-DD' (JSON). Helper nay handle ca 2 case + truncate sau ky tu
     thu 10 de bo time component neu co (vd '2026-05-06T10:00:00').
+
+    Lưu ý: nếu value là datetime (subclass cua date), tra ve .date() de tranh
+    TypeError khi caller so sanh voi date thuong (datetime < date raise).
 
     Replace duplicate pattern:
         if isinstance(v, _date): d = v
@@ -113,7 +116,10 @@ def parse_iso_date(value):
     """
     if value is None or value == '':
         return None
-    from datetime import date as _date
+    from datetime import date as _date, datetime as _dt
+    # datetime kiem tra TRUOC date vi datetime la subclass cua date
+    if isinstance(value, _dt):
+        return value.date()
     if isinstance(value, _date):
         return value
     try:
@@ -336,7 +342,8 @@ def show_about_dialog(parent):
     backend_info = 'PostgreSQL (chưa kết nối)'
     try:
         import requests
-        r = requests.get('http://127.0.0.1:8000/health/db', timeout=2)
+        from api_client import API_URL  # respect EAUT_API_URL env var
+        r = requests.get(f'{API_URL}/health/db', timeout=2)
         if r.ok:
             d = r.json()
             ver_str = d.get('version', 'unknown')
@@ -1559,9 +1566,13 @@ def _status_normalize(text: str) -> str:
 def score_to_letter(total) -> str:
     """Quy doi diem TK (thang 10) sang xep loai chu A+/A/.../F.
 
-    Bac thang theo quy che dao tao: A+ ≥9, A ≥8.5, B+ ≥8, B ≥6.5, C+ ≥5.5,
-    C ≥5, D ≥4, con lai F. Dung chung cho dialog nhap diem + auto-recalc khi
-    user sua o cot QT/Thi truc tiep tren bang.
+    Bac thang theo quy che dao tao: A+ ≥9, A ≥8.5, B+ ≥8, B ≥7, C+ ≥6.5,
+    C ≥5.5, D ≥4, con lai F. KHOP voi backend GradeService._xep_loai_10
+    (truoc co divergence: FE B ≥6.5, BE B ≥7 -> user nhap 6.5 thay 'B' o
+    dialog nhung DB luu 'C+' -> reload se thay khac).
+
+    Dung chung cho dialog nhap diem + auto-recalc khi user sua o cot QT/Thi
+    truc tiep tren bang.
     """
     try:
         s = float(total)
@@ -1570,57 +1581,11 @@ def score_to_letter(total) -> str:
     if s >= 9: return 'A+'
     if s >= 8.5: return 'A'
     if s >= 8: return 'B+'
-    if s >= 6.5: return 'B'
-    if s >= 5.5: return 'C+'
-    if s >= 5: return 'C'
+    if s >= 7: return 'B'
+    if s >= 6.5: return 'C+'
+    if s >= 5.5: return 'C'
     if s >= 4: return 'D'
     return 'F'
-
-
-def make_status_badge(text: str) -> 'QtWidgets.QWidget':
-    """Tao QLabel widget badge style tu trang thai text (vd 'Đã thanh toán' -> green pill).
-
-    Su dung trong setCellWidget(row, col, badge) thay vi setItem voi color foreground.
-    Trong/khong match thi tra lai grey badge generic.
-
-    Fix: dung font metrics tinh min width cho lbl - tranh CSS padding khong duoc Qt
-    tinh vao sizeHint() khien text bi clip o cot hep ('B+' bi cat thanh 'B').
-    """
-    norm = _status_normalize(text)
-    bg, fg = _STATUS_BADGE_MAP.get(norm, ('#f1f5f9', '#475569'))  # grey fallback
-    txt = text or ''
-    # Tinh size tu QFontMetrics + boundingRect (chinh xac nhat cho Vietnamese diacritics)
-    qfont = QFont('Segoe UI', 9, QFont.Bold)
-    fm = QFontMetrics(qfont)
-    text_w = fm.horizontalAdvance(txt) if hasattr(fm, 'horizontalAdvance') else fm.width(txt)
-    # boundingRect cho actual rendered height (bao ca dau "ờ" + descender "g/h")
-    br = fm.boundingRect(0, 0, 9999, 9999, Qt.AlignCenter, txt)
-    actual_h = br.height()
-    # Badge h: max(actual + 14 padding, 36px floor) - fixed floor de luon co space
-    badge_w = text_w + 24
-    badge_h = max(actual_h + 14, 36)
-    lbl = QtWidgets.QLabel(txt)
-    lbl.setFont(qfont)
-    lbl.setAlignment(Qt.AlignCenter)
-    lbl.setFixedSize(badge_w, badge_h)
-    # border-radius cap 18px - du pill effect, khong an text
-    lbl.setStyleSheet(
-        f'QLabel {{ background: {bg}; color: {fg}; '
-        f'border-radius: {min(badge_h // 2, 18)}px; '
-        f'font-weight: bold; }}'
-    )
-    # Container PHAI fill toan bo cell (sizePolicy Expanding) + autofill bg trang
-    # de che item text behind widget. Badge centered bang QGridLayout.
-    container = QtWidgets.QWidget()
-    container.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
-                            QtWidgets.QSizePolicy.Expanding)
-    container.setAutoFillBackground(True)
-    container.setStyleSheet('background: white;')
-    g = QtWidgets.QGridLayout(container)
-    g.setContentsMargins(2, 2, 2, 2)
-    g.setSpacing(0)
-    g.addWidget(lbl, 0, 0, Qt.AlignCenter)
-    return container
 
 
 def style_status_item(item: 'QtWidgets.QTableWidgetItem', text: str):
@@ -3810,17 +3775,12 @@ class MainWindow(QtWidgets.QWidget):
 
     def _show_session_detail(self, sched_row, role='hv'):
         """Popup chi tiet 1 buoi hoc khi click vao card lich. role: 'hv' | 'gv'."""
-        from datetime import date as _date
         ngay_v = sched_row.get('ngay', '')
-        if isinstance(ngay_v, _date):
-            ngay_str = ngay_v.strftime('%d/%m/%Y')
-            try:
-                wd = ngay_v.weekday()
-                thu_vn = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm',
-                          'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][wd]
-                ngay_str = f'{thu_vn}, {ngay_str}'
-            except Exception:
-                pass
+        ngay_d = parse_iso_date(ngay_v)
+        if ngay_d:
+            thu_vn = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm',
+                      'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][ngay_d.weekday()]
+            ngay_str = f'{thu_vn}, {ngay_d.strftime("%d/%m/%Y")}'
         else:
             ngay_str = str(ngay_v)[:10] or '—'
         gio_bd = str(sched_row.get('gio_bat_dau', ''))[:5]
@@ -12854,17 +12814,12 @@ class TeacherWindow(QtWidgets.QWidget):
 
     def _tea_show_session_detail(self, sched_row):
         """Popup chi tiet 1 buoi day khi GV click vao card lich tuan."""
-        from datetime import date as _date
         ngay_v = sched_row.get('ngay', '')
-        if isinstance(ngay_v, _date):
-            ngay_str = ngay_v.strftime('%d/%m/%Y')
-            try:
-                wd = ngay_v.weekday()
-                thu_vn = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm',
-                          'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][wd]
-                ngay_str = f'{thu_vn}, {ngay_str}'
-            except Exception:
-                pass
+        ngay_d = parse_iso_date(ngay_v)
+        if ngay_d:
+            thu_vn = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm',
+                      'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][ngay_d.weekday()]
+            ngay_str = f'{thu_vn}, {ngay_d.strftime("%d/%m/%Y")}'
         else:
             ngay_str = str(ngay_v)[:10] or '—'
         gio_bd = str(sched_row.get('gio_bat_dau', ''))[:5]

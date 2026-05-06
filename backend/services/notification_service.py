@@ -18,8 +18,12 @@ class NotificationService:
     def get_for_student(hv_id: int):
         """thong bao danh cho 1 HV:
         - Broadcast all (den_lop=NULL AND den_hv_id=NULL)
-        - Lop HV dang ky (den_lop in HV's classes)
+        - Lop HV dang ky (den_lop in HV's ACTIVE classes)
         - Direct message gui rieng (den_hv_id = hv_id)
+
+        Loc trang_thai != 'cancelled' o subquery: HV da huy DK lop khong
+        nhan thong bao cua lop do nua. Truoc khong loc -> HV cancel xong van
+        nhan thong bao cua lop cu, gay confusing UX.
         """
         sql = """
             SELECT DISTINCT n.id, n.tieu_de, n.noi_dung, n.loai, n.ngay_tao,
@@ -31,7 +35,11 @@ class NotificationService:
               FROM notifications n
          LEFT JOIN users u ON u.id = n.tu_id
              WHERE (n.den_lop IS NULL AND n.den_hv_id IS NULL)
-                OR n.den_lop IN (SELECT lop_id FROM registrations WHERE hv_id = %s)
+                OR n.den_lop IN (
+                    SELECT lop_id FROM registrations
+                     WHERE hv_id = %s
+                       AND trang_thai IN ('paid', 'pending_payment', 'completed')
+                )
                 OR n.den_hv_id = %s
              ORDER BY n.ngay_tao DESC
         """

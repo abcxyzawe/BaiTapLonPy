@@ -47,8 +47,16 @@ class AuditService:
 
     @staticmethod
     def purge_old(days: int = 90):
-        """Xoa log cu hon X ngay (housekeeping)"""
+        """Xoa log cu hon X ngay (housekeeping).
+
+        Cast int -> string trong placeholder '%s days' co the gay rui ro
+        SQL injection neu days bi bypass type hint (Python runtime khong enforce).
+        Dung make_interval(days) - param thuan int, an toan hon.
+        """
+        days_int = int(days)  # ep kieu de chac chan
+        if days_int < 0:
+            return
         db.execute(
-            "DELETE FROM audit_logs WHERE created_at < CURRENT_DATE - INTERVAL '%s days'",
-            (days,)
+            "DELETE FROM audit_logs WHERE created_at < CURRENT_DATE - make_interval(days => %s)",
+            (days_int,)
         )

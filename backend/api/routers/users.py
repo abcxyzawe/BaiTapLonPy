@@ -33,10 +33,19 @@ def create_student(req: StudentCreate):
     return {'user_id': uid}
 
 
+_BULK_MAX_ROWS = 1000  # cap bulk import - tranh DoS qua endpoint
+
+
 @router.post('/students/bulk')
 def bulk_create_students(req: list[StudentCreate]):
     """Bulk import students. Tra ve {success, failed: [{row, msv, error}]}.
-    Skip rows fail (vd MSV trung) - tiep tuc voi rows con lai."""
+    Skip rows fail (vd MSV trung) - tiep tuc voi rows con lai.
+    Cap toi da {_BULK_MAX_ROWS} rows mot lan goi."""
+    if len(req) > _BULK_MAX_ROWS:
+        raise HTTPException(
+            status_code=413,
+            detail=f'Toi da {_BULK_MAX_ROWS} HV/lan import. Vui long chia file thanh cac batch nho.'
+        )
     success = 0
     failed = []
     for idx, item in enumerate(req, 1):

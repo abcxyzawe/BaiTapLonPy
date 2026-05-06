@@ -44,6 +44,7 @@ class StatsService:
                  FROM classes c
             LEFT JOIN teachers t ON t.user_id = c.gv_id
             LEFT JOIN registrations r ON r.lop_id = c.ma_lop
+                                     AND r.trang_thai IN ('pending_payment', 'paid', 'completed')
                 WHERE c.semester_id = %s
                 GROUP BY COALESCE(t.khoa, 'Khac')
                 ORDER BY so_hv DESC""",

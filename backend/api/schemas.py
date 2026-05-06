@@ -11,6 +11,8 @@ AttendanceStatus = Literal['present', 'absent', 'late', 'excused']
 NotificationType = Literal['info', 'warning', 'urgent']
 SemesterStatus = Literal['open', 'closed', 'upcoming']
 ClassStatus = Literal['open', 'full', 'closed']
+ScheduleStatus = Literal['scheduled', 'completed', 'cancelled', 'postponed']
+RegistrationStatus = Literal['pending_payment', 'paid', 'cancelled', 'completed']
 
 
 # ===== Auth =====
@@ -171,11 +173,11 @@ class EmployeeUpdate(BaseModel):
 
 
 class ReviewSubmit(BaseModel):
-    hv_id: int
-    gv_id: int
-    lop_id: str
-    diem: int
-    nhan_xet: Optional[str] = None
+    hv_id: int = Field(..., gt=0)
+    gv_id: int = Field(..., gt=0)
+    lop_id: str = Field(..., min_length=1, max_length=30)
+    diem: int = Field(..., ge=1, le=5)  # 1-5 sao
+    nhan_xet: Optional[str] = Field(None, max_length=2000)
 
 
 # ===== Semesters =====
@@ -185,7 +187,7 @@ class SemesterCreate(BaseModel):
     nam_hoc: str = Field(..., min_length=4, max_length=20)
     bat_dau: date
     ket_thuc: date
-    trang_thai: str = Field('closed', max_length=20)
+    trang_thai: SemesterStatus = 'closed'  # open | closed | upcoming - khop CHECK constraint DB
 
 
 class SemesterStatusUpdate(BaseModel):
@@ -223,7 +225,7 @@ class ScheduleCreate(BaseModel):
     buoi_so: Optional[int] = Field(None, ge=1, le=200)
     noi_dung: Optional[str] = Field(None, max_length=500)
     thu: Optional[int] = Field(None, ge=2, le=8)
-    trang_thai: str = Field('scheduled', max_length=20)
+    trang_thai: ScheduleStatus = 'scheduled'  # scheduled|completed|cancelled|postponed
 
 
 class ScheduleBatchCreate(BaseModel):
@@ -255,24 +257,24 @@ class ExamCreate(BaseModel):
 
 # ===== Attendance =====
 class AttendanceMark(BaseModel):
-    schedule_id: int
-    hv_id: int
+    schedule_id: int = Field(..., gt=0)
+    hv_id: int = Field(..., gt=0)
     trang_thai: AttendanceStatus  # present|absent|late|excused
     gio_vao: Optional[time] = None
-    recorded_by: Optional[int] = None
-    ghi_chu: Optional[str] = None
+    recorded_by: Optional[int] = Field(None, gt=0)
+    ghi_chu: Optional[str] = Field(None, max_length=500)
 
 
 # ===== Audit =====
 class AuditLog(BaseModel):
-    action: str
-    user_id: Optional[int] = None
-    username: Optional[str] = None
-    role: Optional[str] = None
-    target_type: Optional[str] = None
-    target_id: Optional[str] = None
-    description: Optional[str] = None
-    ip_address: Optional[str] = None
+    action: str = Field(..., min_length=1, max_length=50)
+    user_id: Optional[int] = Field(None, gt=0)
+    username: Optional[str] = Field(None, max_length=50)
+    role: Optional[str] = Field(None, max_length=20)
+    target_type: Optional[str] = Field(None, max_length=50)
+    target_id: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=1000)
+    ip_address: Optional[str] = Field(None, max_length=45)  # IPv6 max length
 
 
 # ===== Assignments =====
