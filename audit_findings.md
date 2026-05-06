@@ -122,7 +122,7 @@ Item đã xong: gạch ngang. Item mới: thêm vào "TIM THEM".
 **P3 (robustness):**
 - [ ] 97 `print(f'[...]` trong main.py — nên replace bằng `logging` module để tắt được dễ hơn
 - [ ] Backend exception handlers: `print(f'[STATS] loi:')` raw — log + truyền request_id để debug
-- [ ] `MOCK_USER['password']` lưu plain text trong Python dict — replace bằng `_session_user` chứa user object thật
+- [x] `MOCK_USER['password']` lưu plain text trong Python dict — đã bỏ field 'password' khỏi 4 CURRENT_* dict + change_password dùng helper `verify_old_password()` re-login để xác thực, không lưu plain text nữa
 
 **Image AI (sẵn key Grok):**
 - [ ] Image gen (sau khi fix hết bug): dùng Grok image API tạo cover image cho khóa học, hoặc avatar mặc định cho user mới — KHÔNG phải text chat

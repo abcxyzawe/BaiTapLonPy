@@ -2926,7 +2926,17 @@ def make_action_cell(buttons, spacing=6):
         if tip:
             b.setToolTip(tip)
         # Size theo do dai text - height 28 de chu co dau tieng Viet (Sua/Xoa) khong bi crop
-        width = 70 if len(text) >= 7 else 60 if len(text) >= 4 else 52
+        # Width tang ra 5-10px so voi truoc de chua dau tieng Viet day du
+        # ('Sửa điểm'/'Chấm bài' moi truoc bi truncate o 70px)
+        n = len(text)
+        if n >= 8:
+            width = 85
+        elif n >= 7:
+            width = 78
+        elif n >= 4:
+            width = 65
+        else:
+            width = 55
         b.setFixedSize(width, 28)
         bg = COLORS.get(color_key, COLORS['navy'])
         hover_css = ''
@@ -2936,7 +2946,8 @@ def make_action_cell(buttons, spacing=6):
             hover_css = f' QPushButton:hover {{ background: {hover_bg}; }}'
         b.setStyleSheet(
             f'QPushButton {{ background: {bg}; color: white; border: none; '
-            f'border-radius: 4px; font-size: 11px; font-weight: bold; }}{hover_css}'
+            f'border-radius: 4px; font-size: 11px; font-weight: bold; '
+            f'padding: 0px; }}{hover_css}'
         )
         hl.addWidget(b)
         btns.append(b)
@@ -4440,6 +4451,8 @@ class MainWindow(QtWidgets.QWidget):
                     f = hi.font(); f.setBold(False); hi.setFont(f)
         wr_lbl = page.findChild(QtWidgets.QLabel, 'lblWeekRange')
         if wr_lbl:
+            # Set format=RichText 1 lan o day - sau setText voi HTML moi parse dung
+            wr_lbl.setTextFormat(Qt.RichText)
             wr_lbl.setText(f'Tuần: {monday.toString("dd/MM/yyyy")} → {monday.addDays(5).toString("dd/MM/yyyy")}')
         # Update label nav week
         nav_lbl = page.findChild(QtWidgets.QLabel, 'lblNavWeek')
@@ -4589,13 +4602,12 @@ class MainWindow(QtWidgets.QWidget):
             n_sessions = len(sched)
             n_lops = len({tup[3] for tup in sched if len(tup) > 3 and tup[3]})
             base = f'Tuần: {monday.toString("dd/MM/yyyy")} → {monday.addDays(5).toString("dd/MM/yyyy")}'
+            # textFormat=RichText da set o tren khi findChild
             if n_sessions > 0:
                 wr_lbl.setText(f'{base}  ·  <b style="color:#002060;">{n_sessions}</b> buổi'
                                  f'  ·  <b style="color:#c05621;">{n_lops}</b> lớp')
-                wr_lbl.setTextFormat(Qt.RichText)
             else:
                 wr_lbl.setText(f'{base}  ·  <span style="color:#a0aec0;">không có buổi</span>')
-                wr_lbl.setTextFormat(Qt.RichText)
 
         # Update legend frame voi cac lop dang hien thi
         self._update_schedule_legend(page, sched)
@@ -6839,17 +6851,30 @@ class AdminWindow(QtWidgets.QWidget):
                     ma = cls.get('ma_mon')
                     if not ma:
                         continue
-                    a = agg_by_ma_mon.setdefault(ma, {'cur': 0, 'mx': 0, 'n': 0, 'gv': set(), 'lich': set()})
+                    a = agg_by_ma_mon.setdefault(ma, {'cur': 0, 'mx': 0, 'n': 0,
+                                                      'gv': set(), 'lich': set(),
+                                                      'buoi': set()})
                     a['cur'] += int(cls.get('siso_hien_tai') or 0)
                     a['mx'] += int(cls.get('siso_max') or 0)
                     a['n'] += 1
                     if cls.get('ten_gv'): a['gv'].add(cls['ten_gv'])
                     if cls.get('lich'): a['lich'].add(cls['lich'])
+                    sb = int(cls.get('so_buoi') or 0)
+                    if sb > 0: a['buoi'].add(sb)
                 data = []
                 for c in courses:
                     a = agg_by_ma_mon.get(c['ma_mon'], {})
+                    # so_buoi: neu cac lop cua mon co cung so_buoi -> hien so do.
+                    # Khac nhau -> hien khoang (vd '20-24'). Khong co lop -> '—'
+                    buoi_set = a.get('buoi', set())
+                    if not buoi_set:
+                        sb_disp = '—'
+                    elif len(buoi_set) == 1:
+                        sb_disp = str(next(iter(buoi_set)))
+                    else:
+                        sb_disp = f'{min(buoi_set)}-{max(buoi_set)}'
                     data.append([
-                        c['ma_mon'], c['ten_mon'], '3',
+                        c['ma_mon'], c['ten_mon'], sb_disp,
                         ', '.join(sorted(a.get('gv', set()))) or '—',
                         ', '.join(sorted(a.get('lich', set()))) or '—',
                         a.get('cur', 0), a.get('mx', 40) or 40,
@@ -6868,6 +6893,9 @@ class AdminWindow(QtWidgets.QWidget):
                 tooltip = f'<b>{row[1]}</b><br>{mo_ta}' if mo_ta else None
                 for c in range(5):
                     item = QtWidgets.QTableWidgetItem(str(row[c]))
+                    # Cot 0 (Ma KH) + cot 2 (So buoi) center align
+                    if c in (0, 2):
+                        item.setTextAlignment(Qt.AlignCenter)
                     if tooltip:
                         item.setToolTip(tooltip)
                     tbl.setItem(r, c, item)
@@ -6886,7 +6914,8 @@ class AdminWindow(QtWidgets.QWidget):
                 btn_edit.clicked.connect(lambda ch, ma=row[0], nm=row[1]: self._admin_edit_course(ma, nm))
                 btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'khóa học'))
             tbl.horizontalHeader().setStretchLastSection(True)
-            for c, cw in enumerate([70, 180, 30, 140, 130, 110, 150]):
+            # Col 2 (So buoi) tang 30 -> 75: header 'Số buổi' co dau khong vua 30px
+            for c, cw in enumerate([70, 180, 75, 140, 130, 110, 150]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
@@ -7331,7 +7360,8 @@ class AdminWindow(QtWidgets.QWidget):
                     avatar_text=rd[1].split()[-1] if rd[1] else '?', subtitle=rd[0]))
                 btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'học viên'))
             tbl.horizontalHeader().setStretchLastSection(True)
-            for c, cw in enumerate([75, 140, 100, 95, 90, 100, 150]):
+            # Col 6 (Thao tac) 150 -> 160 cho 'Chi tiết' (85px) + 'Xóa' (55px) + spacing 6
+            for c, cw in enumerate([75, 140, 100, 95, 90, 100, 160]):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
@@ -8228,40 +8258,40 @@ class AdminWindow(QtWidgets.QWidget):
         )
         btn_new.clicked.connect(self._admin_dialog_new_schedule)
 
-        # Filter bar
+        # Filter bar - sat hon header de bot empty space (truoc gap 14px qua nhieu)
         fb = QtWidgets.QFrame(page)
         fb.setObjectName('filterBar')
-        fb.setGeometry(15, 70, 990, 50)
+        fb.setGeometry(15, 62, 990, 44)
         fb.setStyleSheet('QFrame#filterBar { background: white; border: 1px solid #d2d6dc; border-radius: 8px; }')
 
         lbl_lop = QtWidgets.QLabel('Lọc theo lớp:', fb)
-        lbl_lop.setGeometry(15, 14, 90, 22)
+        lbl_lop.setGeometry(15, 11, 90, 22)
         lbl_lop.setStyleSheet('color: #4a5568; font-size: 12px; background: transparent;')
 
         cbo_lop = QtWidgets.QComboBox(fb)
         cbo_lop.setObjectName('cboAdmSchedLop')
-        cbo_lop.setGeometry(110, 11, 200, 28)
+        cbo_lop.setGeometry(110, 8, 200, 28)
         cbo_lop.setStyleSheet('QComboBox { background: white; border: 1px solid #d2d6dc; border-radius: 4px; padding: 2px 6px; font-size: 12px; }')
 
         lbl_count = QtWidgets.QLabel('', fb)
         lbl_count.setObjectName('lblSchedCount')
-        lbl_count.setGeometry(330, 14, 350, 22)
+        lbl_count.setGeometry(330, 11, 350, 22)
         lbl_count.setStyleSheet('color: #718096; font-size: 11px; background: transparent;')
 
         # Search box loc theo ma lop / ten mon / phong / ngay
         txt_s = QtWidgets.QLineEdit(fb)
         txt_s.setObjectName('txtAdmSchedSearch')
-        txt_s.setGeometry(700, 11, 275, 28)
+        txt_s.setGeometry(700, 8, 275, 28)
         txt_s.setPlaceholderText('🔍 Tìm theo lớp / môn / phòng / ngày...')
         txt_s.setClearButtonEnabled(True)
         txt_s.setStyleSheet('QLineEdit { background: white; border: 1px solid #d2d6dc; '
                              'border-radius: 4px; padding: 2px 8px; font-size: 12px; } '
                              'QLineEdit:focus { border-color: #002060; }')
 
-        # Table
+        # Table - gap 6px sau filter (truoc 130 -> 112)
         tbl = QtWidgets.QTableWidget(page)
         tbl.setObjectName('tblAdmSched')
-        tbl.setGeometry(15, 130, 990, 555)
+        tbl.setGeometry(15, 112, 990, 580)
         tbl.setColumnCount(8)
         tbl.setHorizontalHeaderLabels(['#', 'Lớp', 'Khóa học', 'Ngày', 'Thứ',
                                        'Giờ học', 'Phòng', 'Thao tác'])
@@ -8352,9 +8382,9 @@ class AdminWindow(QtWidgets.QWidget):
                     item = QtWidgets.QTableWidgetItem(str(val))
                     item.setTextAlignment(Qt.AlignCenter if c != 2 else Qt.AlignLeft | Qt.AlignVCenter)
                     tbl.setItem(r, c, item)
-                # Action: Sua + Xoa
+                # Action: Sua + Xoa - dong nhat 'Xóa' (4 chars) thay vi 'Xoá' (3 chars)
                 cell, (btn_edit, btn_del) = make_action_cell(
-                    [('Sửa', 'navy'), ('Xoá', 'red')], spacing=8
+                    [('Sửa', 'navy'), ('Xóa', 'red')], spacing=8
                 )
                 tbl.setCellWidget(r, 7, cell)
                 btn_edit.clicked.connect(lambda ch, sid=row.get('id'):
@@ -8362,8 +8392,9 @@ class AdminWindow(QtWidgets.QWidget):
                 btn_del.clicked.connect(lambda ch, sid=row.get('id'),
                                         lop=row.get('lop_id', ''), d=ngay:
                                         self._admin_delete_schedule(sid, lop, d))
-        # Column widths total 990
-        for c, w in enumerate([35, 85, 200, 90, 70, 125, 115, 270]):
+        # Column widths total 990 - shrink Thao tac (270 qua rong cho 2 nut)
+        # va tang col 'Khoa hoc' (200 -> 240) cho ten khoa hoc dai
+        for c, w in enumerate([35, 85, 240, 95, 70, 125, 130, 210]):
             tbl.setColumnWidth(c, w)
         tbl.horizontalHeader().setStretchLastSection(False)
 
@@ -8444,8 +8475,9 @@ class AdminWindow(QtWidgets.QWidget):
         spin_buoi.setValue(1)
         spin_buoi.setPrefix('Bắt đầu từ buổi #')
 
-        # Preview label
+        # Preview label - explicit RichText format de <b> render dung
         lbl_preview = QtWidgets.QLabel('Chọn lớp + thứ + tuần để xem preview')
+        lbl_preview.setTextFormat(Qt.RichText)
         lbl_preview.setStyleSheet('color: #c05621; font-weight: bold; font-size: 12px; padding: 6px; background: #fff7ed; border-radius: 4px;')
 
         def update_preview():
@@ -9374,11 +9406,10 @@ class AdminWindow(QtWidgets.QWidget):
             msg_warn(self, 'Không lưu được', api_error_msg(e))
             return
 
-        # DB OK -> update local cache + re-fill bang
-        # tim ten_mon moi (neu user doi mon)
-        ten_mon_new = next((c.get('ten_mon', '') for c in courses if c['ma_mon'] == ma_mon_new), tmon)
-        MOCK_CLASSES[idx] = (ma_lop, ma_mon_new, ten_mon_new, gv_name_new,
-                             txt_lich.text(), txt_phong.text(), smax_n, siso_n, gia_n)
+        # DB OK -> refresh cache (giu sem_id field) + re-fill bang. Truoc replace
+        # MOCK_CLASSES[idx] manual voi 9 fields (thieu sem_id) -> is_class_active()
+        # khong nhan duoc trang thai dot
+        _refresh_cache()
         self.pages_filled[2] = False
         self._fill_admin_classes()
         self.pages_filled[2] = True
@@ -9483,10 +9514,9 @@ class AdminWindow(QtWidgets.QWidget):
             msg_warn(self, 'Không thêm được', api_error_msg(e))
             return
 
-        # DB OK -> append cache + refresh UI (siso_hien_tai = 0 mac dinh, trigger se update)
-        MOCK_CLASSES.append((ma_lop, mon_code, mon_name, gv_name,
-                             lich.text(), phong.text(),
-                             smax.value(), 0, gia.value()))
+        # DB OK -> refresh cache + reload UI (truoc append manual missing sem_id idx 9
+        # khien is_class_active() khong nhan thay sem_id -> mis-detect)
+        _refresh_cache()
         self.pages_filled[2] = False
         self._fill_admin_classes()
         self.pages_filled[2] = True
@@ -9545,7 +9575,8 @@ class AdminWindow(QtWidgets.QWidget):
                 avatar_text=rd[1].split()[-1] if rd[1] else '?', subtitle=rd[0]))
             btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'giảng viên'))
         tbl.horizontalHeader().setStretchLastSection(True)
-        for c, cw in enumerate([75, 170, 140, 110, 115, 70, 90, 140]):
+        # Col 7 (Thao tac) 140 -> 160 cho 'Chi tiết' (85px) + 'Xóa' (55px) + spacing
+        for c, cw in enumerate([75, 170, 140, 110, 115, 70, 90, 160]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
@@ -9750,7 +9781,8 @@ class AdminWindow(QtWidgets.QWidget):
                 avatar_text=rd[1].split()[-1] if rd[1] else '?', subtitle=rd[0]))
             btn_del.clicked.connect(lambda ch, ma=row[0], nm=row[1], t=tbl: self._admin_del_row(t, ma, nm, 'nhân viên'))
         tbl.horizontalHeader().setStretchLastSection(True)
-        for c, cw in enumerate([75, 170, 170, 115, 195, 90, 140]):
+        # Col 6 (Thao tac) 140 -> 160 cho 'Chi tiết' (85px) + 'Xóa' (55px) + spacing
+        for c, cw in enumerate([75, 170, 170, 115, 195, 90, 160]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
@@ -11107,6 +11139,8 @@ class TeacherWindow(QtWidgets.QWidget):
                     f = hi.font(); f.setBold(False); hi.setFont(f)
         wr_lbl = page.findChild(QtWidgets.QLabel, 'lblWeekRange')
         if wr_lbl:
+            # Set format=RichText 1 lan o day - sau setText voi HTML moi parse dung
+            wr_lbl.setTextFormat(Qt.RichText)
             wr_lbl.setText(f'Tuần: {monday.toString("dd/MM/yyyy")} → {monday.addDays(5).toString("dd/MM/yyyy")}')
         nav_lbl = page.findChild(QtWidgets.QLabel, 'lblNavWeek')
         if nav_lbl:
@@ -11244,13 +11278,12 @@ class TeacherWindow(QtWidgets.QWidget):
             n_sessions = len(sched)
             n_lops = len({tup[3] for tup in sched if len(tup) > 3 and tup[3]})
             base = f'Tuần: {monday.toString("dd/MM/yyyy")} → {monday.addDays(5).toString("dd/MM/yyyy")}'
+            # textFormat=RichText da set o tren khi findChild
             if n_sessions > 0:
                 wr_lbl_gv.setText(f'{base}  ·  <b style="color:#002060;">{n_sessions}</b> buổi'
                                     f'  ·  <b style="color:#c05621;">{n_lops}</b> lớp')
-                wr_lbl_gv.setTextFormat(Qt.RichText)
             else:
                 wr_lbl_gv.setText(f'{base}  ·  <span style="color:#a0aec0;">không có buổi</span>')
-                wr_lbl_gv.setTextFormat(Qt.RichText)
 
         # Update legend frame voi cac lop dang day
         self._update_tea_schedule_legend(page, sched)
@@ -11354,9 +11387,11 @@ class TeacherWindow(QtWidgets.QWidget):
             gia_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             gia_item.setForeground(QColor(COLORS['gold']))
             tbl.setItem(r, 5, gia_item)
-            # action: 3 nut "Chi tiết" + "📅 Lịch" + "🖨 DS" (in danh sach HV PDF)
+            # action: 3 nut text-only - emoji 📅/🖨 trong text gay font fallback (Segoe UI Emoji)
+            # khong khop QPushButton font 'Segoe UI' bold -> chu trong nut nhin sai font.
+            # Doi sang 'Lịch' / 'In DS' text-only + emoji vao tooltip
             cell, (btn_detail, btn_sched, btn_print) = make_action_cell(
-                [('Chi tiết', 'navy'), ('📅 Lịch', 'green'), ('🖨 DS', 'gold')], spacing=4
+                [('Chi tiết', 'navy'), ('Lịch', 'green'), ('In DS', 'gold')], spacing=4
             )
             tbl.setCellWidget(r, 6, cell)
             btn_detail.clicked.connect(lambda ch, m=ma, n=tmon, s=siso, mx=smax, p=phong, l=lich, g=gia:
@@ -11366,12 +11401,12 @@ class TeacherWindow(QtWidgets.QWidget):
                     ('Sĩ số', f'{s}/{mx}'),
                     ('Học phí', fmt_vnd(g)),
                 ], avatar_text=m, subtitle=n))
-            btn_sched.setToolTip(f'Xem toàn bộ lịch của lớp {ma}')
+            btn_sched.setToolTip(f'📅 Xem toàn bộ lịch của lớp {ma}')
             btn_sched.clicked.connect(lambda ch, m=ma, n=tmon: self._tea_show_class_full_schedule(m, n))
-            btn_print.setToolTip(f'In danh sách học viên lớp {ma} ra PDF')
+            btn_print.setToolTip(f'🖨 In danh sách học viên lớp {ma} ra PDF')
             btn_print.clicked.connect(lambda ch, m=ma: self._tea_print_class_roster(m))
-        # Tang col 6 (Thao tac) cho fit 3 nut
-        for c, cw in enumerate([70, 145, 65, 115, 55, 95, 220]):
+        # Tang col 6 (Thao tac) cho fit 3 nut text-only (Chi tiết 85 + Lịch 65 + In DS 65 + 2*spacing 4 = 223)
+        for c, cw in enumerate([70, 145, 65, 105, 55, 95, 230]):
             tbl.setColumnWidth(c, cw)
         tbl.horizontalHeader().setStretchLastSection(False)
         tbl.verticalHeader().setVisible(False)
@@ -11579,6 +11614,28 @@ class TeacherWindow(QtWidgets.QWidget):
                     print(f'[TEA_NOTICE] sent loi: {e}')
 
             self._render_tea_sent_notices()
+
+        # Style cho txtSubject + txtContent - .ui khong co styleSheet -> inherit
+        # default Qt khien border khong ro, user khong thay ranh gioi field + co the
+        # khong biet la editable. Apply explicit border + focus + bg trang.
+        txt_subj = page.findChild(QtWidgets.QLineEdit, 'txtSubject')
+        if txt_subj and not txt_subj.styleSheet():
+            txt_subj.setStyleSheet(
+                'QLineEdit { background: white; border: 1px solid #d2d6dc; '
+                'border-radius: 6px; padding: 8px 12px; font-size: 13px; '
+                'color: #1a1a2e; } '
+                'QLineEdit:focus { border-color: #002060; }'
+            )
+        txt_ct = page.findChild(QtWidgets.QTextEdit, 'txtContent')
+        if txt_ct and not txt_ct.styleSheet():
+            txt_ct.setStyleSheet(
+                'QTextEdit { background: white; border: 1px solid #d2d6dc; '
+                'border-radius: 6px; padding: 8px 12px; font-size: 13px; '
+                'color: #1a1a2e; } '
+                'QTextEdit:focus { border: 1px solid #002060; }'
+            )
+            txt_ct.setReadOnly(False)  # explicit - tranh truong hop bi inherit readonly
+            txt_ct.setEnabled(True)
 
         # nut gui / clear - safe_connect tranh accumulation
         btn_send = page.findChild(QtWidgets.QPushButton, 'btnSendNotice')
@@ -12119,8 +12176,9 @@ class TeacherWindow(QtWidgets.QWidget):
             tbl.setHorizontalHeaderItem(7, QtWidgets.QTableWidgetItem('Xếp loại'))
             tbl.setHorizontalHeaderItem(8, QtWidgets.QTableWidgetItem('Thao tác'))
             # Col widths: 8 cot dau fixed, cot Thao tac (last) auto-stretch
+            # Cot 3 (Chuyen can): 85 de header 'Chuyên cần' co dau khong bi crop
             # Cot 7 (XL badge): 95 de fit "B+"/"A+"
-            for c, cw in enumerate([40, 95, 175, 70, 70, 70, 70, 95]):
+            for c, cw in enumerate([40, 95, 165, 85, 70, 70, 70, 95]):
                 tbl.setColumnWidth(c, cw)
             tbl.horizontalHeader().setStretchLastSection(True)
             tbl.verticalHeader().setVisible(False)
@@ -12177,15 +12235,17 @@ class TeacherWindow(QtWidgets.QWidget):
         def update_preview():
             qt = sp_qt.value()
             thi = sp_thi.value()
+            # Chi tinh TK + XL khi ca QT va Thi deu duoc nhap (>0). Neu thieu 1
+            # truong se compute sai (vd QT=8 + Thi=0 -> TK=2.4 -> 'F') va luu
+            # vao bang khien user nham. Hien preview '—' de ro la chua du
+            if qt <= 0 or thi <= 0:
+                lbl_preview.setText(
+                    '<span style="color:#a0aec0;">Cần nhập đủ <b>QT</b> và '
+                    '<b>Thi</b> để tự tính tổng kết và xếp loại</span>'
+                )
+                return
             total = round(qt * 0.3 + thi * 0.7, 2)
-            if total >= 9: letter = 'A+'
-            elif total >= 8.5: letter = 'A'
-            elif total >= 8: letter = 'B+'
-            elif total >= 6.5: letter = 'B'
-            elif total >= 5.5: letter = 'C+'
-            elif total >= 5: letter = 'C'
-            elif total >= 4: letter = 'D'
-            else: letter = 'F'
+            letter = score_to_letter(total)  # khop bac thang BE
             color = '#276749' if total >= 7 else '#c05621' if total >= 5 else '#c53030'
             lbl_preview.setText(
                 f'<b>Tổng kết:</b> <span style="color:{color}; font-size:18px;">{total}</span> &nbsp;·&nbsp; '
@@ -12209,24 +12269,38 @@ class TeacherWindow(QtWidgets.QWidget):
         try:
             qt_val = sp_qt.value()
             thi_val = sp_thi.value()
-            total = round(qt_val * 0.3 + thi_val * 0.7, 2)
-            letter = score_to_letter(total)
-
             cc_val = sp_cc.value()
+            # Diem nao = 0 = user khong nhap -> de blank thay vi "0.0"
             tbl.item(row_idx, 3).setText(f'{cc_val:.1f}' if cc_val > 0 else '')
-            tbl.item(row_idx, 4).setText(f'{qt_val:.1f}')
-            tbl.item(row_idx, 5).setText(f'{thi_val:.1f}')
-            it_tk = QtWidgets.QTableWidgetItem(f'{total:.1f}')
-            it_tk.setTextAlignment(Qt.AlignCenter)
-            it_tk.setFlags(it_tk.flags() & ~Qt.ItemIsEditable)
-            tbl.setItem(row_idx, 6, it_tk)
-            it_xl = QtWidgets.QTableWidgetItem(letter)
-            style_status_item(it_xl, letter)  # color + bold + center theo _STATUS_BADGE_MAP
-            it_xl.setFlags(it_xl.flags() & ~Qt.ItemIsEditable)
-            tbl.setItem(row_idx, 7, it_xl)
+            tbl.item(row_idx, 4).setText(f'{qt_val:.2f}' if qt_val > 0 else '')
+            tbl.item(row_idx, 5).setText(f'{thi_val:.2f}' if thi_val > 0 else '')
+            # TK + XL: chi compute khi co ca QT va Thi (tranh truong hop QT=8 +
+            # Thi=0 -> TK=2.4 -> 'F' luu vao bang khien user nham)
+            if qt_val > 0 and thi_val > 0:
+                total = round(qt_val * 0.3 + thi_val * 0.7, 2)
+                letter = score_to_letter(total)
+                it_tk = QtWidgets.QTableWidgetItem(f'{total:.1f}')
+                it_tk.setTextAlignment(Qt.AlignCenter)
+                it_tk.setFlags(it_tk.flags() & ~Qt.ItemIsEditable)
+                tbl.setItem(row_idx, 6, it_tk)
+                it_xl = QtWidgets.QTableWidgetItem(letter)
+                style_status_item(it_xl, letter)
+                it_xl.setFlags(it_xl.flags() & ~Qt.ItemIsEditable)
+                tbl.setItem(row_idx, 7, it_xl)
+                done_msg = f'Điểm của {tbl.item(row_idx,2).text()}: {total} ({letter})'
+            else:
+                # Clear TK + XL neu chua du diem
+                it_tk = QtWidgets.QTableWidgetItem('')
+                it_tk.setFlags(it_tk.flags() & ~Qt.ItemIsEditable)
+                tbl.setItem(row_idx, 6, it_tk)
+                it_xl = QtWidgets.QTableWidgetItem('')
+                it_xl.setFlags(it_xl.flags() & ~Qt.ItemIsEditable)
+                tbl.setItem(row_idx, 7, it_xl)
+                done_msg = (f'Đã lưu điểm cho {tbl.item(row_idx,2).text()}. '
+                            'Còn thiếu QT/Thi nên chưa tính tổng kết.')
         finally:
             self._grades_recalc_lock = False
-        msg_info(self, 'Đã cập nhật', f'Điểm của {tbl.item(row_idx,2).text()}: {total} ({letter})')
+        msg_info(self, 'Đã cập nhật', done_msg)
 
     def _recalc_grade_row(self, item):
         """Tinh lai TK + XL khi nguoi dung sua CC (3) / QT (4) / Thi (5)
@@ -12447,16 +12521,19 @@ class TeacherWindow(QtWidgets.QWidget):
                     item = QtWidgets.QTableWidgetItem(str(val))
                     item.setTextAlignment(Qt.AlignCenter if c in (0, 2, 4, 5) else Qt.AlignLeft | Qt.AlignVCenter)
                     tbl.setItem(r, c, item)
-                # Action: Xem bai nop / Xoa - spacing 10 + col rong 165px de fit 2 nut
+                # Action: Xem bai nop / Xoa. 'Xoa' (3 chars) -> btn 52px qua hep
+                # cho dau tieng Viet -> doi sang 'Xóa' (4 chars) de get 60px width
                 cell, (btn_view, btn_del) = make_action_cell(
-                    [('Xem nộp', 'navy'), ('Xoá', 'red')], spacing=10
+                    [('Xem nộp', 'navy'), ('Xóa', 'red')], spacing=10
                 )
                 tbl.setCellWidget(r, 6, cell)
                 btn_view.clicked.connect(lambda ch, asg_id=row['id']: self._tea_dialog_submissions(asg_id))
                 btn_del.clicked.connect(lambda ch, asg_id=row['id'], td=row.get('tieu_de', ''):
                                         self._tea_delete_assignment(asg_id, td))
-        # Tong width 35+220+75+125+130+90+165 = 840 (vua khit table 840px)
-        for c, w in enumerate([35, 220, 75, 125, 130, 90, 165]):
+        # Tong width 35+185+75+110+125+135+175 = 840 (vua khit table 840px)
+        # Tang col 5 (Da nop/Da cham) 90->135 cho header dai khong bi crop
+        # Tang col 6 (Thao tac) 165->175 cho 2 nut Xem nop/Xoa khong bi che
+        for c, w in enumerate([35, 185, 75, 110, 125, 135, 175]):
             tbl.setColumnWidth(c, w)
         tbl.horizontalHeader().setStretchLastSection(False)
 
@@ -13180,8 +13257,8 @@ class TeacherWindow(QtWidgets.QWidget):
                 # Row height tang neu co badge
                 tbl.setRowHeight(r, 56 if (days_left is not None and 0 <= days_left <= 7) else 44)
 
-                # Action: Xoa
-                cell, (btn_del,) = make_action_cell([('Xoá', 'red')])
+                # Action: Xoa - dong nhat 'Xóa' (4 chars 65px) thay 'Xoá' (3 chars 55px)
+                cell, (btn_del,) = make_action_cell([('Xóa', 'red')])
                 tbl.setCellWidget(r, 7, cell)
                 btn_del.clicked.connect(lambda ch, eid=row['id'], lop=row.get('lop_id', ''),
                                         d=fmt_date(row.get('ngay_thi')):
@@ -13761,12 +13838,19 @@ class EmployeeWindow(QtWidgets.QWidget):
             greet = time_greeting()
             lbl_today.setText(f'{greet} · Hôm nay: {_date.today().strftime("%d/%m/%Y")}')
 
-        # Them nut "Bao cao doanh thu PDF" o header (1 lan, idempotent)
+        # Them nut "Bao cao doanh thu PDF" o header (1 lan, idempotent).
+        # Header rong 870, lblToday o (600,0,245,56) ending x=845. Truoc nut o
+        # x=720 width 170 ending 890 -> overflow header 20px + che lblToday.
+        # Fix: chuyen lblToday sang trai (x=440 w=190) + nut o phai (x=640 w=160)
         header = page.findChild(QtWidgets.QFrame, 'headerBar')
         if header is not None and not header.findChild(QtWidgets.QPushButton, 'btnEmpReport'):
+            # Resize lblToday sang trai de chua nut bao cao
+            lbl_t2 = header.findChild(QtWidgets.QLabel, 'lblToday')
+            if lbl_t2:
+                lbl_t2.setGeometry(420, 0, 210, 56)
             btn_rpt = QtWidgets.QPushButton('🖨 Báo cáo doanh thu', header)
             btn_rpt.setObjectName('btnEmpReport')
-            btn_rpt.setGeometry(720, 12, 170, 32)
+            btn_rpt.setGeometry(640, 12, 200, 32)  # ends at 840 - fit 870 header
             btn_rpt.setCursor(Qt.PointingHandCursor)
             btn_rpt.setStyleSheet(
                 f'QPushButton {{ background: {COLORS["gold"]}; color: white; border: none; '
@@ -14324,7 +14408,9 @@ class EmployeeWindow(QtWidgets.QWidget):
         tbl.horizontalHeader().setStretchLastSection(True)
         # Cot 5 (Trang thai badge) tang 125->240 fit "Chờ thanh toán" 230px pill
         # Redistribute: shrink HV name + lớp + ngày de cho rong cho badge
-        for c, cw in enumerate([55, 80, 145, 70, 90, 240, 110]):
+        # Col 6 (Thao tac) 110 -> 135 cho 'Xem' (55) + spacing 12 + 'Hủy' (55) = 122 + slack
+        # Total 795 vua khit table 796px
+        for c, cw in enumerate([55, 75, 145, 70, 90, 225, 135]):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
