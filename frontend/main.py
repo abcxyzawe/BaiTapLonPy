@@ -4869,11 +4869,9 @@ class MainWindow(QtWidgets.QWidget):
                         if tbl.item(r, c):
                             tbl.item(r, c).setToolTip(tip)
 
-            # Row height: 52 cho row co badge "Hom nay/Con N ngay", 40 cho row binh thuong
+            # Row height 58px (standard) - du cho ca row co badge va row binh thuong
             for r in range(len(data)):
-                ca_item = tbl.item(r, 4)
-                has_badge = ca_item and ('\n' in ca_item.text())
-                tbl.setRowHeight(r, 52 if has_badge else 40)
+                tbl.setRowHeight(r, 58)
             # Tooltip nhac user double-click
             for r in range(len(data)):
                 for c in range(min(7, tbl.columnCount())):
@@ -5288,8 +5286,8 @@ class MainWindow(QtWidgets.QWidget):
         else:
             tbl.setRowCount(len(all_rows))
             for r, row in enumerate(all_rows):
-                # Row 40px - du cho chu xep loai (khong pill nua)
-                tbl.setRowHeight(r, 40)
+                # Row 58px dong nhat voi standard cua app
+                tbl.setRowHeight(r, 58)
                 for c, val in enumerate(row):
                     item = QtWidgets.QTableWidgetItem(str(val))
                     item.setTextAlignment(Qt.AlignCenter if c != 1 else Qt.AlignLeft | Qt.AlignVCenter)
@@ -5406,7 +5404,7 @@ class MainWindow(QtWidgets.QWidget):
             now = datetime.now()
             tbl.setRowCount(len(rows))
             for r, row in enumerate(rows):
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)
                 han_str = '—'
                 han_overdue = False
                 if row.get('han_nop'):
@@ -5653,7 +5651,7 @@ class MainWindow(QtWidgets.QWidget):
             tbl.horizontalHeader().setStretchLastSection(False)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)
             # connect nut danh gia - pass ca gv_id (de submit_review chinh xac)
             for r, row in enumerate(data):
                 w = tbl.cellWidget(r, 5)
@@ -7002,7 +7000,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)
 
         # Khong day btnSearchCourse vi no o sat mep phai roi - chi day combo + separator
         widen_search(page, 'txtSearchCourse', 300, ['sepFilter1', 'cboFilterDept'])
@@ -7444,7 +7442,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)
 
         # btnSearchStudent o sat phai - khong day, chi day combo
         widen_search(page, 'txtSearchStudent', 300, ['cboFilterClass', 'cboFilterDeptSt'])
@@ -7792,7 +7790,7 @@ class AdminWindow(QtWidgets.QWidget):
                 tbl.setColumnWidth(c, cw)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)
 
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddSemester')
         if btn_add:
@@ -8003,7 +8001,7 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.horizontalHeader().setStretchLastSection(True)
             tbl.verticalHeader().setVisible(False)
             for r in range(len(data)):
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)
 
         # btnExportCurr o frame khac va o phai - khong day
         widen_search(page, 'txtSearchCurr', 280, ['cboNganh', 'cboLoai', 'cboHocKy'])
@@ -8470,7 +8468,7 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.setRowCount(len(rows))
             for r, row in enumerate(rows):
                 # Row 44 de cum nut Sua/Xoa (24+padding) khong bi crop chu co dau tieng Viet
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)
                 ngay = fmt_date(row.get('ngay'))
                 gio_bd = str(row.get('gio_bat_dau', ''))[:5]
                 gio_kt = str(row.get('gio_ket_thuc', ''))[:5]
@@ -9170,7 +9168,7 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(classes_src)):
-            tbl.setRowHeight(r, 44)
+            tbl.setRowHeight(r, 58)
 
         # noi rong o tim kiem (placeholder dai khong vua)
         widen_search(page, 'txtSearchCls', 300, ['cboAdmClsCourse', 'cboAdmClsTeacher', 'cboAdmClsStatus'])
@@ -9687,7 +9685,7 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
-            tbl.setRowHeight(r, 44)
+            tbl.setRowHeight(r, 58)
 
         widen_search(page, 'txtSearchTea', 300, ['cboTeaKhoa', 'cboTeaHocVi'])
         # search / filter / add - safe_connect tranh accumulation
@@ -9909,7 +9907,7 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
-            tbl.setRowHeight(r, 44)
+            tbl.setRowHeight(r, 58)
 
         widen_search(page, 'txtSearchEmp', 300, ['cboEmpRole', 'cboEmpStatus'])
         # search / filter / add - safe_connect
@@ -11553,7 +11551,7 @@ class TeacherWindow(QtWidgets.QWidget):
             # khong khop QPushButton font 'Segoe UI' bold -> chu trong nut nhin sai font.
             # Doi sang 'Lịch' / 'In DS' text-only + emoji vao tooltip
             cell, (btn_detail, btn_sched, btn_print) = make_action_cell(
-                [('Chi tiết', 'navy'), ('Lịch', 'green'), ('In DS', 'gold')], spacing=4
+                [('Chi tiết', 'navy'), ('Lịch', 'green'), ('In DS', 'gold')], spacing=10
             )
             tbl.setCellWidget(r, 6, cell)
             btn_detail.clicked.connect(lambda ch, m=ma, n=tmon, s=siso, mx=smax, p=phong, l=lich, g=gia:
@@ -11567,13 +11565,13 @@ class TeacherWindow(QtWidgets.QWidget):
             btn_sched.clicked.connect(lambda ch, m=ma, n=tmon: self._tea_show_class_full_schedule(m, n))
             btn_print.setToolTip(f'🖨 In danh sách học viên lớp {ma} ra PDF')
             btn_print.clicked.connect(lambda ch, m=ma: self._tea_print_class_roster(m))
-        # Tang col 6 (Thao tac) cho fit 3 nut text-only (Chi tiết 85 + Lịch 65 + In DS 65 + 2*spacing 4 = 223)
-        for c, cw in enumerate([70, 145, 65, 105, 55, 95, 230]):
+        # Cot 6 (Thao tac) 245px cho 3 nut: Chi tiết 85 + Lịch 65 + In DS 65 + 2*spacing 10 = 235
+        for c, cw in enumerate([70, 145, 65, 105, 55, 85, 245]):
             tbl.setColumnWidth(c, cw)
         tbl.horizontalHeader().setStretchLastSection(False)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(my_classes)):
-            tbl.setRowHeight(r, 44)
+            tbl.setRowHeight(r, 58)
 
     def _fill_tea_students(self):
         page = self.page_widgets[3]
@@ -11629,7 +11627,7 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             # Row 44px - du cho chu trang thai (khong pill nua)
-            tbl.setRowHeight(r, 44)
+            tbl.setRowHeight(r, 58)
             for c, val in enumerate(row[:5]):
                 item = QtWidgets.QTableWidgetItem(val)
                 item.setTextAlignment(Qt.AlignCenter if c in (0, 3) else Qt.AlignLeft | Qt.AlignVCenter)
@@ -11644,7 +11642,7 @@ class TeacherWindow(QtWidgets.QWidget):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
-            tbl.setRowHeight(r, 40)
+            tbl.setRowHeight(r, 58)
 
         # btnExportStudents nam o headerBar va da o sat phai - khong day
         widen_search(page, 'txtSearchStudent', 280)
@@ -12336,7 +12334,7 @@ class TeacherWindow(QtWidgets.QWidget):
                 tbl.removeCellWidget(r, 7)
             for r, row in enumerate(data):
                 # Row 44px - du cho chu xep loai (khong pill nua)
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)
                 for c, val in enumerate(row):
                     item = QtWidgets.QTableWidgetItem(str(val))
                     item.setTextAlignment(Qt.AlignCenter if c != 2 else Qt.AlignLeft | Qt.AlignVCenter)
@@ -12973,7 +12971,7 @@ class TeacherWindow(QtWidgets.QWidget):
             tbl.clearSpans()
             tbl.setRowCount(len(subs))
             for r, s in enumerate(subs):
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)
                 has_sub = s.get('submission_id') is not None
                 graded = s.get('diem') is not None
                 status = 'Đã chấm' if graded else ('Đã nộp' if has_sub else 'Chưa nộp')
@@ -13546,8 +13544,8 @@ class TeacherWindow(QtWidgets.QWidget):
                     if tbl.item(r, c):
                         tbl.item(r, c).setToolTip(tip)
 
-                # Row height tang neu co badge
-                tbl.setRowHeight(r, 56 if (days_left is not None and 0 <= days_left <= 7) else 44)
+                # Row height 58px standard
+                tbl.setRowHeight(r, 58)
 
                 # Action: Xoa - dong nhat 'Xóa' (4 chars 65px) thay 'Xoá' (3 chars 55px)
                 cell, (btn_del,) = make_action_cell([('Xóa', 'red')])
@@ -14696,7 +14694,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             # Row 44px - du cho chu trang thai (khong pill nua)
-            tbl.setRowHeight(r, 44)
+            tbl.setRowHeight(r, 58)
             for c, val in enumerate(row[:5]):
                 item = QtWidgets.QTableWidgetItem(val)
                 item.setTextAlignment(Qt.AlignCenter if c in (0, 1, 3) else
@@ -14739,7 +14737,7 @@ class EmployeeWindow(QtWidgets.QWidget):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
-            tbl.setRowHeight(r, 44)
+            tbl.setRowHeight(r, 58)
 
         widen_search(page, 'txtSearchReg', 300, ['cboRegStatus', 'cboRegDate'])
         # search + filter + export - safe_connect tranh accumulation
@@ -14878,7 +14876,7 @@ class EmployeeWindow(QtWidgets.QWidget):
             tbl.setColumnWidth(c, cw)
         tbl.verticalHeader().setVisible(False)
         for r in range(len(data)):
-            tbl.setRowHeight(r, 40)
+            tbl.setRowHeight(r, 58)
         tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
 
         # buttons - safe_connect tranh accumulation
@@ -15555,7 +15553,7 @@ class EmployeeWindow(QtWidgets.QWidget):
                      ('Trạng thái', 'Đầy' if cls_data[7] >= cls_data[6] else 'Còn chỗ')],
                     avatar_text=cls_data[0][:2], subtitle=cls_data[2]))
             for r in range(len(cls_list)):
-                tbl.setRowHeight(r, 44)
+                tbl.setRowHeight(r, 58)
         tbl.horizontalHeader().setStretchLastSection(True)
         for c, cw in enumerate([78, 150, 125, 140, 68, 100, 85, 90]):
             tbl.setColumnWidth(c, cw)
