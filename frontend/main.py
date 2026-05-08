@@ -4134,7 +4134,7 @@ class MainWindow(QtWidgets.QWidget):
         banner.setToolTip('Liên hệ nhân viên để thanh toán học phí. Click để xem chi tiết bảng dưới.')
 
         text = (f'💳  Bạn có <b>{n_pending}</b> lớp <b>chờ thanh toán</b>  ·  '
-                f'tổng <b style="color:#9a3412;">{fmt_vnd(total_fee, suffix="đ")}</b>'
+                f'tổng <b style="color:#9a3412;">{fmt_vnd(total_fee)}</b>'
                 f'  ·  liên hệ Nhân viên để thanh toán')
 
         lbl = QtWidgets.QLabel(text, banner)
@@ -6186,7 +6186,7 @@ class MainWindow(QtWidgets.QWidget):
         stats = [
             (20, 42, '📚 Lớp đăng ký', f'{n_total}', '#002060'),
             (210, 42, '✅ Hoàn thành', f'{n_done}', '#166534'),
-            (20, 85, '💰 Tổng học phí', fmt_vnd(total_fee, suffix='đ'), '#c05621'),
+            (20, 85, '💰 Tổng học phí', fmt_vnd(total_fee), '#c05621'),
             (210, 85, '⭐ Điểm TB', f'{gpa:.2f}/10' if gpa_list else '—', '#7c3aed'),
         ]
         for x, y, label, val, color in stats:
@@ -9420,7 +9420,7 @@ class AdminWindow(QtWidgets.QWidget):
             items = [str(r + 1), row.get('ma_lop', ''), row.get('ma_mon', ''),
                      row.get('gv_id', '') or '—', row.get('lich', '') or '—',
                      row.get('phong', '') or '—', row.get('siso_max', '40'),
-                     fmt_vnd(row.get('gia', 0) or 0, suffix='đ')]
+                     fmt_vnd(row.get('gia', 0) or 0)]
             for c, val in enumerate(items):
                 tbl.setItem(r, c, QtWidgets.QTableWidgetItem(str(val)))
         for c, w in enumerate([35, 90, 80, 70, 130, 80, 80, 130]):
@@ -14602,7 +14602,7 @@ class EmployeeWindow(QtWidgets.QWidget):
                     suffix = '  ⛔ ĐÃ ĐẦY'
                 else:
                     suffix = f'  ({cho_trong} chỗ trống)' if cho_trong > 0 else ''
-                cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8], suffix="đ")}){suffix}')
+                cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8])}){suffix}')
                 # Disable item neu lop day -> NV khong the chon
                 if is_full:
                     last_idx = cbo_cls.count() - 1
@@ -14650,7 +14650,7 @@ class EmployeeWindow(QtWidgets.QWidget):
                 suffix = '  ⛔ ĐÃ ĐẦY'
             else:
                 suffix = f'  ({cho_trong} chỗ trống)' if cho_trong > 0 else ''
-            cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8], suffix="đ")}){suffix}')
+            cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8])}){suffix}')
             if is_full:
                 last_idx = cbo_cls.count() - 1
                 item = cbo_cls.model().item(last_idx)
@@ -14711,7 +14711,7 @@ class EmployeeWindow(QtWidgets.QWidget):
             f'<b>Giảng viên:</b> {gv or "—"}<br>'
             f'<b>Lịch học:</b> {lich or "—"}  ·  <b>Phòng:</b> {phong or "—"}<br>'
             f'<b>Sĩ số:</b> {siso_html}  ·  '
-            f'<b>Học phí:</b> <span style="color:#c05621;">{fmt_vnd(gia, suffix="đ")}</span>'
+            f'<b>Học phí:</b> <span style="color:#c05621;">{fmt_vnd(gia)}</span>'
         )
         lbl.setText(info)
 
@@ -15910,7 +15910,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         stats = [
             (20, 42, '📝 Đăng ký xử lý', f'{n_reg}', '#002060'),
             (210, 42, '💵 TT đã xác nhận', f'{n_pay}', '#166534'),
-            (20, 85, '💰 Tổng thu', fmt_vnd(total_rev, suffix='đ'), '#c05621'),
+            (20, 85, '💰 Tổng thu', fmt_vnd(total_rev), '#c05621'),
             (210, 85, '📈 TB 30 ngày', avg_str, '#7c3aed'),
         ]
         for x, y, label, val, color in stats:
