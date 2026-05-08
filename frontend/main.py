@@ -8161,7 +8161,13 @@ class AdminWindow(QtWidgets.QWidget):
         txt_stt.setStyleSheet('background: #f7fafc; color: #718096;')
         txt_code = QtWidgets.QLineEdit(cur[1])
         txt_name = QtWidgets.QLineEdit(cur[2])
-        txt_tc = QtWidgets.QLineEdit(cur[3])
+        # So buoi: spinbox - tranh user go chu cai roi catch ValueError sau Save
+        spin_tc = QtWidgets.QSpinBox()
+        spin_tc.setRange(1, 10)
+        try:
+            spin_tc.setValue(int(cur[3]))
+        except (ValueError, TypeError):
+            spin_tc.setValue(3)
         cbo_loai = QtWidgets.QComboBox()
         cbo_loai.addItems(['Cơ bản', 'Nâng cao', 'Định hướng'])
         if cur[4] in ['Cơ bản', 'Nâng cao', 'Định hướng']:
@@ -8179,7 +8185,7 @@ class AdminWindow(QtWidgets.QWidget):
         form.addRow('STT:', txt_stt)
         form.addRow('Mã khoá:', txt_code)
         form.addRow('Tên khoá:', txt_name)
-        form.addRow('Số buổi:', txt_tc)
+        form.addRow('Số buổi:', spin_tc)
         form.addRow('Loại:', cbo_loai)
         form.addRow('Đợt:', cbo_dot)
         form.addRow('Yêu cầu trình độ:', txt_prereq)
@@ -8192,13 +8198,8 @@ class AdminWindow(QtWidgets.QWidget):
         if not txt_code.text().strip() or not txt_name.text().strip():
             msg_warn(self, 'Thiếu', 'Mã khóa và tên môn không được trống')
             return
-        try:
-            int(txt_tc.text())
-        except ValueError:
-            msg_warn(self, 'Sai dữ liệu', 'Số buổi phải là số')
-            return
         type_colors = {'Cơ bản': COLORS['navy'], 'Nâng cao': COLORS['green'], 'Định hướng': COLORS['gold']}
-        new_vals = [cur[0], txt_code.text().upper(), txt_name.text(), txt_tc.text(),
+        new_vals = [cur[0], txt_code.text().upper(), txt_name.text(), str(spin_tc.value()),
                     cbo_loai.currentText(), cbo_dot.currentText().strip() or '—',
                     txt_prereq.text().strip() or '—']
 
@@ -8309,7 +8310,10 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_mon = QtWidgets.QComboBox()
         for c in available_courses:
             cbo_mon.addItem(f"{c['ma_mon']} - {c.get('ten_mon', '')}", c['ma_mon'])
-        txt_tc = QtWidgets.QLineEdit('3')
+        # So buoi: spinbox de chan input ngoai range va khong cho go chu
+        spin_tc = QtWidgets.QSpinBox()
+        spin_tc.setRange(1, 10)
+        spin_tc.setValue(3)
         cbo_loai = QtWidgets.QComboBox(); cbo_loai.addItems(['Cơ bản', 'Nâng cao', 'Định hướng'])
         # Dot: editable combo - admin co the chon dot co san hoac nhap moi (vd "Mua he 2026")
         cbo_dot = QtWidgets.QComboBox()
@@ -8320,7 +8324,7 @@ class AdminWindow(QtWidgets.QWidget):
         txt_prereq = QtWidgets.QLineEdit()
         txt_prereq.setPlaceholderText('VD: IT001 (để trống nếu không có)')
         form.addRow('Khoá học:', cbo_mon)
-        form.addRow('Số buổi:', txt_tc)
+        form.addRow('Số buổi:', spin_tc)
         form.addRow('Loại:', cbo_loai)
         form.addRow('Đợt:', cbo_dot)
         form.addRow('Yêu cầu trình độ:', txt_prereq)
@@ -8330,14 +8334,7 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_mon.setFocus()  # auto-focus first field
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
-        # Validate tin_chi
-        try:
-            tin_chi_n = int(txt_tc.text().strip())
-            if tin_chi_n < 1 or tin_chi_n > 10:
-                raise ValueError()
-        except ValueError:
-            msg_warn(self, 'Sai dữ liệu', 'Số buổi phải là số từ 1-10')
-            return
+        tin_chi_n = spin_tc.value()
         if not (DB_AVAILABLE and CurriculumService):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
