@@ -36,4 +36,7 @@ test_output.log
 # File test/preview tam (PDF export, output...)
 test_*.pdf
 test_*.json
+test_results.json
+test_all_api.py
+test_screenshots/
 *.tmp
