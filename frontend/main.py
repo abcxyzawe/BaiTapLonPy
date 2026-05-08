@@ -9686,8 +9686,15 @@ class AdminWindow(QtWidgets.QWidget):
         mon_code, mon_name = cbo_mon.currentData()
         gv_id = cbo_gv.currentData()  # userData = teacher_id (set khi build combo)
         gv_name = cbo_gv.currentText()
-        ma_lop = ma.text().upper().strip()
+        ma_lop = ma.text().strip().upper()
 
+        # Pre-check duplicate ma_lop tu cache - tranh case API tra 409 voi msg
+        # backend kho hieu (vd 'duplicate key value violates unique constraint')
+        if any(c[0] == ma_lop for c in MOCK_CLASSES):
+            msg_warn(self, 'Trùng mã lớp',
+                     f'Mã lớp <b>{ma_lop}</b> đã tồn tại trong hệ thống.\n'
+                     'Vui lòng chọn mã khác (vd thêm hậu tố -A/-B/-2026).')
+            return
         if not DB_AVAILABLE:
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
