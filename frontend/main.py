@@ -13751,10 +13751,11 @@ class TeacherWindow(QtWidgets.QWidget):
             except Exception as e:
                 print(f'[TEA_EXAM] loi load lop: {e}')
 
-        # Ngay thi
+        # Ngay thi - khoa min = today de tranh GV vo tinh tao lich thi qua khu
         from PyQt5.QtCore import QDate, QTime
         dt_ngay = QtWidgets.QDateEdit()
         dt_ngay.setCalendarPopup(True)
+        dt_ngay.setMinimumDate(QDate.currentDate())
         dt_ngay.setDate(QDate.currentDate().addDays(14))
         dt_ngay.setDisplayFormat('dd/MM/yyyy')
 
@@ -13822,6 +13823,12 @@ class TeacherWindow(QtWidgets.QWidget):
             return
         if cbo_lop.currentIndex() == 0:
             msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
+            return
+        # Validate gio bat dau < gio ket thuc - user co the chinh tay sau khi
+        # chon ca khien gio kt < bd (vd ca 1 07:30-09:00 nhung gv keo time_kt
+        # ve 07:00 -> exam invalid)
+        if time_bd.time() >= time_kt.time():
+            msg_warn(self, 'Sai giờ', 'Giờ bắt đầu phải nhỏ hơn giờ kết thúc.')
             return
         # Map hinh thuc VN -> ASCII (DB schema dung Tu luan/Trac nghiem)
         ht_map = {'Trắc nghiệm': 'Trac nghiem', 'Tự luận': 'Tu luan',
