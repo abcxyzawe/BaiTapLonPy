@@ -9503,18 +9503,18 @@ class AdminWindow(QtWidgets.QWidget):
                 if it and teacher_sel not in it.text():
                     show = False
             if status_sel:
-                it = tbl.item(r, 5)
-                if it:
-                    siso_text = it.text()
-                    try:
-                        cur, mx = siso_text.split('/')
-                        is_full = int(cur) >= int(mx)
-                    except Exception:
-                        is_full = False
-                    if status_sel == 'Đã đóng' and not is_full:
-                        show = False
-                    elif status_sel == 'Đang mở' and is_full:
-                        show = False
+                # Truoc filter check siso full/not-full -> sai nghia voi 'Dang mo
+                # / Da dong'. UI label intent la trang_thai dot (semester) chu
+                # khong phai si so cua lop. Lookup ma_lop -> MOCK_CLASSES ->
+                # is_class_active() de check dung trang thai dot.
+                it_ma = tbl.item(r, 0)
+                ma_lop = it_ma.text() if it_ma else ''
+                cls_tuple = next((c for c in MOCK_CLASSES if c[0] == ma_lop), None)
+                is_active = is_class_active(cls_tuple) if cls_tuple else False
+                if status_sel == 'Đang mở' and not is_active:
+                    show = False
+                elif status_sel == 'Đã đóng' and is_active:
+                    show = False
             tbl.setRowHidden(r, not show)
 
     def _admin_edit_class(self, ma_lop):
