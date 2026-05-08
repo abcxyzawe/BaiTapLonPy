@@ -13347,18 +13347,28 @@ class TeacherWindow(QtWidgets.QWidget):
             except Exception as e:
                 print(f'[TEA_SCHED] loi load lop: {e}')
 
-        # Ngay
+        # Ngay - khoa min = today de tranh GV vo tinh tao buoi hoc qua khu
+        # (lich su cua lop nen ghi qua he thong khac, khong qua dialog 'Tao moi')
         from PyQt5.QtCore import QDate, QTime
         dt_ngay = QtWidgets.QDateEdit()
         dt_ngay.setCalendarPopup(True)
+        dt_ngay.setMinimumDate(QDate.currentDate())
         dt_ngay.setDate(QDate.currentDate().addDays(1))
         dt_ngay.setDisplayFormat('dd/MM/yyyy')
 
-        # Gio bat dau / ket thuc
+        # Gio bat dau / ket thuc - auto set time_kt min = time_bd + 30p de
+        # tranh user keo time_kt < time_bd. Validate tong the van chay sau OK.
         time_bd = QtWidgets.QTimeEdit(QTime(7, 0))
         time_bd.setDisplayFormat('HH:mm')
         time_kt = QtWidgets.QTimeEdit(QTime(9, 30))
         time_kt.setDisplayFormat('HH:mm')
+
+        def _sync_time_kt_min(t):
+            min_kt = t.addSecs(30 * 60)  # bd + 30 phut
+            time_kt.setMinimumTime(min_kt)
+            if time_kt.time() < min_kt:
+                time_kt.setTime(min_kt)
+        time_bd.timeChanged.connect(_sync_time_kt_min)
 
         # Phong (default lay tu lop)
         txt_phong = QtWidgets.QLineEdit()
