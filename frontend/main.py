@@ -7728,19 +7728,38 @@ class AdminWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle('Thêm học viên')
-        dlg.setFixedSize(420, 320)
+        dlg.setFixedSize(440, 380)
         form = QtWidgets.QFormLayout(dlg)
-        fields = [('MSV', 'msv'), ('Họ tên', 'ten'), ('Lớp', 'lop'), ('Khoa', 'khoa'),
-                  ('SDT', 'sdt'), ('Email', 'email')]
+        # Schema students: msv, full_name (users), sdt/email (users), ngaysinh,
+        # gioitinh, diachi. Truoc dialog co 'Lop' va 'Khoa' nhung students KHONG
+        # co 2 column nay -> user nhap mat cong, khong luu duoc.
         widgets = {}
-        for label, key in fields:
+        for label, key, placeholder in [
+            ('MSV', 'msv', 'vd: HV20261234'),
+            ('Họ tên', 'ten', ''),
+            ('SDT', 'sdt', 'vd: 0901234567'),
+            ('Email', 'email', 'vd: ten@example.com'),
+            ('Địa chỉ', 'diachi', ''),
+        ]:
             w = QtWidgets.QLineEdit()
-            if key == 'email':
-                w.setPlaceholderText('vd: ten@example.com')
-            elif key == 'sdt':
-                w.setPlaceholderText('vd: 0901234567')
+            if placeholder:
+                w.setPlaceholderText(placeholder)
             form.addRow(label + ':', w)
             widgets[key] = w
+        # Ngay sinh - QDateEdit voi default 18 nam truoc (HV phan lon ~18+)
+        dt = QtWidgets.QDateEdit()
+        dt.setCalendarPopup(True)
+        dt.setDisplayFormat('dd/MM/yyyy')
+        dt.setMaximumDate(QDate.currentDate())
+        dt.setDate(QDate.currentDate().addYears(-18))
+        form.addRow('Ngày sinh:', dt)
+        widgets['ngaysinh'] = dt
+        # Gioi tinh - combo (Nam/Nu/Khac), de empty default
+        gt = QtWidgets.QComboBox()
+        gt.addItems(['', 'Nam', 'Nữ', 'Khác'])
+        form.addRow('Giới tính:', gt)
+        widgets['gioitinh'] = gt
+
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
         form.addRow(btns)
@@ -7764,6 +7783,9 @@ class AdminWindow(QtWidgets.QWidget):
             return
         # Goi API truoc
         msv_val = widgets['msv'].text().strip()
+        ngaysinh_val = widgets['ngaysinh'].date().toString('yyyy-MM-dd')
+        gioitinh_val = widgets['gioitinh'].currentText().strip()
+        diachi_val = widgets['diachi'].text().strip()
         try:
             StudentService.create(
                 username=msv_val.lower(),
@@ -7772,6 +7794,9 @@ class AdminWindow(QtWidgets.QWidget):
                 msv=msv_val,
                 sdt=sdt or None,
                 email=email or None,
+                ngaysinh=ngaysinh_val,
+                gioitinh=gioitinh_val or None,
+                diachi=diachi_val or None,
             )
         except Exception as e:
             print(f'[ADM_ADD_HV] DB loi: {e}')
