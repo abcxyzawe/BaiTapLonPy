@@ -30,7 +30,9 @@ class GradeService:
 
     @staticmethod
     def get_grades_by_class(lop_id: str):
-        """bang diem cua 1 lop (cho GV xem/nhap)"""
+        """bang diem cua 1 lop (cho GV xem/nhap).
+        Lay tat ca HV da dang ky lop (ke ca pending_payment) de GV con thay
+        ai chua dong tien - tranh truong hop chon lop khong hien sinh vien."""
         sql = """
             SELECT u.id AS hv_id, s.msv, u.full_name,
                    g.diem_qt, g.diem_thi, g.tong_ket, g.xep_loai
@@ -39,7 +41,7 @@ class GradeService:
               JOIN registrations r ON r.hv_id = u.id
          LEFT JOIN grades g ON g.hv_id = u.id AND g.lop_id = r.lop_id
              WHERE r.lop_id = %s
-               AND r.trang_thai IN ('paid', 'completed')
+               AND r.trang_thai IN ('pending_payment', 'paid', 'completed')
              ORDER BY u.full_name
         """
         return db.fetch_all(sql, (lop_id,))

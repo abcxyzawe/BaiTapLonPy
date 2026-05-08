@@ -3772,6 +3772,10 @@ class MainWindow(QtWidgets.QWidget):
         except Exception as e:
             msg_warn(self, 'Lỗi tải', api_error_msg(e))
             return
+        # Filter theo lop neu user da chon o combo loc
+        sel_lop = getattr(self, '_stu_sched_filter', None)
+        if sel_lop:
+            schedules = [r for r in schedules if r.get('lop_id') == sel_lop]
         msv = MOCK_USER.get('msv', 'HV')
         name = MOCK_USER.get('name', '') or MOCK_USER.get('full_name', '')
         fname = f'LichTuan_{msv}_{monday.toString("yyyyMMdd")}.pdf'
@@ -4261,7 +4265,8 @@ class MainWindow(QtWidgets.QWidget):
                 lbl_f.show()
                 cbo = QtWidgets.QComboBox(hb)
                 cbo.setObjectName('cboSchedFilter')
-                cbo.setGeometry(285, 12, 280, 32)
+                # x=285 + width 230 -> end 515; cach btn_pdf 25px tranh ket nhau
+                cbo.setGeometry(285, 12, 230, 32)
                 cbo.setCursor(Qt.PointingHandCursor)
                 cbo.setStyleSheet('QComboBox { background: white; border: 1px solid #d2d6dc; '
                                    'border-radius: 6px; padding: 4px 10px; font-size: 12px; } '
@@ -4272,7 +4277,7 @@ class MainWindow(QtWidgets.QWidget):
             if not hb.findChild(QtWidgets.QPushButton, 'btnPrintSchedHV'):
                 btn_pdf = QtWidgets.QPushButton('🖨 In tuần PDF', hb)
                 btn_pdf.setObjectName('btnPrintSchedHV')
-                btn_pdf.setGeometry(580, 12, 130, 32)
+                btn_pdf.setGeometry(540, 12, 130, 32)
                 btn_pdf.setCursor(Qt.PointingHandCursor)
                 btn_pdf.setToolTip('In lịch tuần đang xem ra PDF để mang theo')
                 btn_pdf.setStyleSheet(
@@ -4282,11 +4287,12 @@ class MainWindow(QtWidgets.QWidget):
                 )
                 btn_pdf.clicked.connect(self._stu_export_schedule_week_pdf)
                 btn_pdf.show()
+                btn_pdf.raise_()
             # Them nut "Xuat lich (.ics)" 1 lan
             if not hb.findChild(QtWidgets.QPushButton, 'btnExportICS'):
                 btn_ics = QtWidgets.QPushButton('📅 Xuất .ics', hb)
                 btn_ics.setObjectName('btnExportICS')
-                btn_ics.setGeometry(720, 12, 130, 32)
+                btn_ics.setGeometry(680, 12, 130, 32)
                 btn_ics.setCursor(Qt.PointingHandCursor)
                 btn_ics.setToolTip('Xuất lịch học sang file .ics để import vào Google/Apple Calendar')
                 btn_ics.setStyleSheet(
@@ -4296,6 +4302,7 @@ class MainWindow(QtWidgets.QWidget):
                 )
                 btn_ics.clicked.connect(self._stu_export_ics)
                 btn_ics.show()
+                btn_ics.raise_()
 
         # Schedule frame to, calendar Frame giu nhung an cal widget va dat prev/next button
         sf = page.findChild(QtWidgets.QFrame, 'scheduleFrame')
@@ -5607,6 +5614,7 @@ class MainWindow(QtWidgets.QWidget):
         # Lay danh sach GV tu API + diem danh gia trung binh
         data = []
         gv_ids = []  # song song voi data, luu gv_id de pass vao dialog
+        gv_subjects = []  # song song voi data, luu list mon GV day de filter
         if DB_AVAILABLE:
             try:
                 gvs = TeacherService.get_for_review() or []
@@ -5620,8 +5628,12 @@ class MainWindow(QtWidgets.QWidget):
                         str(cnt),
                     ])
                     gv_ids.append(gv.get('gv_id') or gv.get('user_id') or gv.get('id'))
+                    raw_mon = gv.get('mon_day', '') or ''
+                    gv_subjects.append([m.strip() for m in raw_mon.split('|') if m.strip()])
             except Exception as e:
                 print(f'[REVIEW] API loi: {e}')
+        # Luu de _apply_review_filter dung
+        self._review_gv_subjects = gv_subjects
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblReview')
         if tbl:
             if not data:
@@ -5665,17 +5677,46 @@ class MainWindow(QtWidgets.QWidget):
                         )
 
         widen_search(page, 'txtSearchReview', 280, ['cboSubject', 'cboDept'])
+        # Populate cboDept tu unique khoa trong data + cboSubject tu unique mon
+        # day cua tat ca GV. Tranh hardcode list khong khop voi DB
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboDept')
+        if cbo_d:
+            cur_dept = cbo_d.currentText() if cbo_d.count() > 0 else ''
+            cbo_d.blockSignals(True)
+            cbo_d.clear()
+            cbo_d.addItem('Tất cả khoa')
+            for k in sorted({(row[2] or '').strip() for row in data if (row[2] or '').strip()}):
+                cbo_d.addItem(k)
+            # Restore lua chon cu neu con ton tai
+            idx = cbo_d.findText(cur_dept)
+            if idx > 0:
+                cbo_d.setCurrentIndex(idx)
+            cbo_d.blockSignals(False)
+        cbo_s = page.findChild(QtWidgets.QComboBox, 'cboSubject')
+        if cbo_s:
+            cur_sub = cbo_s.currentText() if cbo_s.count() > 0 else ''
+            cbo_s.blockSignals(True)
+            cbo_s.clear()
+            cbo_s.addItem('Tất cả khóa học')
+            uniq_mon = set()
+            for ms in gv_subjects:
+                uniq_mon.update(ms)
+            for m in sorted(uniq_mon):
+                cbo_s.addItem(m)
+            idx = cbo_s.findText(cur_sub)
+            if idx > 0:
+                cbo_s.setCurrentIndex(idx)
+            cbo_s.blockSignals(False)
+
         # search + filter - safe_connect tranh accumulation khi page reload
         # (truoc moi lan _fill_review chay them 1 handler -> nav qua lai N lan
         # se trigger filter N lan moi text change -> lag UI)
         txt_s = page.findChild(QtWidgets.QLineEdit, 'txtSearchReview')
         if txt_s:
             safe_connect(txt_s.textChanged,
-                         lambda t: table_filter(tbl, t, cols=[1, 2]) if tbl else None)
-        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboDept')
+                         lambda t: self._apply_review_filter())
         if cbo_d:
             safe_connect(cbo_d.currentIndexChanged, lambda: self._apply_review_filter())
-        cbo_s = page.findChild(QtWidgets.QComboBox, 'cboSubject')
         if cbo_s:
             safe_connect(cbo_s.currentIndexChanged, lambda: self._apply_review_filter())
 
@@ -5683,16 +5724,35 @@ class MainWindow(QtWidgets.QWidget):
         page = self.page_widgets[5]  # btnReview moved to idx 5 sau khi insert btnAssign
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblReview')
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboDept')
-        if not tbl or not cbo_d:
+        cbo_s = page.findChild(QtWidgets.QComboBox, 'cboSubject')
+        txt_s = page.findChild(QtWidgets.QLineEdit, 'txtSearchReview')
+        if not tbl:
             return
-        dept_map = {0: None, 1: 'CNTT', 2: 'Toán', 3: 'Ngoại ngữ'}
-        want = dept_map.get(cbo_d.currentIndex())
+        # Idx 0 = "Tat ca" -> None, idx > 0 -> currentText() de match data thuc
+        want_dept = (cbo_d.currentText().strip()
+                     if (cbo_d and cbo_d.currentIndex() > 0) else None)
+        want_sub = (cbo_s.currentText().strip()
+                    if (cbo_s and cbo_s.currentIndex() > 0) else None)
+        kw = (txt_s.text().strip().lower() if txt_s else '')
+        gv_subs = getattr(self, '_review_gv_subjects', [])
         for r in range(tbl.rowCount()):
-            it = tbl.item(r, 2)
-            if not want:
-                tbl.setRowHidden(r, False)
-            else:
-                tbl.setRowHidden(r, it.text() != want if it else False)
+            name_it = tbl.item(r, 1)
+            khoa_it = tbl.item(r, 2)
+            name_txt = name_it.text() if name_it else ''
+            khoa_txt = khoa_it.text() if khoa_it else ''
+            # Lay list mon day cua GV nay theo row index (gv_subs song song row)
+            subs = gv_subs[r] if r < len(gv_subs) else []
+
+            ok = True
+            if want_dept and khoa_txt.strip() != want_dept:
+                ok = False
+            if ok and want_sub and want_sub not in subs:
+                ok = False
+            if ok and kw:
+                hay = (name_txt + ' ' + khoa_txt).lower()
+                if kw not in hay:
+                    ok = False
+            tbl.setRowHidden(r, not ok)
 
     def _open_review_dialog(self, gv_name, gv_id=None):
         dlg = QtWidgets.QDialog(self)
@@ -7668,19 +7728,38 @@ class AdminWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle('Thêm học viên')
-        dlg.setFixedSize(420, 320)
+        dlg.setFixedSize(440, 380)
         form = QtWidgets.QFormLayout(dlg)
-        fields = [('MSV', 'msv'), ('Họ tên', 'ten'), ('Lớp', 'lop'), ('Khoa', 'khoa'),
-                  ('SDT', 'sdt'), ('Email', 'email')]
+        # Schema students: msv, full_name (users), sdt/email (users), ngaysinh,
+        # gioitinh, diachi. Truoc dialog co 'Lop' va 'Khoa' nhung students KHONG
+        # co 2 column nay -> user nhap mat cong, khong luu duoc.
         widgets = {}
-        for label, key in fields:
+        for label, key, placeholder in [
+            ('MSV', 'msv', 'vd: HV20261234'),
+            ('Họ tên', 'ten', ''),
+            ('SDT', 'sdt', 'vd: 0901234567'),
+            ('Email', 'email', 'vd: ten@example.com'),
+            ('Địa chỉ', 'diachi', ''),
+        ]:
             w = QtWidgets.QLineEdit()
-            if key == 'email':
-                w.setPlaceholderText('vd: ten@example.com')
-            elif key == 'sdt':
-                w.setPlaceholderText('vd: 0901234567')
+            if placeholder:
+                w.setPlaceholderText(placeholder)
             form.addRow(label + ':', w)
             widgets[key] = w
+        # Ngay sinh - QDateEdit voi default 18 nam truoc (HV phan lon ~18+)
+        dt = QtWidgets.QDateEdit()
+        dt.setCalendarPopup(True)
+        dt.setDisplayFormat('dd/MM/yyyy')
+        dt.setMaximumDate(QDate.currentDate())
+        dt.setDate(QDate.currentDate().addYears(-18))
+        form.addRow('Ngày sinh:', dt)
+        widgets['ngaysinh'] = dt
+        # Gioi tinh - combo (Nam/Nu/Khac), de empty default
+        gt = QtWidgets.QComboBox()
+        gt.addItems(['', 'Nam', 'Nữ', 'Khác'])
+        form.addRow('Giới tính:', gt)
+        widgets['gioitinh'] = gt
+
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
         form.addRow(btns)
@@ -7704,6 +7783,9 @@ class AdminWindow(QtWidgets.QWidget):
             return
         # Goi API truoc
         msv_val = widgets['msv'].text().strip()
+        ngaysinh_val = widgets['ngaysinh'].date().toString('yyyy-MM-dd')
+        gioitinh_val = widgets['gioitinh'].currentText().strip()
+        diachi_val = widgets['diachi'].text().strip()
         try:
             StudentService.create(
                 username=msv_val.lower(),
@@ -7712,6 +7794,9 @@ class AdminWindow(QtWidgets.QWidget):
                 msv=msv_val,
                 sdt=sdt or None,
                 email=email or None,
+                ngaysinh=ngaysinh_val,
+                gioitinh=gioitinh_val or None,
+                diachi=diachi_val or None,
             )
         except Exception as e:
             print(f'[ADM_ADD_HV] DB loi: {e}')
@@ -9836,11 +9921,14 @@ class AdminWindow(QtWidgets.QWidget):
                     khoa=vals[2] or None, hoc_vi=vals[3] or None, sdt=vals[4] or None,
                 )
             elif role_name == 'nhân viên':
-                # fields = ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']
+                # fields = ['Mã NV', 'Họ tên', 'Chức vụ', 'Phòng ban', 'SDT', 'Email']
                 EmployeeService.create(
                     username=vals[0].lower(), password='passemp',
                     full_name=vals[1], ma_nv=vals[0],
-                    chuc_vu=vals[2] or None, sdt=vals[3] or None, email=vals[4] or None,
+                    chuc_vu=vals[2] or None,
+                    phong_ban=vals[3] or None,
+                    sdt=vals[4] or None,
+                    email=vals[5] or None if len(vals) > 5 else None,
                 )
             else:
                 msg_warn(self, 'Lỗi', f'Role không hợp lệ: {role_name}')
@@ -9939,7 +10027,7 @@ class AdminWindow(QtWidgets.QWidget):
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddEmp')
         if btn_add:
             safe_connect(btn_add.clicked, lambda: self._admin_add_user('nhân viên', 5, 'tblAdmEmployees',
-                                                                       ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']))
+                                                                       ['Mã NV', 'Họ tên', 'Chức vụ', 'Phòng ban', 'SDT', 'Email']))
         # Them nut Bulk import NV CSV (idempotent)
         if not page.findChild(QtWidgets.QPushButton, 'btnImportEmpsCSV'):
             btn_imp = QtWidgets.QPushButton('📥 Import CSV', page)
@@ -13353,29 +13441,49 @@ class TeacherWindow(QtWidgets.QWidget):
         hb.setObjectName('headerBar')
         hb.setGeometry(0, 0, 870, 56)
         hb.setStyleSheet('QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }')
+        hb.show()
+
         title = QtWidgets.QLabel('Lịch thi', hb)
-        title.setGeometry(25, 0, 400, 56)
+        title.setGeometry(25, 0, 200, 56)
         title.setStyleSheet('color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;')
+        title.show()
 
         # Combo loc theo lop - GV dang day nhieu lop -> can loc nhanh
         lbl_f = QtWidgets.QLabel('Lớp:', hb)
         lbl_f.setObjectName('lblTeaExamFilter')
-        lbl_f.setGeometry(425, 18, 35, 24)
+        lbl_f.setGeometry(235, 18, 35, 24)
         lbl_f.setStyleSheet('color: #4a5568; font-size: 12px; font-weight: bold; background: transparent;')
+        lbl_f.show()
 
         cbo_f = QtWidgets.QComboBox(hb)
         cbo_f.setObjectName('cboTeaExamFilter')
-        cbo_f.setGeometry(465, 12, 85, 32)
+        cbo_f.setGeometry(275, 12, 130, 32)
         cbo_f.setCursor(Qt.PointingHandCursor)
         cbo_f.setStyleSheet('QComboBox { background: white; border: 1px solid #d2d6dc; '
                               'border-radius: 6px; padding: 4px 8px; font-size: 11px; } '
                               'QComboBox:hover { border-color: #002060; } '
                               'QComboBox::drop-down { border: none; padding-right: 4px; }')
+        cbo_f.show()
 
-        # Nut "In PDF" - de truoc nut Tao lich thi
+        # Nut "+ Tao lich thi" - dat truoc nut PDF de luon hien khi GV vao trang
+        btn_new = QtWidgets.QPushButton('+ Tạo lịch thi', hb)
+        btn_new.setObjectName('btnNewExam')
+        btn_new.setGeometry(425, 12, 140, 32)
+        btn_new.setCursor(Qt.PointingHandCursor)
+        btn_new.setToolTip('Tạo lịch thi mới cho lớp đang dạy')
+        btn_new.setStyleSheet(
+            'QPushButton { background: #002060; color: white; border: none; '
+            'border-radius: 6px; font-size: 12px; font-weight: bold; } '
+            'QPushButton:hover { background: #001a50; }'
+        )
+        btn_new.clicked.connect(self._tea_dialog_new_exam)
+        btn_new.show()
+        btn_new.raise_()
+
+        # Nut "In PDF" - de canh nut Tao lich thi
         btn_pdf = QtWidgets.QPushButton('🖨 In PDF', hb)
         btn_pdf.setObjectName('btnTeaPrintExam')
-        btn_pdf.setGeometry(560, 12, 140, 32)
+        btn_pdf.setGeometry(575, 12, 130, 32)
         btn_pdf.setCursor(Qt.PointingHandCursor)
         btn_pdf.setToolTip('In danh sách lịch thi của GV ra PDF')
         btn_pdf.setStyleSheet(
@@ -13384,17 +13492,8 @@ class TeacherWindow(QtWidgets.QWidget):
             'QPushButton:hover { background: #9c4419; }'
         )
         btn_pdf.clicked.connect(self._tea_export_exam_pdf)
-
-        btn_new = QtWidgets.QPushButton('+ Tạo lịch thi', hb)
-        btn_new.setObjectName('btnNewExam')
-        btn_new.setGeometry(710, 12, 140, 32)
-        btn_new.setCursor(Qt.PointingHandCursor)
-        btn_new.setStyleSheet(
-            'QPushButton { background: #002060; color: white; border: none; '
-            'border-radius: 6px; font-size: 12px; font-weight: bold; } '
-            'QPushButton:hover { background: #001a50; }'
-        )
-        btn_new.clicked.connect(self._tea_dialog_new_exam)
+        btn_pdf.show()
+        btn_pdf.raise_()
 
         tbl = QtWidgets.QTableWidget(page)
         tbl.setObjectName('tblTeaExams')
@@ -13764,19 +13863,24 @@ class TeacherWindow(QtWidgets.QWidget):
         show_exam_detail_dialog(self, cache[row], role='gv')
 
     def _tea_export_exam_pdf(self):
-        """In lich thi cua GV ra PDF."""
+        """In lich thi cua GV ra PDF. Ton trong filter lop neu user dang loc."""
         gv_id = MOCK_TEACHER.get('user_id')
         if not gv_id:
             msg_warn(self, 'Lỗi', 'Chưa có thông tin GV')
             return
-        if not (DB_AVAILABLE and ExamService):
-            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
-            return
-        try:
-            rows = ExamService.get_for_teacher(gv_id) or []
-        except Exception as e:
-            msg_warn(self, 'Lỗi tải', api_error_msg(e))
-            return
+        # Uu tien dung cache filtered rows tu lan render bang gan nhat (da apply
+        # filter cbo lop). Fallback fetch fresh tu API khi cache rong (vd user
+        # chua mo trang Lich thi).
+        rows = list(getattr(self, '_tea_exam_rows_cache', []) or [])
+        if not rows:
+            if not (DB_AVAILABLE and ExamService):
+                msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+                return
+            try:
+                rows = ExamService.get_for_teacher(gv_id) or []
+            except Exception as e:
+                msg_warn(self, 'Lỗi tải', api_error_msg(e))
+                return
         if not rows:
             msg_warn(self, 'Trống', 'Chưa có lịch thi nào để in.')
             return
@@ -15732,7 +15836,8 @@ class EmployeeWindow(QtWidgets.QWidget):
 
 class App:
     def __init__(self):
-        self.qapp = QtWidgets.QApplication(sys.argv)
+        # reuse QApplication neu da co (run.py spawn splash truoc)
+        self.qapp = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
         load_theme(self.qapp)
         # Prefetch courses + classes tu API (cache de cac combo dung lai)
         _load_app_data()
@@ -15840,77 +15945,6 @@ class App:
                      'Vui lòng cung cấp MSV/Mã GV/Mã NV để nhân viên xác minh.')
         btn_forgot.clicked.connect(_show_forgot)
         btn_forgot.show()
-
-        # "Tai khoan test" link - dat ben trai (đối xứng forgot pw)
-        btn_test = QtWidgets.QPushButton('🔧 Tài khoản test', pw_field.parent())
-        btn_test.setObjectName('btnTestAccounts')
-        btn_test.setGeometry(pw_geo.x(), pw_geo.y() + pw_geo.height() + 4, 130, 20)
-        btn_test.setCursor(Qt.PointingHandCursor)
-        btn_test.setStyleSheet(
-            'QPushButton { background: transparent; color: #718096; border: none; '
-            'font-size: 11px; font-weight: bold; text-align: left; padding: 0 4px; } '
-            'QPushButton:hover { color: #002060; text-decoration: underline; }'
-        )
-
-        def _show_test_accounts():
-            """Dialog liet ke 4 tai khoan test + click-to-fill."""
-            dlg = QtWidgets.QDialog(self.login_win)
-            dlg.setWindowTitle('Tài khoản test')
-            dlg.setFixedSize(420, 360)
-            dlg.setStyleSheet('QDialog { background: white; }')
-            v = QtWidgets.QVBoxLayout(dlg)
-            v.setContentsMargins(20, 18, 20, 16)
-            v.setSpacing(10)
-
-            head = QtWidgets.QLabel('🔧  Tài khoản test - 4 vai trò')
-            head.setStyleSheet('color: #002060; font-size: 14px; font-weight: bold;')
-            v.addWidget(head)
-
-            sub = QtWidgets.QLabel('Click vào dòng để tự động điền vào form đăng nhập:')
-            sub.setStyleSheet('color: #718096; font-size: 11px; padding-bottom: 6px;')
-            v.addWidget(sub)
-
-            accounts = [
-                ('👨‍🎓 Học viên', 'user', 'passuser', '#002060'),
-                ('👨‍🏫 Giảng viên', 'gv1', 'passgv1', '#276749'),
-                ('💼 Nhân viên', 'nv1', 'passnv1', '#c05621'),
-                ('🛠 Quản trị viên', 'admin', 'passadmin', '#c53030'),
-            ]
-            for label, uname, pwd, color in accounts:
-                btn = QtWidgets.QPushButton(f'  {label}\n  Username: {uname}  ·  Password: {pwd}')
-                btn.setCursor(Qt.PointingHandCursor)
-                btn.setStyleSheet(
-                    f'QPushButton {{ background: white; color: #1a1a2e; border: 1px solid #d2d6dc; '
-                    f'border-left: 4px solid {color}; border-radius: 6px; '
-                    f'padding: 8px 12px; font-size: 12px; text-align: left; }} '
-                    f'QPushButton:hover {{ background: #f7fafc; border-color: {color}; }}'
-                )
-                def _fill(_u=uname, _p=pwd):
-                    self.login_win.txtUsername.setText(_u)
-                    self.login_win.txtPassword.setText(_p)
-                    dlg.accept()
-                btn.clicked.connect(_fill)
-                v.addWidget(btn)
-
-            v.addStretch(1)
-            note = QtWidgets.QLabel(
-                '<i style="color:#a0aec0; font-size:10px;">Lưu ý: chỉ dùng để demo / test. '
-                'Trên môi trường production hãy đổi mật khẩu mặc định.</i>'
-            )
-            note.setWordWrap(True)
-            v.addWidget(note)
-
-            close_btn = QtWidgets.QPushButton('Đóng')
-            close_btn.setStyleSheet('QPushButton { background: #002060; color: white; border: none; '
-                                     'border-radius: 4px; padding: 6px 20px; font-weight: bold; }')
-            close_btn.clicked.connect(dlg.reject)
-            br = QtWidgets.QHBoxLayout()
-            br.addStretch(1); br.addWidget(close_btn)
-            v.addLayout(br)
-            dlg.exec_()
-
-        btn_test.clicked.connect(_show_test_accounts)
-        btn_test.show()
 
         # Caps Lock warning - hien duoi pw_field, an khi off
         # Detect: trong keyPressEvent neu typed letter co case khac voi shift state -> capslock on

@@ -106,11 +106,19 @@ class TeacherService:
 
     @staticmethod
     def get_for_review():
-        """danh sach GV de HV danh gia (cho trang review)"""
+        """danh sach GV de HV danh gia (cho trang review).
+        Tra them khoa + danh sach mon dang day (string nhieu mon noi bang '|')
+        de FE filter theo Khoa va Khoa hoc."""
         sql = """
-            SELECT u.id AS gv_id, u.full_name, t.hoc_vi,
+            SELECT u.id AS gv_id, u.full_name, t.hoc_vi, t.khoa,
                    COALESCE((SELECT AVG(diem) FROM reviews WHERE gv_id = u.id), 0) AS diem_tb,
-                   (SELECT COUNT(*) FROM reviews WHERE gv_id = u.id) AS so_danh_gia
+                   (SELECT COUNT(*) FROM reviews WHERE gv_id = u.id) AS so_danh_gia,
+                   COALESCE((
+                       SELECT string_agg(DISTINCT co.ten_mon, '|' ORDER BY co.ten_mon)
+                         FROM classes c
+                         JOIN courses co ON co.ma_mon = c.ma_mon
+                        WHERE c.gv_id = u.id
+                   ), '') AS mon_day
               FROM users u
               JOIN teachers t ON t.user_id = u.id
              WHERE u.is_active = TRUE
