@@ -13835,19 +13835,24 @@ class TeacherWindow(QtWidgets.QWidget):
         show_exam_detail_dialog(self, cache[row], role='gv')
 
     def _tea_export_exam_pdf(self):
-        """In lich thi cua GV ra PDF."""
+        """In lich thi cua GV ra PDF. Ton trong filter lop neu user dang loc."""
         gv_id = MOCK_TEACHER.get('user_id')
         if not gv_id:
             msg_warn(self, 'Lỗi', 'Chưa có thông tin GV')
             return
-        if not (DB_AVAILABLE and ExamService):
-            msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
-            return
-        try:
-            rows = ExamService.get_for_teacher(gv_id) or []
-        except Exception as e:
-            msg_warn(self, 'Lỗi tải', api_error_msg(e))
-            return
+        # Uu tien dung cache filtered rows tu lan render bang gan nhat (da apply
+        # filter cbo lop). Fallback fetch fresh tu API khi cache rong (vd user
+        # chua mo trang Lich thi).
+        rows = list(getattr(self, '_tea_exam_rows_cache', []) or [])
+        if not rows:
+            if not (DB_AVAILABLE and ExamService):
+                msg_warn(self, 'Lỗi', 'Chưa kết nối hệ thống')
+                return
+            try:
+                rows = ExamService.get_for_teacher(gv_id) or []
+            except Exception as e:
+                msg_warn(self, 'Lỗi tải', api_error_msg(e))
+                return
         if not rows:
             msg_warn(self, 'Trống', 'Chưa có lịch thi nào để in.')
             return
