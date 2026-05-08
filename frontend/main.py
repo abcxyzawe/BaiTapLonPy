@@ -7082,8 +7082,28 @@ class AdminWindow(QtWidgets.QWidget):
             safe_connect(btn_s.clicked, lambda: table_filter(tbl, txt.text(), cols=[0, 1, 3]))
         cbo = page.findChild(QtWidgets.QComboBox, 'cboFilterDept')
         if cbo:
+            # Populate dynamic theo unique prefix tu ma_mon trong data thuc te.
+            # Truoc hardcode 4 items va idx-based map -> admin them ma_mon prefix
+            # moi (vd 'VS' / 'BS') khong filter duoc.
+            khoa_labels = {
+                'IT': 'Công nghệ thông tin (CNTT)',
+                'MA': 'Toán',
+                'EN': 'Ngoại ngữ',
+            }
+            cur_data = cbo.currentData() if cbo.count() > 0 else None
+            cbo.blockSignals(True)
             cbo.clear()
-            cbo.addItems(['Tất cả khoa', 'Công nghệ thông tin (CNTT)', 'Toán', 'Ngoại ngữ'])
+            cbo.addItem('Tất cả khoa', None)
+            unique_pref = sorted({(row[0] or '')[:2].upper() for row in data if row and row[0]})
+            for p in unique_pref:
+                label = khoa_labels.get(p, p)  # fallback hien luon prefix neu khong co label
+                cbo.addItem(label, p)
+            # Restore lua chon cu neu con ton tai
+            if cur_data:
+                idx_r = cbo.findData(cur_data)
+                if idx_r > 0:
+                    cbo.setCurrentIndex(idx_r)
+            cbo.blockSignals(False)
             safe_connect(cbo.currentIndexChanged, lambda: self._admin_filter_courses())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddCourse')
         if btn_add:
@@ -7227,16 +7247,15 @@ class AdminWindow(QtWidgets.QWidget):
         cbo = page.findChild(QtWidgets.QComboBox, 'cboFilterDept')
         if not tbl or not cbo:
             return
-        if cbo.currentIndex() == 0:
-            for r in range(tbl.rowCount()):
-                tbl.setRowHidden(r, False)
-            return
-        # map khoa -> prefix ma mon
-        prefix_map = {1: 'IT', 2: 'MA', 3: 'EN'}
-        prefix = prefix_map.get(cbo.currentIndex())
+        # Lay prefix tu cbo.currentData() (set khi populate o _fill_admin_courses).
+        # Khong dung idx hardcode map vi cbo gio populate dynamic theo data thuc.
+        prefix = cbo.currentData()
         for r in range(tbl.rowCount()):
+            if not prefix:
+                tbl.setRowHidden(r, False)
+                continue
             it = tbl.item(r, 0)
-            show = prefix is None or (it and it.text().startswith(prefix))
+            show = bool(it and it.text().upper().startswith(prefix))
             tbl.setRowHidden(r, not show)
 
     def _admin_add_course(self):
@@ -9503,18 +9522,18 @@ class AdminWindow(QtWidgets.QWidget):
                 if it and teacher_sel not in it.text():
                     show = False
             if status_sel:
-                it = tbl.item(r, 5)
-                if it:
-                    siso_text = it.text()
-                    try:
-                        cur, mx = siso_text.split('/')
-                        is_full = int(cur) >= int(mx)
-                    except Exception:
-                        is_full = False
-                    if status_sel == 'Đã đóng' and not is_full:
-                        show = False
-                    elif status_sel == 'Đang mở' and is_full:
-                        show = False
+                # Truoc filter check siso full/not-full -> sai nghia voi 'Dang mo
+                # / Da dong'. UI label intent la trang_thai dot (semester) chu
+                # khong phai si so cua lop. Lookup ma_lop -> MOCK_CLASSES ->
+                # is_class_active() de check dung trang thai dot.
+                it_ma = tbl.item(r, 0)
+                ma_lop = it_ma.text() if it_ma else ''
+                cls_tuple = next((c for c in MOCK_CLASSES if c[0] == ma_lop), None)
+                is_active = is_class_active(cls_tuple) if cls_tuple else False
+                if status_sel == 'Đang mở' and not is_active:
+                    show = False
+                elif status_sel == 'Đã đóng' and is_active:
+                    show = False
             tbl.setRowHidden(r, not show)
 
     def _admin_edit_class(self, ma_lop):
@@ -14866,6 +14885,12 @@ class EmployeeWindow(QtWidgets.QWidget):
         for nm in ('cboCourse', 'cboClassEmp'):
             w = page.findChild(QtWidgets.QComboBox, nm)
             if w: w.setCurrentIndex(0)
+        # Focus lai txtMSV de NV nhap HV tiep theo nhanh - khong phai bam chuot
+        # tro lai. Ket hop voi Enter binding (Quanghuy iter 17) tao luong nhap
+        # day du keyboard: Enter -> lookup -> register -> auto reset + focus
+        txt_msv = page.findChild(QtWidgets.QLineEdit, 'txtMSV')
+        if txt_msv:
+            txt_msv.setFocus()
 
     def _fill_emp_reglist(self):
         page = self.page_widgets[2]
