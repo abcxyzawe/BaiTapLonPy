@@ -7274,11 +7274,19 @@ class AdminWindow(QtWidgets.QWidget):
         if not txt_code.text().strip() or not txt_name.text().strip():
             msg_warn(self, 'Thiếu', 'Mã khóa và tên môn không được trống')
             return
+        new_code = txt_code.text().strip().upper()
+        new_name = txt_name.text().strip()
+        # Pre-check duplicate ma_mon tu cache - tranh case API tra 409 voi msg
+        # backend kho hieu (vd 'duplicate key value violates unique constraint').
+        # Apply pattern dong bo voi pre-check ma_lop cua _admin_add_class.
+        if any(c[0] == new_code for c in MOCK_COURSES):
+            msg_warn(self, 'Trùng mã khoá',
+                     f'Mã khoá <b>{new_code}</b> đã tồn tại trong hệ thống.\n'
+                     'Vui lòng chọn mã khác (vd thêm số phiên bản: IT001A, IT001-2).')
+            return
         if not DB_AVAILABLE:
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
-        new_code = txt_code.text().upper().strip()
-        new_name = txt_name.text().strip()
         desc_text = txt_desc.toPlainText().strip()
         # Goi API TRUOC khi update UI
         try:
