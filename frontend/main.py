@@ -7915,17 +7915,35 @@ class AdminWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle('Thêm đợt khoá học')
-        dlg.setFixedSize(380, 280)
+        dlg.setFixedSize(380, 290)
         form = QtWidgets.QFormLayout(dlg)
         ma = QtWidgets.QLineEdit()
         ma.setPlaceholderText('VD: DOT1-2026')
+        # Suggest nam_hoc dynamic theo nam hien tai (truoc hardcode '2026-2027'
+        # khien moi he ket nam dot moi van hien default cu)
+        cur_year = QDate.currentDate().year()
         ten = QtWidgets.QLineEdit()
-        ten.setPlaceholderText('VD: Đợt 1 năm 2026')
-        nam = QtWidgets.QLineEdit('2026-2027')
-        bd = QtWidgets.QLineEdit('01/08/2026')
-        bd.setPlaceholderText('dd/mm/yyyy')
-        kt = QtWidgets.QLineEdit('31/12/2026')
-        kt.setPlaceholderText('dd/mm/yyyy')
+        ten.setPlaceholderText(f'VD: Đợt 1 năm {cur_year}')
+        nam = QtWidgets.QLineEdit(f'{cur_year}-{cur_year + 1}')
+        # Doi sang QDateEdit calendar - tranh user nhap sai format dd/mm/yyyy
+        # va co the chon nhanh ngay tu calendar popup
+        bd = QtWidgets.QDateEdit()
+        bd.setCalendarPopup(True)
+        bd.setDisplayFormat('dd/MM/yyyy')
+        bd.setMinimumDate(QDate.currentDate())  # khong cho tao dot qua khu
+        bd.setDate(QDate.currentDate())
+        kt = QtWidgets.QDateEdit()
+        kt.setCalendarPopup(True)
+        kt.setDisplayFormat('dd/MM/yyyy')
+        kt.setDate(QDate.currentDate().addMonths(4))  # default = bd + 4 thang
+        # Auto-sync: kt min = bd + 1 day, bump kt neu thap hon
+        def _sync_kt_min(d):
+            min_kt = d.addDays(1)
+            kt.setMinimumDate(min_kt)
+            if kt.date() < min_kt:
+                kt.setDate(min_kt)
+        _sync_kt_min(bd.date())  # init
+        bd.dateChanged.connect(_sync_kt_min)
         form.addRow('Mã đợt:', ma)
         form.addRow('Tên đợt:', ten)
         form.addRow('Năm học:', nam)
@@ -7944,16 +7962,9 @@ class AdminWindow(QtWidgets.QWidget):
         if not (DB_AVAILABLE and SemesterService):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
-        # Parse + validate date
-        from datetime import datetime
-        def parse_dd_mm_yyyy(s):
-            return datetime.strptime(s.strip(), '%d/%m/%Y').date()
-        try:
-            bd_date = parse_dd_mm_yyyy(bd.text())
-            kt_date = parse_dd_mm_yyyy(kt.text())
-        except ValueError:
-            msg_warn(self, 'Sai dữ liệu', 'Ngày phải đúng định dạng dd/mm/yyyy')
-            return
+        bd_date = bd.date().toPyDate()
+        kt_date = kt.date().toPyDate()
+        # kt_min da dam bao kt > bd, nhung giu check cho safety
         if kt_date <= bd_date:
             msg_warn(self, 'Sai dữ liệu', 'Ngày kết thúc phải sau ngày bắt đầu')
             return
