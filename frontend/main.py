@@ -14866,6 +14866,12 @@ class EmployeeWindow(QtWidgets.QWidget):
         for nm in ('cboCourse', 'cboClassEmp'):
             w = page.findChild(QtWidgets.QComboBox, nm)
             if w: w.setCurrentIndex(0)
+        # Focus lai txtMSV de NV nhap HV tiep theo nhanh - khong phai bam chuot
+        # tro lai. Ket hop voi Enter binding (Quanghuy iter 17) tao luong nhap
+        # day du keyboard: Enter -> lookup -> register -> auto reset + focus
+        txt_msv = page.findChild(QtWidgets.QLineEdit, 'txtMSV')
+        if txt_msv:
+            txt_msv.setFocus()
 
     def _fill_emp_reglist(self):
         page = self.page_widgets[2]
