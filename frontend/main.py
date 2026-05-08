@@ -9938,6 +9938,23 @@ class AdminWindow(QtWidgets.QWidget):
         if not DB_AVAILABLE:
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
+        # Pre-check duplicate ma_gv / ma_nv truoc POST. Khong co cache local nen
+        # phai goi *Service.get_by_code(). 404 = chua co (OK), object = trung.
+        # Dong bo voi pre-check ma_lop/ma_mon/MSV o cac dialog admin khac.
+        ma_code = widgets[0].text().strip().upper()
+        ma_label = 'Mã GV' if role_name == 'giảng viên' else 'Mã NV'
+        lookup_fn = (TeacherService.get_by_code if role_name == 'giảng viên'
+                     else EmployeeService.get_by_code)
+        try:
+            existing = lookup_fn(ma_code)
+            if existing:
+                msg_warn(self, f'Trùng {ma_label}',
+                         f'{ma_label} <b>{ma_code}</b> đã tồn tại trong hệ thống.\n'
+                         'Vui lòng chọn mã khác.')
+                return
+        except Exception as e:
+            if '404' not in str(e):
+                print(f'[ADM_ADD_USER] pre-check loi: {e}')
         # Goi API truoc khi update UI
         vals = [w.text().strip() for w in widgets]
         try:
