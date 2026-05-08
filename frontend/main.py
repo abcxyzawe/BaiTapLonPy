@@ -13167,6 +13167,10 @@ class TeacherWindow(QtWidgets.QWidget):
         except Exception as e:
             msg_warn(self, 'Lỗi tải', api_error_msg(e))
             return
+        # Apply filter lop neu dang loc - dong bo voi cach lich tuan render tren UI
+        sel_lop = getattr(self, '_tea_sched_filter', None)
+        if sel_lop:
+            schedules = [r for r in schedules if r.get('lop_id') == sel_lop]
         gv_code = MOCK_TEACHER.get('id', 'GV')
         name = MOCK_TEACHER.get('name', '') or ''
         fname = f'LichDay_{gv_code}_{monday.toString("yyyyMMdd")}.pdf'
