@@ -9921,11 +9921,14 @@ class AdminWindow(QtWidgets.QWidget):
                     khoa=vals[2] or None, hoc_vi=vals[3] or None, sdt=vals[4] or None,
                 )
             elif role_name == 'nhân viên':
-                # fields = ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']
+                # fields = ['Mã NV', 'Họ tên', 'Chức vụ', 'Phòng ban', 'SDT', 'Email']
                 EmployeeService.create(
                     username=vals[0].lower(), password='passemp',
                     full_name=vals[1], ma_nv=vals[0],
-                    chuc_vu=vals[2] or None, sdt=vals[3] or None, email=vals[4] or None,
+                    chuc_vu=vals[2] or None,
+                    phong_ban=vals[3] or None,
+                    sdt=vals[4] or None,
+                    email=vals[5] or None if len(vals) > 5 else None,
                 )
             else:
                 msg_warn(self, 'Lỗi', f'Role không hợp lệ: {role_name}')
@@ -10024,7 +10027,7 @@ class AdminWindow(QtWidgets.QWidget):
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddEmp')
         if btn_add:
             safe_connect(btn_add.clicked, lambda: self._admin_add_user('nhân viên', 5, 'tblAdmEmployees',
-                                                                       ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']))
+                                                                       ['Mã NV', 'Họ tên', 'Chức vụ', 'Phòng ban', 'SDT', 'Email']))
         # Them nut Bulk import NV CSV (idempotent)
         if not page.findChild(QtWidgets.QPushButton, 'btnImportEmpsCSV'):
             btn_imp = QtWidgets.QPushButton('📥 Import CSV', page)
