@@ -7274,11 +7274,19 @@ class AdminWindow(QtWidgets.QWidget):
         if not txt_code.text().strip() or not txt_name.text().strip():
             msg_warn(self, 'Thiếu', 'Mã khóa và tên môn không được trống')
             return
+        new_code = txt_code.text().strip().upper()
+        new_name = txt_name.text().strip()
+        # Pre-check duplicate ma_mon tu cache - tranh case API tra 409 voi msg
+        # backend kho hieu (vd 'duplicate key value violates unique constraint').
+        # Apply pattern dong bo voi pre-check ma_lop cua _admin_add_class.
+        if any(c[0] == new_code for c in MOCK_COURSES):
+            msg_warn(self, 'Trùng mã khoá',
+                     f'Mã khoá <b>{new_code}</b> đã tồn tại trong hệ thống.\n'
+                     'Vui lòng chọn mã khác (vd thêm số phiên bản: IT001A, IT001-2).')
+            return
         if not DB_AVAILABLE:
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
-        new_code = txt_code.text().upper().strip()
-        new_name = txt_name.text().strip()
         desc_text = txt_desc.toPlainText().strip()
         # Goi API TRUOC khi update UI
         try:
@@ -9652,10 +9660,16 @@ class AdminWindow(QtWidgets.QWidget):
             print(f'[ADM_ADD_CLS] load teachers loi: {e}')
         lich = QtWidgets.QLineEdit('T2 (7:00-9:30)')
         phong = QtWidgets.QLineEdit('P.?')
-        smax = QtWidgets.QSpinBox(); smax.setRange(10, 100); smax.setValue(40)
-        gia = QtWidgets.QSpinBox(); gia.setRange(500000, 10000000); gia.setSingleStep(100000); gia.setValue(2000000)
+        # Range dong bo voi _admin_edit_class:
+        # - smax: 1..200 (truoc 10..100 lam admin khong tao duoc lop nho 1on1
+        #   hoac lop dong > 100, va edit dialog da cho range nay)
+        # - gia: 0..100M (truoc 500k..10M chan lop cao cap > 10M, vd IELTS,
+        #   lop chuyen, edit dialog cho 0..100M)
+        # - so_buoi: 1..100 (truoc 4..60, edit cho 1..100)
+        smax = QtWidgets.QSpinBox(); smax.setRange(1, 200); smax.setValue(40)
+        gia = QtWidgets.QSpinBox(); gia.setRange(0, 100_000_000); gia.setSingleStep(100_000); gia.setValue(2_000_000)
         gia.setSuffix(' đ'); gia.setGroupSeparatorShown(True)
-        so_buoi = QtWidgets.QSpinBox(); so_buoi.setRange(4, 60); so_buoi.setValue(24)
+        so_buoi = QtWidgets.QSpinBox(); so_buoi.setRange(1, 100); so_buoi.setValue(24)
 
         form.addRow('Mã lớp (*):', ma)
         form.addRow('Khóa học (*):', cbo_mon)
@@ -9924,6 +9938,23 @@ class AdminWindow(QtWidgets.QWidget):
         if not DB_AVAILABLE:
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
+        # Pre-check duplicate ma_gv / ma_nv truoc POST. Khong co cache local nen
+        # phai goi *Service.get_by_code(). 404 = chua co (OK), object = trung.
+        # Dong bo voi pre-check ma_lop/ma_mon/MSV o cac dialog admin khac.
+        ma_code = widgets[0].text().strip().upper()
+        ma_label = 'Mã GV' if role_name == 'giảng viên' else 'Mã NV'
+        lookup_fn = (TeacherService.get_by_code if role_name == 'giảng viên'
+                     else EmployeeService.get_by_code)
+        try:
+            existing = lookup_fn(ma_code)
+            if existing:
+                msg_warn(self, f'Trùng {ma_label}',
+                         f'{ma_label} <b>{ma_code}</b> đã tồn tại trong hệ thống.\n'
+                         'Vui lòng chọn mã khác.')
+                return
+        except Exception as e:
+            if '404' not in str(e):
+                print(f'[ADM_ADD_USER] pre-check loi: {e}')
         # Goi API truoc khi update UI
         vals = [w.text().strip() for w in widgets]
         try:
