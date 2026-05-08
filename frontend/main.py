@@ -9727,7 +9727,7 @@ class AdminWindow(QtWidgets.QWidget):
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddTeacher')
         if btn_add:
             safe_connect(btn_add.clicked, lambda: self._admin_add_user('giảng viên', 4, 'tblAdmTeachers',
-                                                                       ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']))
+                                                                       ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT', 'Email']))
         # Them nut Bulk import GV CSV (idempotent)
         if not page.findChild(QtWidgets.QPushButton, 'btnImportTeachersCSV'):
             btn_imp = QtWidgets.QPushButton('📥 Import CSV', page)
@@ -9798,7 +9798,8 @@ class AdminWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle(f'Thêm {role_name}')
-        dlg.setFixedSize(380, 300)
+        # Height tinh theo so field de tranh cat khi caller pass nhieu field hon
+        dlg.setFixedSize(380, max(300, 100 + 40 * len(fields)))
         form = QtWidgets.QFormLayout(dlg)
         widgets = []
         for label in fields:
@@ -9838,11 +9839,12 @@ class AdminWindow(QtWidgets.QWidget):
         vals = [w.text().strip() for w in widgets]
         try:
             if role_name == 'giảng viên':
-                # fields = ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']
+                # fields = ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT', 'Email']
                 TeacherService.create(
                     username=vals[0].lower(), password='passtea',
                     full_name=vals[1], ma_gv=vals[0],
                     khoa=vals[2] or None, hoc_vi=vals[3] or None, sdt=vals[4] or None,
+                    email=vals[5] or None if len(vals) > 5 else None,
                 )
             elif role_name == 'nhân viên':
                 # fields = ['Mã NV', 'Họ tên', 'Chức vụ', 'SDT', 'Email']
