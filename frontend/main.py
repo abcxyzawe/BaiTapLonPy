@@ -7787,7 +7787,22 @@ class AdminWindow(QtWidgets.QWidget):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
         # Goi API truoc
-        msv_val = widgets['msv'].text().strip()
+        msv_val = widgets['msv'].text().strip().upper()
+        # Pre-check duplicate MSV - tranh case API tra 409 raw PG error sau POST.
+        # Apply pattern dong bo voi pre-check ma_lop / ma_mon tu cac dialog admin
+        # khac. Khong co cache MSV nen goi API: 404 = chua co (OK), object = trung
+        try:
+            existing = StudentService.get_by_msv(msv_val)
+            if existing:
+                msg_warn(self, 'Trùng MSV',
+                         f'MSV <b>{msv_val}</b> đã tồn tại trong hệ thống.\n'
+                         'Vui lòng kiểm tra lại hoặc dùng MSV khác.')
+                return
+        except Exception as e:
+            # 404 = chua co MSV (binh thuong, proceed). Loi khac (500/network)
+            # khong block dialog vi POST se tra error chi tiet hon
+            if '404' not in str(e):
+                print(f'[ADM_ADD_HV] pre-check loi: {e}')
         ngaysinh_val = widgets['ngaysinh'].date().toString('yyyy-MM-dd')
         gioitinh_val = widgets['gioitinh'].currentText().strip()
         diachi_val = widgets['diachi'].text().strip()
