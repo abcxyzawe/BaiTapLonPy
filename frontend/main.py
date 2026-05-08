@@ -7532,7 +7532,35 @@ class AdminWindow(QtWidgets.QWidget):
         # filter khong bao gio match -> chon khoa thi an HET hv.
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
         if cbo_d:
-            cbo_d.hide()  # An hoan toan thay vi hien filter ma khong work
+            # Truoc cbo bi hide hoan toan vi col 3 'khoa' la hardcode '—' khien
+            # filter luon match rong. Apply pattern dynamic giong _admin_filter_courses
+            # (Duc iter 28): derive khoa tu prefix cua ma_lop HV dang ky (col 2 =
+            # cac_lop chuoi 'IT001-A, MA002-B'). Filter logic update tuong ung.
+            cbo_d.show()
+            khoa_labels = {
+                'IT': 'Công nghệ thông tin (CNTT)',
+                'MA': 'Toán',
+                'EN': 'Ngoại ngữ',
+            }
+            unique_pref = set()
+            for row in data:
+                cac_lop = str(row[2]) if len(row) > 2 and row[2] else ''
+                for lop in cac_lop.split(','):
+                    lop = lop.strip()
+                    if lop and lop != '—' and len(lop) >= 2:
+                        unique_pref.add(lop[:2].upper())
+            cur_data = cbo_d.currentData() if cbo_d.count() > 0 else None
+            cbo_d.blockSignals(True)
+            cbo_d.clear()
+            cbo_d.addItem('Tất cả khoa', None)
+            for p in sorted(unique_pref):
+                cbo_d.addItem(khoa_labels.get(p, p), p)
+            if cur_data:
+                idx_r = cbo_d.findData(cur_data)
+                if idx_r > 0:
+                    cbo_d.setCurrentIndex(idx_r)
+            cbo_d.blockSignals(False)
+            safe_connect(cbo_d.currentIndexChanged, lambda: self._admin_filter_students())
         # Lop combo: populate tu cac lop thuc te HV dang ky (khong hardcode
         # 'CNTT-K20A'). Lay unique tu cot 2 (cac_lop) cua data.
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
@@ -7594,17 +7622,26 @@ class AdminWindow(QtWidgets.QWidget):
         page = self.page_widgets[3]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdminStudents')
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
         if not tbl:
             return
-        # Strip dau khi so sanh - cac_lop la chuoi 'IT001-A, IT002-B' nen
-        # check substring de khop ma_lop. Bo cbo_d (khoa) - student khong co
-        # khoa col, filter cu luon hide het rows
+        # Lop filter: substring match voi cac_lop chuoi 'IT001-A, IT002-B'.
+        # Khoa filter: prefix-based (currentData() set khi populate o _fill).
+        # Hai filter combine voi AND (HV phai dat ca 2 dieu kien).
         lop_sel = _status_normalize(cbo_c.currentText()) if cbo_c and cbo_c.currentIndex() > 0 else None
+        khoa_pref = cbo_d.currentData() if cbo_d and cbo_d.currentIndex() > 0 else None
         for r in range(tbl.rowCount()):
             it_lop = tbl.item(r, 2)
             show = True
-            if lop_sel and it_lop and lop_sel not in _status_normalize(it_lop.text()):
+            cac_lop_txt = it_lop.text() if it_lop else ''
+            if lop_sel and lop_sel not in _status_normalize(cac_lop_txt):
                 show = False
+            if show and khoa_pref:
+                # Match neu it nhat 1 lop trong cac_lop bat dau bang prefix
+                show = any(
+                    lop.strip().upper().startswith(khoa_pref)
+                    for lop in cac_lop_txt.split(',') if lop.strip()
+                )
             tbl.setRowHidden(r, not show)
 
     def _admin_import_students_csv(self):
