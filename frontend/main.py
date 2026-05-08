@@ -7325,25 +7325,28 @@ class AdminWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle(f'Sửa khóa học - {ma}')
-        dlg.setFixedSize(440, 440)
+        dlg.setFixedSize(440, 340)
         form = QtWidgets.QFormLayout(dlg)
         txt_code = QtWidgets.QLineEdit(tbl.item(target_row, 0).text() if tbl.item(target_row, 0) else ma)
         txt_code.setReadOnly(True)  # Khong cho sua ma_mon (la PK)
         txt_code.setStyleSheet('background: #f7fafc; color: #718096;')
         txt_name = QtWidgets.QLineEdit(tbl.item(target_row, 1).text() if tbl.item(target_row, 1) else nm)
-        txt_tc = QtWidgets.QLineEdit(tbl.item(target_row, 2).text() if tbl.item(target_row, 2) else '3')
-        txt_gv = QtWidgets.QLineEdit(tbl.item(target_row, 3).text() if tbl.item(target_row, 3) else '')
-        txt_lich = QtWidgets.QLineEdit(tbl.item(target_row, 4).text() if tbl.item(target_row, 4) else '')
         # Mo ta: pre-fill tu DB
         txt_desc = QtWidgets.QTextEdit()
-        txt_desc.setFixedHeight(100)
+        txt_desc.setFixedHeight(120)
         txt_desc.setPlainText(cur_mo_ta)
         txt_desc.setPlaceholderText('Mô tả khoá học...')
         form.addRow('Mã khóa:', txt_code)
         form.addRow('Tên khóa:', txt_name)
-        form.addRow('Số buổi:', txt_tc)
-        form.addRow('GV phụ trách:', txt_gv)
-        form.addRow('Lịch học:', txt_lich)
+        # Schema 'courses' chi co (ma_mon, ten_mon, mo_ta). So buoi/GV/Lich la
+        # aggregate hien thi tu cac 'classes', khong phai attribute course ->
+        # sua o day khong co y nghia. Sua tung lop qua dialog 'Sua lop'.
+        hint = QtWidgets.QLabel(
+            '<i style="color:#718096; font-size:11px;">'
+            'Số buổi, giảng viên, lịch học sửa ở từng lớp (trang Quản lý lớp).</i>'
+        )
+        hint.setWordWrap(True)
+        form.addRow('', hint)
         form.addRow('Mô tả:', txt_desc)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
@@ -7359,14 +7362,7 @@ class AdminWindow(QtWidgets.QWidget):
         if not DB_AVAILABLE:
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
-        # mo_ta: dung text user nhap, fallback metadata neu rong
         new_desc = txt_desc.toPlainText().strip()
-        if not new_desc:
-            new_desc = f'Số buổi: {txt_tc.text() or 3}'
-            if txt_gv.text().strip():
-                new_desc += f'. GV: {txt_gv.text().strip()}'
-            if txt_lich.text().strip():
-                new_desc += f'. Lịch: {txt_lich.text().strip()}'
         try:
             CourseService.update_course(ma, ten_mon=new_name, mo_ta=new_desc)
         except Exception as e:
