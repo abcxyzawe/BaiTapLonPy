@@ -4134,7 +4134,7 @@ class MainWindow(QtWidgets.QWidget):
         banner.setToolTip('Liên hệ nhân viên để thanh toán học phí. Click để xem chi tiết bảng dưới.')
 
         text = (f'💳  Bạn có <b>{n_pending}</b> lớp <b>chờ thanh toán</b>  ·  '
-                f'tổng <b style="color:#9a3412;">{fmt_vnd(total_fee, suffix="đ")}</b>'
+                f'tổng <b style="color:#9a3412;">{fmt_vnd(total_fee)}</b>'
                 f'  ·  liên hệ Nhân viên để thanh toán')
 
         lbl = QtWidgets.QLabel(text, banner)
@@ -6186,7 +6186,7 @@ class MainWindow(QtWidgets.QWidget):
         stats = [
             (20, 42, '📚 Lớp đăng ký', f'{n_total}', '#002060'),
             (210, 42, '✅ Hoàn thành', f'{n_done}', '#166534'),
-            (20, 85, '💰 Tổng học phí', fmt_vnd(total_fee, suffix='đ'), '#c05621'),
+            (20, 85, '💰 Tổng học phí', fmt_vnd(total_fee), '#c05621'),
             (210, 85, '⭐ Điểm TB', f'{gpa:.2f}/10' if gpa_list else '—', '#7c3aed'),
         ]
         for x, y, label, val, color in stats:
@@ -7551,7 +7551,35 @@ class AdminWindow(QtWidgets.QWidget):
         # filter khong bao gio match -> chon khoa thi an HET hv.
         cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
         if cbo_d:
-            cbo_d.hide()  # An hoan toan thay vi hien filter ma khong work
+            # Truoc cbo bi hide hoan toan vi col 3 'khoa' la hardcode '—' khien
+            # filter luon match rong. Apply pattern dynamic giong _admin_filter_courses
+            # (Duc iter 28): derive khoa tu prefix cua ma_lop HV dang ky (col 2 =
+            # cac_lop chuoi 'IT001-A, MA002-B'). Filter logic update tuong ung.
+            cbo_d.show()
+            khoa_labels = {
+                'IT': 'Công nghệ thông tin (CNTT)',
+                'MA': 'Toán',
+                'EN': 'Ngoại ngữ',
+            }
+            unique_pref = set()
+            for row in data:
+                cac_lop = str(row[2]) if len(row) > 2 and row[2] else ''
+                for lop in cac_lop.split(','):
+                    lop = lop.strip()
+                    if lop and lop != '—' and len(lop) >= 2:
+                        unique_pref.add(lop[:2].upper())
+            cur_data = cbo_d.currentData() if cbo_d.count() > 0 else None
+            cbo_d.blockSignals(True)
+            cbo_d.clear()
+            cbo_d.addItem('Tất cả khoa', None)
+            for p in sorted(unique_pref):
+                cbo_d.addItem(khoa_labels.get(p, p), p)
+            if cur_data:
+                idx_r = cbo_d.findData(cur_data)
+                if idx_r > 0:
+                    cbo_d.setCurrentIndex(idx_r)
+            cbo_d.blockSignals(False)
+            safe_connect(cbo_d.currentIndexChanged, lambda: self._admin_filter_students())
         # Lop combo: populate tu cac lop thuc te HV dang ky (khong hardcode
         # 'CNTT-K20A'). Lay unique tu cot 2 (cac_lop) cua data.
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
@@ -7613,17 +7641,26 @@ class AdminWindow(QtWidgets.QWidget):
         page = self.page_widgets[3]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdminStudents')
         cbo_c = page.findChild(QtWidgets.QComboBox, 'cboFilterClass')
+        cbo_d = page.findChild(QtWidgets.QComboBox, 'cboFilterDeptSt')
         if not tbl:
             return
-        # Strip dau khi so sanh - cac_lop la chuoi 'IT001-A, IT002-B' nen
-        # check substring de khop ma_lop. Bo cbo_d (khoa) - student khong co
-        # khoa col, filter cu luon hide het rows
+        # Lop filter: substring match voi cac_lop chuoi 'IT001-A, IT002-B'.
+        # Khoa filter: prefix-based (currentData() set khi populate o _fill).
+        # Hai filter combine voi AND (HV phai dat ca 2 dieu kien).
         lop_sel = _status_normalize(cbo_c.currentText()) if cbo_c and cbo_c.currentIndex() > 0 else None
+        khoa_pref = cbo_d.currentData() if cbo_d and cbo_d.currentIndex() > 0 else None
         for r in range(tbl.rowCount()):
             it_lop = tbl.item(r, 2)
             show = True
-            if lop_sel and it_lop and lop_sel not in _status_normalize(it_lop.text()):
+            cac_lop_txt = it_lop.text() if it_lop else ''
+            if lop_sel and lop_sel not in _status_normalize(cac_lop_txt):
                 show = False
+            if show and khoa_pref:
+                # Match neu it nhat 1 lop trong cac_lop bat dau bang prefix
+                show = any(
+                    lop.strip().upper().startswith(khoa_pref)
+                    for lop in cac_lop_txt.split(',') if lop.strip()
+                )
             tbl.setRowHidden(r, not show)
 
     def _admin_import_students_csv(self):
@@ -8004,6 +8041,15 @@ class AdminWindow(QtWidgets.QWidget):
         if not (DB_AVAILABLE and SemesterService):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
+        sem_id_val = ma.text().strip()
+        # Pre-check duplicate sem_id tu cache MOCK_SEM_STATUS - tranh case API
+        # tra 409 raw PG error sau POST. Apply pattern dong bo voi pre-check
+        # ma_lop / ma_mon / ma_gv / MSV cua cac dialog admin khac.
+        if sem_id_val in MOCK_SEM_STATUS:
+            msg_warn(self, 'Trùng mã đợt',
+                     f'Mã đợt <b>{sem_id_val}</b> đã tồn tại trong hệ thống.\n'
+                     'Vui lòng chọn mã khác (vd thêm hậu tố -A/-2: DOT1-2026-A).')
+            return
         bd_date = bd.date().toPyDate()
         kt_date = kt.date().toPyDate()
         # kt_min da dam bao kt > bd, nhung giu check cho safety
@@ -8013,7 +8059,7 @@ class AdminWindow(QtWidgets.QWidget):
         # Goi API truoc
         try:
             SemesterService.create(
-                sem_id=ma.text().strip(), ten=ten.text().strip(), nam_hoc=nam.text().strip(),
+                sem_id=sem_id_val, ten=ten.text().strip(), nam_hoc=nam.text().strip(),
                 bat_dau=bd_date, ket_thuc=kt_date, trang_thai='open'
             )
         except Exception as e:
@@ -9430,7 +9476,7 @@ class AdminWindow(QtWidgets.QWidget):
             items = [str(r + 1), row.get('ma_lop', ''), row.get('ma_mon', ''),
                      row.get('gv_id', '') or '—', row.get('lich', '') or '—',
                      row.get('phong', '') or '—', row.get('siso_max', '40'),
-                     fmt_vnd(row.get('gia', 0) or 0, suffix='đ')]
+                     fmt_vnd(row.get('gia', 0) or 0)]
             for c, val in enumerate(items):
                 tbl.setItem(r, c, QtWidgets.QTableWidgetItem(str(val)))
         for c, w in enumerate([35, 90, 80, 70, 130, 80, 80, 130]):
@@ -14612,7 +14658,7 @@ class EmployeeWindow(QtWidgets.QWidget):
                     suffix = '  ⛔ ĐÃ ĐẦY'
                 else:
                     suffix = f'  ({cho_trong} chỗ trống)' if cho_trong > 0 else ''
-                cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8], suffix="đ")}){suffix}')
+                cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8])}){suffix}')
                 # Disable item neu lop day -> NV khong the chon
                 if is_full:
                     last_idx = cbo_cls.count() - 1
@@ -14660,7 +14706,7 @@ class EmployeeWindow(QtWidgets.QWidget):
                 suffix = '  ⛔ ĐÃ ĐẦY'
             else:
                 suffix = f'  ({cho_trong} chỗ trống)' if cho_trong > 0 else ''
-            cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8], suffix="đ")}){suffix}')
+            cbo_cls.addItem(f'{cls[0]} — {cls[3]} ({fmt_vnd(cls[8])}){suffix}')
             if is_full:
                 last_idx = cbo_cls.count() - 1
                 item = cbo_cls.model().item(last_idx)
@@ -14721,7 +14767,7 @@ class EmployeeWindow(QtWidgets.QWidget):
             f'<b>Giảng viên:</b> {gv or "—"}<br>'
             f'<b>Lịch học:</b> {lich or "—"}  ·  <b>Phòng:</b> {phong or "—"}<br>'
             f'<b>Sĩ số:</b> {siso_html}  ·  '
-            f'<b>Học phí:</b> <span style="color:#c05621;">{fmt_vnd(gia, suffix="đ")}</span>'
+            f'<b>Học phí:</b> <span style="color:#c05621;">{fmt_vnd(gia)}</span>'
         )
         lbl.setText(info)
 
@@ -14764,6 +14810,13 @@ class EmployeeWindow(QtWidgets.QWidget):
             if w:
                 w.setText(val)
         msg_info(self, 'Tra cứu', f'Đã tìm thấy: {ten}')
+        # Sau lookup OK, focus chuyen sang cboCourse (next step trong flow:
+        # MSV -> Enter -> lookup -> chon khoa hoc -> chon lop -> Dang ky).
+        # Dong bo voi commit Duc iter 24 (focus MSV sau reset) tao luong UX
+        # day du keyboard cho NV
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboCourse')
+        if cbo_c:
+            cbo_c.setFocus()
 
     def _emp_do_register(self):
         page = self.page_widgets[1]
@@ -15919,7 +15972,7 @@ class EmployeeWindow(QtWidgets.QWidget):
         stats = [
             (20, 42, '📝 Đăng ký xử lý', f'{n_reg}', '#002060'),
             (210, 42, '💵 TT đã xác nhận', f'{n_pay}', '#166534'),
-            (20, 85, '💰 Tổng thu', fmt_vnd(total_rev, suffix='đ'), '#c05621'),
+            (20, 85, '💰 Tổng thu', fmt_vnd(total_rev), '#c05621'),
             (210, 85, '📈 TB 30 ngày', avg_str, '#7c3aed'),
         ]
         for x, y, label, val, color in stats:
