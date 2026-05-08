@@ -14754,6 +14754,13 @@ class EmployeeWindow(QtWidgets.QWidget):
             if w:
                 w.setText(val)
         msg_info(self, 'Tra cứu', f'Đã tìm thấy: {ten}')
+        # Sau lookup OK, focus chuyen sang cboCourse (next step trong flow:
+        # MSV -> Enter -> lookup -> chon khoa hoc -> chon lop -> Dang ky).
+        # Dong bo voi commit Duc iter 24 (focus MSV sau reset) tao luong UX
+        # day du keyboard cho NV
+        cbo_c = page.findChild(QtWidgets.QComboBox, 'cboCourse')
+        if cbo_c:
+            cbo_c.setFocus()
 
     def _emp_do_register(self):
         page = self.page_widgets[1]
