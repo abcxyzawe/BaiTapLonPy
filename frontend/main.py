@@ -3,8 +3,8 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt5 import QtWidgets, uic, QtCore
-from PyQt5.QtGui import QPixmap, QIcon, QColor, QFont
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtGui import QPixmap, QIcon, QColor, QFont, QDoubleValidator
+from PyQt5.QtCore import Qt, QDate, QLocale
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
 
@@ -1862,6 +1862,15 @@ class _GradeEditorDelegate(QtWidgets.QStyledItemDelegate):
             'padding: 6px 10px; }'
         )
         ed.setAlignment(Qt.AlignCenter)
+        # Validator chan input: chi cho [0, 10] voi 2 chu so thap phan.
+        # Truoc user nhap dc 12 hoac chu cai -> _recalc_grade_row tinh TK sai
+        # cho den khi bam Save moi bao loi. Validator chan tu goc o moi cell QT/Thi/CC.
+        validator = QDoubleValidator(0.0, 10.0, 2, ed)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        # Locale C: dau cham la separator thap phan, nhat quan voi cach _recalc parse
+        validator.setLocale(QLocale.c())
+        ed.setValidator(validator)
+        ed.setMaxLength(5)  # '10.00' la 5 ky tu, du
         return ed
 
     def updateEditorGeometry(self, editor, option, index):
