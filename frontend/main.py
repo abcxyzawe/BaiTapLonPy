@@ -3,8 +3,8 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt5 import QtWidgets, uic, QtCore
-from PyQt5.QtGui import QPixmap, QIcon, QColor, QFont
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtGui import QPixmap, QIcon, QColor, QFont, QDoubleValidator
+from PyQt5.QtCore import Qt, QDate, QLocale
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
 
@@ -1862,6 +1862,15 @@ class _GradeEditorDelegate(QtWidgets.QStyledItemDelegate):
             'padding: 6px 10px; }'
         )
         ed.setAlignment(Qt.AlignCenter)
+        # Validator chan input: chi cho [0, 10] voi 2 chu so thap phan.
+        # Truoc user nhap dc 12 hoac chu cai -> _recalc_grade_row tinh TK sai
+        # cho den khi bam Save moi bao loi. Validator chan tu goc o moi cell QT/Thi/CC.
+        validator = QDoubleValidator(0.0, 10.0, 2, ed)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        # Locale C: dau cham la separator thap phan, nhat quan voi cach _recalc parse
+        validator.setLocale(QLocale.c())
+        ed.setValidator(validator)
+        ed.setMaxLength(5)  # '10.00' la 5 ky tu, du
         return ed
 
     def updateEditorGeometry(self, editor, option, index):
@@ -9803,7 +9812,7 @@ class AdminWindow(QtWidgets.QWidget):
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddTeacher')
         if btn_add:
             safe_connect(btn_add.clicked, lambda: self._admin_add_user('giảng viên', 4, 'tblAdmTeachers',
-                                                                       ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']))
+                                                                       ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT', 'Email']))
         # Them nut Bulk import GV CSV (idempotent)
         if not page.findChild(QtWidgets.QPushButton, 'btnImportTeachersCSV'):
             btn_imp = QtWidgets.QPushButton('📥 Import CSV', page)
@@ -9874,7 +9883,8 @@ class AdminWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle(f'Thêm {role_name}')
-        dlg.setFixedSize(380, 300)
+        # Height tinh theo so field de tranh cat khi caller pass nhieu field hon
+        dlg.setFixedSize(380, max(300, 100 + 40 * len(fields)))
         form = QtWidgets.QFormLayout(dlg)
         widgets = []
         for label in fields:
@@ -9914,11 +9924,12 @@ class AdminWindow(QtWidgets.QWidget):
         vals = [w.text().strip() for w in widgets]
         try:
             if role_name == 'giảng viên':
-                # fields = ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT']
+                # fields = ['Mã GV', 'Họ tên', 'Khoa', 'Học vị', 'SDT', 'Email']
                 TeacherService.create(
                     username=vals[0].lower(), password='passtea',
                     full_name=vals[1], ma_gv=vals[0],
                     khoa=vals[2] or None, hoc_vi=vals[3] or None, sdt=vals[4] or None,
+                    email=vals[5] or None if len(vals) > 5 else None,
                 )
             elif role_name == 'nhân viên':
                 # fields = ['Mã NV', 'Họ tên', 'Chức vụ', 'Phòng ban', 'SDT', 'Email']
@@ -13255,6 +13266,10 @@ class TeacherWindow(QtWidgets.QWidget):
         except Exception as e:
             msg_warn(self, 'Lỗi tải', api_error_msg(e))
             return
+        # Apply filter lop neu dang loc - dong bo voi cach lich tuan render tren UI
+        sel_lop = getattr(self, '_tea_sched_filter', None)
+        if sel_lop:
+            schedules = [r for r in schedules if r.get('lop_id') == sel_lop]
         gv_code = MOCK_TEACHER.get('id', 'GV')
         name = MOCK_TEACHER.get('name', '') or ''
         fname = f'LichDay_{gv_code}_{monday.toString("yyyyMMdd")}.pdf'
