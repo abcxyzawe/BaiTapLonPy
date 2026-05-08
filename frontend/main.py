@@ -7985,6 +7985,15 @@ class AdminWindow(QtWidgets.QWidget):
         if not (DB_AVAILABLE and SemesterService):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
+        sem_id_val = ma.text().strip()
+        # Pre-check duplicate sem_id tu cache MOCK_SEM_STATUS - tranh case API
+        # tra 409 raw PG error sau POST. Apply pattern dong bo voi pre-check
+        # ma_lop / ma_mon / ma_gv / MSV cua cac dialog admin khac.
+        if sem_id_val in MOCK_SEM_STATUS:
+            msg_warn(self, 'Trùng mã đợt',
+                     f'Mã đợt <b>{sem_id_val}</b> đã tồn tại trong hệ thống.\n'
+                     'Vui lòng chọn mã khác (vd thêm hậu tố -A/-2: DOT1-2026-A).')
+            return
         bd_date = bd.date().toPyDate()
         kt_date = kt.date().toPyDate()
         # kt_min da dam bao kt > bd, nhung giu check cho safety
@@ -7994,7 +8003,7 @@ class AdminWindow(QtWidgets.QWidget):
         # Goi API truoc
         try:
             SemesterService.create(
-                sem_id=ma.text().strip(), ten=ten.text().strip(), nam_hoc=nam.text().strip(),
+                sem_id=sem_id_val, ten=ten.text().strip(), nam_hoc=nam.text().strip(),
                 bat_dau=bd_date, ket_thuc=kt_date, trang_thai='open'
             )
         except Exception as e:
