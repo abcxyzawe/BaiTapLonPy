@@ -9652,10 +9652,16 @@ class AdminWindow(QtWidgets.QWidget):
             print(f'[ADM_ADD_CLS] load teachers loi: {e}')
         lich = QtWidgets.QLineEdit('T2 (7:00-9:30)')
         phong = QtWidgets.QLineEdit('P.?')
-        smax = QtWidgets.QSpinBox(); smax.setRange(10, 100); smax.setValue(40)
-        gia = QtWidgets.QSpinBox(); gia.setRange(500000, 10000000); gia.setSingleStep(100000); gia.setValue(2000000)
+        # Range dong bo voi _admin_edit_class:
+        # - smax: 1..200 (truoc 10..100 lam admin khong tao duoc lop nho 1on1
+        #   hoac lop dong > 100, va edit dialog da cho range nay)
+        # - gia: 0..100M (truoc 500k..10M chan lop cao cap > 10M, vd IELTS,
+        #   lop chuyen, edit dialog cho 0..100M)
+        # - so_buoi: 1..100 (truoc 4..60, edit cho 1..100)
+        smax = QtWidgets.QSpinBox(); smax.setRange(1, 200); smax.setValue(40)
+        gia = QtWidgets.QSpinBox(); gia.setRange(0, 100_000_000); gia.setSingleStep(100_000); gia.setValue(2_000_000)
         gia.setSuffix(' đ'); gia.setGroupSeparatorShown(True)
-        so_buoi = QtWidgets.QSpinBox(); so_buoi.setRange(4, 60); so_buoi.setValue(24)
+        so_buoi = QtWidgets.QSpinBox(); so_buoi.setRange(1, 100); so_buoi.setValue(24)
 
         form.addRow('Mã lớp (*):', ma)
         form.addRow('Khóa học (*):', cbo_mon)
