@@ -8161,7 +8161,13 @@ class AdminWindow(QtWidgets.QWidget):
         txt_stt.setStyleSheet('background: #f7fafc; color: #718096;')
         txt_code = QtWidgets.QLineEdit(cur[1])
         txt_name = QtWidgets.QLineEdit(cur[2])
-        txt_tc = QtWidgets.QLineEdit(cur[3])
+        # So buoi: spinbox - tranh user go chu cai roi catch ValueError sau Save
+        spin_tc = QtWidgets.QSpinBox()
+        spin_tc.setRange(1, 10)
+        try:
+            spin_tc.setValue(int(cur[3]))
+        except (ValueError, TypeError):
+            spin_tc.setValue(3)
         cbo_loai = QtWidgets.QComboBox()
         cbo_loai.addItems(['Cơ bản', 'Nâng cao', 'Định hướng'])
         if cur[4] in ['Cơ bản', 'Nâng cao', 'Định hướng']:
@@ -8179,7 +8185,7 @@ class AdminWindow(QtWidgets.QWidget):
         form.addRow('STT:', txt_stt)
         form.addRow('Mã khoá:', txt_code)
         form.addRow('Tên khoá:', txt_name)
-        form.addRow('Số buổi:', txt_tc)
+        form.addRow('Số buổi:', spin_tc)
         form.addRow('Loại:', cbo_loai)
         form.addRow('Đợt:', cbo_dot)
         form.addRow('Yêu cầu trình độ:', txt_prereq)
@@ -8192,13 +8198,8 @@ class AdminWindow(QtWidgets.QWidget):
         if not txt_code.text().strip() or not txt_name.text().strip():
             msg_warn(self, 'Thiếu', 'Mã khóa và tên môn không được trống')
             return
-        try:
-            int(txt_tc.text())
-        except ValueError:
-            msg_warn(self, 'Sai dữ liệu', 'Số buổi phải là số')
-            return
         type_colors = {'Cơ bản': COLORS['navy'], 'Nâng cao': COLORS['green'], 'Định hướng': COLORS['gold']}
-        new_vals = [cur[0], txt_code.text().upper(), txt_name.text(), txt_tc.text(),
+        new_vals = [cur[0], txt_code.text().upper(), txt_name.text(), str(spin_tc.value()),
                     cbo_loai.currentText(), cbo_dot.currentText().strip() or '—',
                     txt_prereq.text().strip() or '—']
 
@@ -8309,7 +8310,10 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_mon = QtWidgets.QComboBox()
         for c in available_courses:
             cbo_mon.addItem(f"{c['ma_mon']} - {c.get('ten_mon', '')}", c['ma_mon'])
-        txt_tc = QtWidgets.QLineEdit('3')
+        # So buoi: spinbox de chan input ngoai range va khong cho go chu
+        spin_tc = QtWidgets.QSpinBox()
+        spin_tc.setRange(1, 10)
+        spin_tc.setValue(3)
         cbo_loai = QtWidgets.QComboBox(); cbo_loai.addItems(['Cơ bản', 'Nâng cao', 'Định hướng'])
         # Dot: editable combo - admin co the chon dot co san hoac nhap moi (vd "Mua he 2026")
         cbo_dot = QtWidgets.QComboBox()
@@ -8320,7 +8324,7 @@ class AdminWindow(QtWidgets.QWidget):
         txt_prereq = QtWidgets.QLineEdit()
         txt_prereq.setPlaceholderText('VD: IT001 (để trống nếu không có)')
         form.addRow('Khoá học:', cbo_mon)
-        form.addRow('Số buổi:', txt_tc)
+        form.addRow('Số buổi:', spin_tc)
         form.addRow('Loại:', cbo_loai)
         form.addRow('Đợt:', cbo_dot)
         form.addRow('Yêu cầu trình độ:', txt_prereq)
@@ -8330,14 +8334,7 @@ class AdminWindow(QtWidgets.QWidget):
         cbo_mon.setFocus()  # auto-focus first field
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
-        # Validate tin_chi
-        try:
-            tin_chi_n = int(txt_tc.text().strip())
-            if tin_chi_n < 1 or tin_chi_n > 10:
-                raise ValueError()
-        except ValueError:
-            msg_warn(self, 'Sai dữ liệu', 'Số buổi phải là số từ 1-10')
-            return
+        tin_chi_n = spin_tc.value()
         if not (DB_AVAILABLE and CurriculumService):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
             return
@@ -13751,10 +13748,11 @@ class TeacherWindow(QtWidgets.QWidget):
             except Exception as e:
                 print(f'[TEA_EXAM] loi load lop: {e}')
 
-        # Ngay thi
+        # Ngay thi - khoa min = today de tranh GV vo tinh tao lich thi qua khu
         from PyQt5.QtCore import QDate, QTime
         dt_ngay = QtWidgets.QDateEdit()
         dt_ngay.setCalendarPopup(True)
+        dt_ngay.setMinimumDate(QDate.currentDate())
         dt_ngay.setDate(QDate.currentDate().addDays(14))
         dt_ngay.setDisplayFormat('dd/MM/yyyy')
 
@@ -13774,12 +13772,33 @@ class TeacherWindow(QtWidgets.QWidget):
         time_kt = QtWidgets.QTimeEdit(QTime(9, 0))
         time_kt.setDisplayFormat('HH:mm')
 
+        # Auto sync time_kt min = time_bd + 30p khi user keo time_bd, tranh
+        # case time_kt < time_bd. Dong bo voi dialog 'Tao buoi hoc' (Quanghuy fix
+        # iter truoc). Disconnect tam khi cbo_ca trigger setTime de tranh recursion
+        _suppress_kt_sync = [False]
+        def _sync_time_kt_min(t):
+            if _suppress_kt_sync[0]:
+                return
+            min_kt = t.addSecs(30 * 60)
+            time_kt.setMinimumTime(min_kt)
+            if time_kt.time() < min_kt:
+                time_kt.setTime(min_kt)
+        time_bd.timeChanged.connect(_sync_time_kt_min)
+
         def on_ca_changed(idx):
             t = ca_times.get(idx, ('07:30', '09:00'))
             h_bd, m_bd = map(int, t[0].split(':'))
             h_kt, m_kt = map(int, t[1].split(':'))
+            # Suppress sync de set time_bd KHONG keo time_kt theo (cbo da
+            # cap nhat cap gio chuan cua ca, khong can clamp them)
+            _suppress_kt_sync[0] = True
+            time_bd.setMinimumTime(QTime(0, 0))
+            time_kt.setMinimumTime(QTime(0, 0))
             time_bd.setTime(QTime(h_bd, m_bd))
             time_kt.setTime(QTime(h_kt, m_kt))
+            _suppress_kt_sync[0] = False
+            # Re-arm constraint cho lan keo tay tiep theo
+            time_kt.setMinimumTime(time_bd.time().addSecs(30 * 60))
         cbo_ca.currentIndexChanged.connect(on_ca_changed)
 
         # Phong
@@ -13822,6 +13841,12 @@ class TeacherWindow(QtWidgets.QWidget):
             return
         if cbo_lop.currentIndex() == 0:
             msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
+            return
+        # Validate gio bat dau < gio ket thuc - user co the chinh tay sau khi
+        # chon ca khien gio kt < bd (vd ca 1 07:30-09:00 nhung gv keo time_kt
+        # ve 07:00 -> exam invalid)
+        if time_bd.time() >= time_kt.time():
+            msg_warn(self, 'Sai giờ', 'Giờ bắt đầu phải nhỏ hơn giờ kết thúc.')
             return
         # Map hinh thuc VN -> ASCII (DB schema dung Tu luan/Trac nghiem)
         ht_map = {'Trắc nghiệm': 'Trac nghiem', 'Tự luận': 'Tu luan',
