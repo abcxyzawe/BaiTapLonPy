@@ -7082,8 +7082,28 @@ class AdminWindow(QtWidgets.QWidget):
             safe_connect(btn_s.clicked, lambda: table_filter(tbl, txt.text(), cols=[0, 1, 3]))
         cbo = page.findChild(QtWidgets.QComboBox, 'cboFilterDept')
         if cbo:
+            # Populate dynamic theo unique prefix tu ma_mon trong data thuc te.
+            # Truoc hardcode 4 items va idx-based map -> admin them ma_mon prefix
+            # moi (vd 'VS' / 'BS') khong filter duoc.
+            khoa_labels = {
+                'IT': 'Công nghệ thông tin (CNTT)',
+                'MA': 'Toán',
+                'EN': 'Ngoại ngữ',
+            }
+            cur_data = cbo.currentData() if cbo.count() > 0 else None
+            cbo.blockSignals(True)
             cbo.clear()
-            cbo.addItems(['Tất cả khoa', 'Công nghệ thông tin (CNTT)', 'Toán', 'Ngoại ngữ'])
+            cbo.addItem('Tất cả khoa', None)
+            unique_pref = sorted({(row[0] or '')[:2].upper() for row in data if row and row[0]})
+            for p in unique_pref:
+                label = khoa_labels.get(p, p)  # fallback hien luon prefix neu khong co label
+                cbo.addItem(label, p)
+            # Restore lua chon cu neu con ton tai
+            if cur_data:
+                idx_r = cbo.findData(cur_data)
+                if idx_r > 0:
+                    cbo.setCurrentIndex(idx_r)
+            cbo.blockSignals(False)
             safe_connect(cbo.currentIndexChanged, lambda: self._admin_filter_courses())
         btn_add = page.findChild(QtWidgets.QPushButton, 'btnAddCourse')
         if btn_add:
@@ -7227,16 +7247,15 @@ class AdminWindow(QtWidgets.QWidget):
         cbo = page.findChild(QtWidgets.QComboBox, 'cboFilterDept')
         if not tbl or not cbo:
             return
-        if cbo.currentIndex() == 0:
-            for r in range(tbl.rowCount()):
-                tbl.setRowHidden(r, False)
-            return
-        # map khoa -> prefix ma mon
-        prefix_map = {1: 'IT', 2: 'MA', 3: 'EN'}
-        prefix = prefix_map.get(cbo.currentIndex())
+        # Lay prefix tu cbo.currentData() (set khi populate o _fill_admin_courses).
+        # Khong dung idx hardcode map vi cbo gio populate dynamic theo data thuc.
+        prefix = cbo.currentData()
         for r in range(tbl.rowCount()):
+            if not prefix:
+                tbl.setRowHidden(r, False)
+                continue
             it = tbl.item(r, 0)
-            show = prefix is None or (it and it.text().startswith(prefix))
+            show = bool(it and it.text().upper().startswith(prefix))
             tbl.setRowHidden(r, not show)
 
     def _admin_add_course(self):
