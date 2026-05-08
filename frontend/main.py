@@ -7243,22 +7243,27 @@ class AdminWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle('Thêm khóa học')
-        dlg.setFixedSize(440, 380)
+        dlg.setFixedSize(440, 320)
         form = QtWidgets.QFormLayout(dlg)
         txt_code = QtWidgets.QLineEdit()
         txt_code.setPlaceholderText('VD: IT001')
         txt_name = QtWidgets.QLineEdit()
         txt_name.setPlaceholderText('VD: Lập trình Python cơ bản')
-        txt_tc = QtWidgets.QLineEdit('3')
-        txt_gv = QtWidgets.QLineEdit()
         # Mo ta thuc - QTextEdit cho phep multi-line
         txt_desc = QtWidgets.QTextEdit()
-        txt_desc.setFixedHeight(90)
+        txt_desc.setFixedHeight(110)
         txt_desc.setPlaceholderText('Mô tả ngắn về khoá học (đối tượng, kỹ năng, ứng dụng)...')
         form.addRow('Mã khóa:', txt_code)
         form.addRow('Tên khóa:', txt_name)
-        form.addRow('Số buổi:', txt_tc)
-        form.addRow('GV phụ trách:', txt_gv)
+        # Schema 'courses' chi co (ma_mon, ten_mon, mo_ta). So buoi va GV thuoc
+        # 'classes' (1 course chay nhieu lop, moi lop GV/so buoi rieng) -> tach
+        # ra dialog 'Them lop' khi admin tao lop tu course nay.
+        hint = QtWidgets.QLabel(
+            '<i style="color:#718096; font-size:11px;">'
+            'Số buổi & giảng viên sẽ chọn khi tạo từng lớp cho khoá này.</i>'
+        )
+        hint.setWordWrap(True)
+        form.addRow('', hint)
         form.addRow('Mô tả:', txt_desc)
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
@@ -7274,12 +7279,7 @@ class AdminWindow(QtWidgets.QWidget):
             return
         new_code = txt_code.text().upper().strip()
         new_name = txt_name.text().strip()
-        # Mo ta: dung text user nhap (multi-line). Fallback format cu neu rong.
         desc_text = txt_desc.toPlainText().strip()
-        if not desc_text:
-            desc_text = f'Số buổi: {txt_tc.text() or 3}'
-            if txt_gv.text().strip():
-                desc_text += f'. GV: {txt_gv.text().strip()}'
         # Goi API TRUOC khi update UI
         try:
             CourseService.create_course(
