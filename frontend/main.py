@@ -13775,12 +13775,33 @@ class TeacherWindow(QtWidgets.QWidget):
         time_kt = QtWidgets.QTimeEdit(QTime(9, 0))
         time_kt.setDisplayFormat('HH:mm')
 
+        # Auto sync time_kt min = time_bd + 30p khi user keo time_bd, tranh
+        # case time_kt < time_bd. Dong bo voi dialog 'Tao buoi hoc' (Quanghuy fix
+        # iter truoc). Disconnect tam khi cbo_ca trigger setTime de tranh recursion
+        _suppress_kt_sync = [False]
+        def _sync_time_kt_min(t):
+            if _suppress_kt_sync[0]:
+                return
+            min_kt = t.addSecs(30 * 60)
+            time_kt.setMinimumTime(min_kt)
+            if time_kt.time() < min_kt:
+                time_kt.setTime(min_kt)
+        time_bd.timeChanged.connect(_sync_time_kt_min)
+
         def on_ca_changed(idx):
             t = ca_times.get(idx, ('07:30', '09:00'))
             h_bd, m_bd = map(int, t[0].split(':'))
             h_kt, m_kt = map(int, t[1].split(':'))
+            # Suppress sync de set time_bd KHONG keo time_kt theo (cbo da
+            # cap nhat cap gio chuan cua ca, khong can clamp them)
+            _suppress_kt_sync[0] = True
+            time_bd.setMinimumTime(QTime(0, 0))
+            time_kt.setMinimumTime(QTime(0, 0))
             time_bd.setTime(QTime(h_bd, m_bd))
             time_kt.setTime(QTime(h_kt, m_kt))
+            _suppress_kt_sync[0] = False
+            # Re-arm constraint cho lan keo tay tiep theo
+            time_kt.setMinimumTime(time_bd.time().addSecs(30 * 60))
         cbo_ca.currentIndexChanged.connect(on_ca_changed)
 
         # Phong
