@@ -665,13 +665,42 @@ class AssignmentService:
 
     # GV
     @staticmethod
-    def create(lop_id, gv_id, tieu_de, mo_ta='', han_nop=None, diem_toi_da=10):
+    def create(lop_id, gv_id, tieu_de, mo_ta='', han_nop=None, diem_toi_da=10,
+               file_path=None):
         return _post('/assignments', {
             'lop_id': lop_id, 'gv_id': gv_id,
             'tieu_de': tieu_de, 'mo_ta': mo_ta,
+            'file_path': file_path,
             'han_nop': han_nop.isoformat() if han_nop else None,
             'diem_toi_da': diem_toi_da,
         })
+
+    @staticmethod
+    def upload_file(local_path):
+        """GV upload file dinh kem TRUOC khi tao bai. Tra ve dict
+        {file_path, size, filename}. Local_path la duong dan tuyet doi tren may GV.
+
+        Goi truc tiep multipart/form-data qua requests session (khong qua _post
+        vi _post chi support JSON body)."""
+        with open(local_path, 'rb') as f:
+            files = {'file': (os.path.basename(local_path), f)}
+            r = _session.post(API_URL + '/assignments/upload-file',
+                              files=files, timeout=(3, 60))  # read timeout 60s cho file lon
+        r.raise_for_status()
+        return r.json()
+
+    @staticmethod
+    def download_file(file_path, dest_path):
+        """Tai file dinh kem ve local. file_path = relative tu uploads/.
+        dest_path = absolute path luu file."""
+        with _session.get(API_URL + f'/assignments/file/{file_path}',
+                          stream=True, timeout=(3, 60)) as r:
+            r.raise_for_status()
+            with open(dest_path, 'wb') as f:
+                for chunk in r.iter_content(1024 * 64):
+                    if chunk:
+                        f.write(chunk)
+        return dest_path
 
     @staticmethod
     def update(asg_id, **fields):

@@ -40,3 +40,6 @@ test_results.json
 test_all_api.py
 test_screenshots/
 *.tmp
+
+# User data - assignment attachments (GV upload, KHONG push len git)
+backend/uploads/

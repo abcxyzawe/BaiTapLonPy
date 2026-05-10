@@ -333,6 +333,7 @@ class AssignmentCreate(BaseModel):
     gv_id: int = Field(..., gt=0)
     tieu_de: str = Field(..., min_length=1, max_length=200)
     mo_ta: Optional[str] = Field(None, max_length=5000)
+    file_path: Optional[str] = Field(None, max_length=500)
     han_nop: Optional[_dt] = None
     diem_toi_da: float = Field(10, gt=0, le=100)
 
@@ -340,6 +341,7 @@ class AssignmentCreate(BaseModel):
 class AssignmentUpdate(BaseModel):
     tieu_de: Optional[str] = Field(None, min_length=1, max_length=200)
     mo_ta: Optional[str] = Field(None, max_length=5000)
+    file_path: Optional[str] = Field(None, max_length=500)
     han_nop: Optional[_dt] = None
     diem_toi_da: Optional[float] = Field(None, gt=0, le=100)
 

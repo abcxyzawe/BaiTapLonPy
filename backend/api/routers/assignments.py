@@ -17,7 +17,13 @@ Endpoints:
     GET    /submissions/student/{hv_id}   lich su nop bai
     GET    /assignments/student/{hv_id}/pending  bai can lam
 """
-from fastapi import APIRouter, HTTPException
+import os
+import re
+import time
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 
 from backend.api.schemas import (
     AssignmentCreate, AssignmentUpdate,
@@ -27,6 +33,23 @@ from backend.services.assignment_service import AssignmentService
 
 router = APIRouter()
 
+# Folder luu file dinh kem assignments - relative tu repo root
+# (backend/uploads/assignments/). Tao luc startup neu chua co.
+_UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / 'uploads' / 'assignments'
+_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+# Whitelist extension theo yeu cau (anh + tai lieu)
+_ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.pdf',
+                '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+                '.txt', '.zip', '.rar'}
+_MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB
+
+
+def _safe_filename(name: str) -> str:
+    """Bo ky tu nguy hiem, giu only alphanumeric + dot/dash/underscore."""
+    base = os.path.basename(name or 'file')
+    base = re.sub(r'[^\w.\-]+', '_', base, flags=re.UNICODE)
+    return base[:120] or 'file'
+
 
 # ============ ASSIGNMENT CRUD ============
 
@@ -35,9 +58,61 @@ def create_assignment(req: AssignmentCreate):
     asg_id = AssignmentService.create(
         lop_id=req.lop_id, gv_id=req.gv_id,
         tieu_de=req.tieu_de, mo_ta=req.mo_ta or '',
+        file_path=req.file_path,
         han_nop=req.han_nop, diem_toi_da=req.diem_toi_da
     )
     return {'id': asg_id, 'status': 'created'}
+
+
+@router.post('/upload-file')
+async def upload_assignment_file(file: UploadFile = File(...)):
+    """GV upload file dinh kem TRUOC khi tao bai tap. Tra ve file_path tuong doi
+    de FE truyen vao POST /assignments. Tach 2 buoc cho phep retry tao bai tap
+    ma khong phai upload lai file."""
+    fname = _safe_filename(file.filename or 'file')
+    ext = os.path.splitext(fname)[1].lower()
+    if ext and ext not in _ALLOWED_EXT:
+        raise HTTPException(status_code=400,
+                            detail=f'Loai file khong duoc phep: {ext}. '
+                                   f'Cho phep: {", ".join(sorted(_ALLOWED_EXT))}')
+    # Prefix timestamp tranh ghi de + de sort theo thoi gian
+    saved_name = f'{int(time.time() * 1000)}_{fname}'
+    dest = _UPLOAD_DIR / saved_name
+    size = 0
+    try:
+        with open(dest, 'wb') as f:
+            while chunk := await file.read(1024 * 64):
+                size += len(chunk)
+                if size > _MAX_FILE_BYTES:
+                    f.close()
+                    dest.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f'File qua lon (>{_MAX_FILE_BYTES // (1024 * 1024)} MB)'
+                    )
+                f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f'Khong luu duoc file: {e}')
+    # Relative path de luu DB (frontend dung GET /assignments/file/<path> de download)
+    rel_path = f'assignments/{saved_name}'
+    return {'file_path': rel_path, 'size': size, 'filename': fname}
+
+
+@router.get('/file/{file_path:path}')
+def download_assignment_file(file_path: str):
+    """Tra ve file dinh kem cua bai tap. file_path la relative tu uploads/.
+    HV/GV xem chi tiet bai tap goi endpoint nay de tai/mo file."""
+    # Chong path traversal - chi cho phep file trong _UPLOAD_DIR's parent (uploads/)
+    abs_root = _UPLOAD_DIR.parent.resolve()
+    target = (abs_root / file_path).resolve()
+    if abs_root not in target.parents and target != abs_root:
+        raise HTTPException(status_code=400, detail='file_path invalid')
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail='File khong ton tai')
+    return FileResponse(target, filename=target.name)
 
 
 @router.put('/{asg_id}')

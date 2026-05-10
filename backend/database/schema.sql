@@ -352,6 +352,7 @@ CREATE TABLE assignments (
     gv_id       INTEGER NOT NULL REFERENCES teachers(user_id) ON DELETE CASCADE,
     tieu_de     VARCHAR(200) NOT NULL,
     mo_ta       TEXT,
+    file_path   VARCHAR(500),   -- file dinh kem GV upload (anh/word/pdf...), relative tu backend/uploads/
     han_nop     TIMESTAMP,
     diem_toi_da NUMERIC(4, 2) DEFAULT 10 CHECK (diem_toi_da > 0 AND diem_toi_da <= 100),
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP

@@ -9,13 +9,18 @@ class AssignmentService:
 
     @staticmethod
     def create(lop_id: str, gv_id: int, tieu_de: str, mo_ta: str = '',
+               file_path: str = None,
                han_nop=None, diem_toi_da: float = 10) -> int:
-        """GV tao bai tap moi cho lop. Tra ve assignment_id."""
+        """GV tao bai tap moi cho lop. Tra ve assignment_id.
+
+        file_path la relative path (vd 'assignments/2026-05-09_xxx.pdf')
+        tu folder backend/uploads/. None neu khong dinh kem file.
+        """
         row = db.execute_returning(
-            """INSERT INTO assignments (lop_id, gv_id, tieu_de, mo_ta, han_nop, diem_toi_da)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+            """INSERT INTO assignments (lop_id, gv_id, tieu_de, mo_ta, file_path, han_nop, diem_toi_da)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                  RETURNING id""",
-            (lop_id, gv_id, tieu_de, mo_ta, han_nop, diem_toi_da)
+            (lop_id, gv_id, tieu_de, mo_ta, file_path, han_nop, diem_toi_da)
         )
         return row['id']
 
@@ -24,7 +29,7 @@ class AssignmentService:
         """GV sua bai tap. Tra ve rowcount - 0 = bai tap khong ton tai
         (router can dung de phan biet 404 vs 200 ok). Truoc luon return True
         khien API tra 200 ok du record bi xoa truoc do."""
-        allowed = {'tieu_de', 'mo_ta', 'han_nop', 'diem_toi_da'}
+        allowed = {'tieu_de', 'mo_ta', 'file_path', 'han_nop', 'diem_toi_da'}
         sets = []
         vals = []
         for k, v in fields.items():

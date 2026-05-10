@@ -5557,6 +5557,48 @@ class MainWindow(QtWidgets.QWidget):
         desc.setStyleSheet('background: #f7fafc;')
         v.addWidget(desc)
 
+        # File dinh kem (neu GV co upload). HV bam de tai ve + mo bang app mac dinh OS
+        asg_file_path = full_asg.get('file_path')
+        if asg_file_path:
+            file_row = QtWidgets.QFrame()
+            file_row.setStyleSheet(
+                'QFrame { background: #eef2ff; border: 1px solid #c7d2fe; '
+                'border-radius: 6px; padding: 6px; }'
+            )
+            fh = QtWidgets.QHBoxLayout(file_row)
+            fh.setContentsMargins(8, 4, 8, 4)
+            file_name_only = asg_file_path.rsplit('/', 1)[-1]
+            # Bo timestamp prefix (1234567890123_) khi hien thi cho HV de
+            file_disp = file_name_only.split('_', 1)[1] if '_' in file_name_only else file_name_only
+            lbl_f = QtWidgets.QLabel(f'📎 <b>File đính kèm:</b> {file_disp}')
+            lbl_f.setStyleSheet('background: transparent; border: none;')
+            btn_dl = QtWidgets.QPushButton('Tải về & Mở')
+            btn_dl.setCursor(Qt.PointingHandCursor)
+            btn_dl.setStyleSheet(
+                'QPushButton { background: #4f46e5; color: white; border: none; '
+                'padding: 4px 12px; border-radius: 4px; font-weight: bold; }'
+                'QPushButton:hover { background: #4338ca; }'
+            )
+
+            def _download_and_open():
+                from PyQt5.QtGui import QDesktopServices
+                from PyQt5.QtCore import QUrl
+                import tempfile
+                try:
+                    # Save vao temp dir voi ten goc (bo prefix timestamp) de dialog
+                    # "Save As" cua OS hien ten quen thuoc cho user
+                    tmp_dir = tempfile.gettempdir()
+                    dest = os.path.join(tmp_dir, file_disp)
+                    AssignmentService.download_file(asg_file_path, dest)
+                    QDesktopServices.openUrl(QUrl.fromLocalFile(dest))
+                except Exception as ex:
+                    msg_warn(self, 'Lỗi tải file', api_error_msg(ex))
+
+            btn_dl.clicked.connect(_download_and_open)
+            fh.addWidget(lbl_f, 1)
+            fh.addWidget(btn_dl)
+            v.addWidget(file_row)
+
         # Bai cua HV
         v.addWidget(QtWidgets.QLabel('<b>Bài làm của bạn:</b>'))
         my_text = QtWidgets.QTextEdit()
@@ -13013,11 +13055,11 @@ class TeacherWindow(QtWidgets.QWidget):
             tbl.setRowHidden(r, not show)
 
     def _tea_dialog_new_assignment(self):
-        """Dialog tao bai tap moi - chon lop + nhap tieu de/mo ta/han nop."""
+        """Dialog tao bai tap moi - chon lop + nhap tieu de/mo ta/han nop + file dinh kem."""
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle('Giao bài tập mới')
-        dlg.setFixedSize(500, 480)
+        dlg.setFixedSize(520, 560)
         form = QtWidgets.QFormLayout(dlg)
 
         cbo_lop = QtWidgets.QComboBox()
@@ -13035,7 +13077,61 @@ class TeacherWindow(QtWidgets.QWidget):
         txt_title.setPlaceholderText('VD: Bài tập tuần 3 - Vòng lặp')
         txt_desc = QtWidgets.QTextEdit()
         txt_desc.setPlaceholderText('Mô tả yêu cầu bài tập (có thể dán link tài liệu, ví dụ...)')
-        txt_desc.setFixedHeight(140)
+        txt_desc.setFixedHeight(120)
+
+        # File dinh kem - container co button chon + label hien filename + button bo
+        file_row = QtWidgets.QWidget()
+        fh = QtWidgets.QHBoxLayout(file_row)
+        fh.setContentsMargins(0, 0, 0, 0)
+        fh.setSpacing(6)
+        btn_pick = QtWidgets.QPushButton('📎 Chọn file...')
+        btn_pick.setCursor(Qt.PointingHandCursor)
+        btn_pick.setStyleSheet('QPushButton { padding: 6px 10px; }')
+        lbl_file = QtWidgets.QLabel('Không có file đính kèm')
+        lbl_file.setStyleSheet('color: #718096; font-style: italic;')
+        btn_clear = QtWidgets.QPushButton('✕')
+        btn_clear.setFixedWidth(28)
+        btn_clear.setCursor(Qt.PointingHandCursor)
+        btn_clear.setToolTip('Bỏ file đính kèm')
+        btn_clear.hide()
+        fh.addWidget(btn_pick)
+        fh.addWidget(lbl_file, 1)
+        fh.addWidget(btn_clear)
+        # State: luu local path - upload khi user bam OK (tranh upload file roi
+        # huy dialog -> file rac tren server)
+        picked = {'path': None}
+
+        def _pick_file():
+            allow_str = ('Tệp hỗ trợ (*.png *.jpg *.jpeg *.gif *.pdf '
+                         '*.doc *.docx *.xls *.xlsx *.ppt *.pptx *.txt *.zip *.rar);;'
+                         'Tất cả (*.*)')
+            path, _ = QtWidgets.QFileDialog.getOpenFileName(
+                self, 'Chọn file đính kèm cho bài tập',
+                os.path.expanduser('~'), allow_str
+            )
+            if not path:
+                return
+            try:
+                size_mb = os.path.getsize(path) / (1024 * 1024)
+            except OSError:
+                size_mb = 0
+            if size_mb > 20:
+                msg_warn(self, 'File quá lớn',
+                         f'File {size_mb:.1f} MB vượt giới hạn 20 MB.')
+                return
+            picked['path'] = path
+            lbl_file.setText(f'{os.path.basename(path)}  ({size_mb:.1f} MB)')
+            lbl_file.setStyleSheet('color: #2d3748;')
+            btn_clear.show()
+
+        def _clear_file():
+            picked['path'] = None
+            lbl_file.setText('Không có file đính kèm')
+            lbl_file.setStyleSheet('color: #718096; font-style: italic;')
+            btn_clear.hide()
+
+        btn_pick.clicked.connect(_pick_file)
+        btn_clear.clicked.connect(_clear_file)
 
         dt_han = QtWidgets.QDateTimeEdit()
         dt_han.setCalendarPopup(True)
@@ -13052,6 +13148,7 @@ class TeacherWindow(QtWidgets.QWidget):
         form.addRow('Lớp (*):', cbo_lop)
         form.addRow('Tiêu đề (*):', txt_title)
         form.addRow('Mô tả:', txt_desc)
+        form.addRow('File đính kèm:', file_row)
         form.addRow('Hạn nộp:', dt_han)
         form.addRow('Điểm tối đa:', spin_diem)
 
@@ -13072,6 +13169,17 @@ class TeacherWindow(QtWidgets.QWidget):
         if not (DB_AVAILABLE and AssignmentService and gv_id):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống')
             return
+        # Upload file truoc (neu co) -> lay file_path roi tao assignment.
+        # Neu upload fail thi dung luon, khong tao assignment de tranh state lech.
+        file_path_val = None
+        if picked['path']:
+            try:
+                up_res = AssignmentService.upload_file(picked['path'])
+                file_path_val = up_res.get('file_path')
+            except Exception as e:
+                print(f'[TEA_ASG] upload loi: {e}')
+                msg_warn(self, 'Lỗi upload file', api_error_msg(e))
+                return
         try:
             han_dt = dt_han.dateTime().toPyDateTime()
             AssignmentService.create(
@@ -13079,6 +13187,7 @@ class TeacherWindow(QtWidgets.QWidget):
                 gv_id=gv_id,
                 tieu_de=title,
                 mo_ta=txt_desc.toPlainText(),
+                file_path=file_path_val,
                 han_nop=han_dt,
                 diem_toi_da=float(spin_diem.value()),
             )
