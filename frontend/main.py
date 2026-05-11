@@ -12174,7 +12174,10 @@ class TeacherWindow(QtWidgets.QWidget):
                     ('Lịch học', l), ('Phòng', p),
                     ('Sĩ số', f'{s}/{mx}'),
                     ('Học phí', fmt_vnd(g)),
-                ], avatar_text=m, subtitle=n))
+                ], avatar_text=m, subtitle=n,
+                extra_buttons=[('📹 Quản lý video',
+                                lambda mm=m: self._show_class_videos_dialog(mm, role='gv'),
+                                COLORS['orange'])]))
             btn_sched.setToolTip(f'📅 Xem toàn bộ lịch của lớp {ma}')
             btn_sched.clicked.connect(lambda ch, m=ma, n=tmon: self._tea_show_class_full_schedule(m, n))
             btn_print.setToolTip(f'🖨 In danh sách học viên lớp {ma} ra PDF')
