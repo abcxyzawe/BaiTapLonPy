@@ -30,23 +30,6 @@ from backend.services.assignment_service import AssignmentService
 
 router = APIRouter()
 
-# Folder luu file dinh kem assignments - relative tu repo root
-# (backend/uploads/assignments/). Tao luc startup neu chua co.
-_UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / 'uploads' / 'assignments'
-_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-# Whitelist extension theo yeu cau (anh + tai lieu)
-_ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.pdf',
-                '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
-                '.txt', '.zip', '.rar'}
-_MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB
-
-
-def _safe_filename(name: str) -> str:
-    """Bo ky tu nguy hiem, giu only alphanumeric + dot/dash/underscore."""
-    base = os.path.basename(name or 'file')
-    base = re.sub(r'[^\w.\-]+', '_', base, flags=re.UNICODE)
-    return base[:120] or 'file'
-
 
 # ============ ASSIGNMENT CRUD ============
 

@@ -3929,10 +3929,10 @@ class MainWindow(QtWidgets.QWidget):
         if is_online:
             def _open_meeting():
                 QDesktopServices.openUrl(QUrl(meeting_url))
-            extra.append(('🎥 Tham gia online', _open_meeting, '#16a34a'))
+            extra.append(('🎥 Tham gia online', _open_meeting, COLORS['green']))
         extra.append(('📹 Video bài giảng',
                       lambda: self._show_class_videos_dialog(ma_lop, role='hv'),
-                      '#7c3aed'))
+                      COLORS['orange']))
 
         show_detail_dialog(
             self,
@@ -3957,22 +3957,37 @@ class MainWindow(QtWidgets.QWidget):
         dlg.setWindowTitle(f'Video bài giảng - Lớp {lop_id}')
         dlg.setFixedSize(640, 580)
         v = QtWidgets.QVBoxLayout(dlg)
-        v.setContentsMargins(16, 12, 16, 12)
+        v.setContentsMargins(16, 14, 16, 14)
+        v.setSpacing(10)
 
-        head = QtWidgets.QLabel(f'<b>Lớp {lop_id}</b> · '
-                                 'GV upload link YouTube/Drive/Vimeo, click "Xem" để mở trên trình duyệt.')
-        head.setStyleSheet('color: #4a5568; padding: 6px; background: #f7fafc; '
-                           'border: 1px solid #e2e8f0; border-radius: 6px;')
+        # Header info banner - dong style voi cac dialog khac trong app
+        head = QtWidgets.QLabel(
+            f'<b style="color:{COLORS["navy"]};">📹 Lớp {lop_id}</b>'
+            f' &nbsp;·&nbsp; <span style="color:{COLORS["text_mid"]};">'
+            'GV upload link YouTube/Drive/Vimeo. Click <b>Xem video</b> để mở bằng trình duyệt.'
+            '</span>'
+        )
+        head.setStyleSheet(
+            f'color: {COLORS["text_dark"]}; padding: 10px 12px; '
+            f'background: {COLORS["bg_alt"]}; '
+            f'border: 1px solid {COLORS["border"]}; '
+            f'border-left: 3px solid {COLORS["navy"]}; '
+            f'border-radius: 6px; font-size: 12px;'
+        )
         head.setWordWrap(True)
         v.addWidget(head)
 
         # Scroll body chua cac card video
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet('QScrollArea { border: 1px solid #e2e8f0; border-radius: 6px; background: white; }')
+        scroll.setStyleSheet(
+            f'QScrollArea {{ border: 1px solid {COLORS["border"]}; '
+            f'border-radius: 6px; background: {COLORS["bg_alt"]}; }}'
+        )
         inner = QtWidgets.QWidget()
+        inner.setStyleSheet(f'background: {COLORS["bg_alt"]};')
         body = QtWidgets.QVBoxLayout(inner)
-        body.setContentsMargins(8, 8, 8, 8)
+        body.setContentsMargins(10, 10, 10, 10)
         body.setSpacing(8)
 
         def _load_videos():
@@ -3984,21 +3999,29 @@ class MainWindow(QtWidgets.QWidget):
             try:
                 videos = ClassVideoService.get_by_class(lop_id) or []
             except Exception as e:
-                err = QtWidgets.QLabel(f'Lỗi tải danh sách video: {api_error_msg(e)}')
-                err.setStyleSheet('color: #c53030; padding: 12px;')
+                err = QtWidgets.QLabel(f'⚠ Lỗi tải danh sách video:\n{api_error_msg(e)}')
+                err.setStyleSheet(
+                    f'color: {COLORS["red"]}; padding: 16px; '
+                    f'background: white; border: 1px solid {COLORS["red"]}; '
+                    f'border-radius: 6px;'
+                )
+                err.setWordWrap(True)
                 body.addWidget(err)
+                body.addStretch()
                 return
             if not videos:
                 empty = QtWidgets.QLabel(
-                    '<div style="text-align:center; padding:30px;">'
-                    '<span style="font-size:32px;">📹</span><br>'
-                    '<span style="color:#718096;">Chưa có video bài giảng nào.</span>'
-                    + ('<br><span style="color:#a0aec0; font-size:11px;">'
-                       'Bấm "+ Thêm video" để upload link YouTube/Drive.</span>'
+                    f'<div style="text-align:center; padding:40px;">'
+                    f'<span style="font-size:42px;">📹</span><br>'
+                    f'<br><span style="color:{COLORS["text_mid"]}; font-size:13px;">'
+                    f'Chưa có video bài giảng nào cho lớp này.</span>'
+                    + (f'<br><br><span style="color:{COLORS["text_light"]}; font-size:11px;">'
+                       'Bấm <b>+ Thêm video</b> bên dưới để upload link YouTube/Drive.</span>'
                        if role == 'gv' else '')
                     + '</div>'
                 )
                 empty.setAlignment(Qt.AlignCenter)
+                empty.setStyleSheet('background: transparent; border: none;')
                 body.addWidget(empty)
                 body.addStretch()
                 return
@@ -4010,15 +4033,15 @@ class MainWindow(QtWidgets.QWidget):
         scroll.setWidget(inner)
         v.addWidget(scroll, 1)
 
-        # Footer
+        # Footer - dong style voi cac dialog khac (navy primary action button)
         ft = QtWidgets.QHBoxLayout()
         if role == 'gv':
             btn_add = QtWidgets.QPushButton('+ Thêm video')
             btn_add.setCursor(Qt.PointingHandCursor)
             btn_add.setStyleSheet(
-                'QPushButton { background: #7c3aed; color: white; border: none; '
-                'padding: 8px 16px; border-radius: 6px; font-weight: bold; } '
-                'QPushButton:hover { background: #6d28d9; }'
+                f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; '
+                f'padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
             )
             btn_add.clicked.connect(lambda: self._dialog_add_edit_video(
                 lop_id, video_row=None, on_done=_load_videos))
@@ -4026,7 +4049,11 @@ class MainWindow(QtWidgets.QWidget):
         ft.addStretch()
         btn_close = QtWidgets.QPushButton('Đóng')
         btn_close.setCursor(Qt.PointingHandCursor)
-        btn_close.setStyleSheet('QPushButton { padding: 8px 18px; }')
+        btn_close.setStyleSheet(
+            'QPushButton { background: #edf2f7; color: #4a5568; border: 1px solid #d2d6dc; '
+            'padding: 8px 18px; border-radius: 6px; font-size: 12px; }'
+            'QPushButton:hover { background: #e2e8f0; }'
+        )
         btn_close.clicked.connect(dlg.accept)
         ft.addWidget(btn_close)
         v.addLayout(ft)
@@ -4035,22 +4062,27 @@ class MainWindow(QtWidgets.QWidget):
         dlg.exec_()
 
     def _build_video_card(self, vrow, lop_id, role, reload_cb):
-        """Render 1 card video trong dialog list. role='gv' -> co them Sua/Xoa."""
+        """Render 1 card video trong dialog list. role='gv' -> co them Sua/Xoa.
+        Style theo EAUT palette - dong nhat voi cac card khac (assignment, etc)."""
         from PyQt5.QtGui import QDesktopServices
         from PyQt5.QtCore import QUrl
         card = QtWidgets.QFrame()
         card.setStyleSheet(
-            'QFrame { background: white; border: 1px solid #e2e8f0; '
-            'border-radius: 8px; padding: 4px; }'
+            f'QFrame {{ background: {COLORS["bg_card"]}; '
+            f'border: 1px solid {COLORS["border"]}; '
+            f'border-left: 3px solid {COLORS["orange"]}; '
+            f'border-radius: 6px; }}'
         )
         h = QtWidgets.QVBoxLayout(card)
-        h.setContentsMargins(10, 8, 10, 8)
+        h.setContentsMargins(12, 10, 12, 10)
         h.setSpacing(4)
-        # Tieu de + buoi so
-        title_line = f'<b style="color:#1a1a2e; font-size:13px;">📹 {vrow.get("tieu_de", "")}</b>'
+        # Tieu de + buoi so badge
+        title_line = (f'<b style="color:{COLORS["text_dark"]}; font-size:13px;">'
+                      f'📹 {vrow.get("tieu_de", "")}</b>')
         bs = vrow.get('buoi_so')
         if bs:
-            title_line += f' <span style="color:#7c3aed; font-size:11px;">· Buổi {bs}</span>'
+            title_line += (f' &nbsp;<span style="color:{COLORS["orange"]}; '
+                           f'font-size:11px; font-weight:bold;">· Buổi {bs}</span>')
         lbl_t = QtWidgets.QLabel(title_line)
         lbl_t.setStyleSheet('border: none; background: transparent;')
         h.addWidget(lbl_t)
@@ -4058,7 +4090,8 @@ class MainWindow(QtWidgets.QWidget):
         gv_name = vrow.get('ten_gv', '') or '—'
         created = fmt_date(vrow.get('created_at'), fmt='%d/%m/%Y')
         meta = QtWidgets.QLabel(
-            f'<span style="color:#718096; font-size:10px;">GV: {gv_name} · Đăng: {created}</span>'
+            f'<span style="color:{COLORS["text_light"]}; font-size:10px;">'
+            f'GV: {gv_name} · Đăng: {created}</span>'
         )
         meta.setStyleSheet('border: none; background: transparent;')
         h.addWidget(meta)
@@ -4066,18 +4099,22 @@ class MainWindow(QtWidgets.QWidget):
         mo_ta = (vrow.get('mo_ta') or '').strip()
         if mo_ta:
             lbl_d = QtWidgets.QLabel(mo_ta)
-            lbl_d.setStyleSheet('color: #4a5568; font-size: 11px; border: none; background: transparent;')
+            lbl_d.setStyleSheet(
+                f'color: {COLORS["text_mid"]}; font-size: 11px; '
+                f'border: none; background: transparent;'
+            )
             lbl_d.setWordWrap(True)
             h.addWidget(lbl_d)
         # Buttons
         btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(6)
         url = vrow.get('video_url') or ''
         btn_view = QtWidgets.QPushButton('▶ Xem video')
         btn_view.setCursor(Qt.PointingHandCursor)
         btn_view.setStyleSheet(
-            'QPushButton { background: #2563eb; color: white; border: none; '
-            'padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; } '
-            'QPushButton:hover { background: #1d4ed8; }'
+            f'QPushButton {{ background: {COLORS["navy"]}; color: white; border: none; '
+            f'padding: 5px 14px; border-radius: 4px; font-size: 11px; font-weight: bold; }} '
+            f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
         )
         btn_view.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
         btn_row.addWidget(btn_view)
@@ -4086,15 +4123,23 @@ class MainWindow(QtWidgets.QWidget):
             video_id = vrow.get('id')
             btn_edit = QtWidgets.QPushButton('✎ Sửa')
             btn_edit.setCursor(Qt.PointingHandCursor)
-            btn_edit.setStyleSheet('QPushButton { padding: 4px 10px; font-size: 11px; }')
+            btn_edit.setStyleSheet(
+                f'QPushButton {{ background: {COLORS["bg_alt"]}; color: {COLORS["text_mid"]}; '
+                f'border: 1px solid {COLORS["border"]}; padding: 5px 12px; border-radius: 4px; '
+                f'font-size: 11px; }} '
+                f'QPushButton:hover {{ background: {COLORS["bg"]}; '
+                f'border-color: {COLORS["navy"]}; color: {COLORS["navy"]}; }}'
+            )
             btn_edit.clicked.connect(lambda: self._dialog_add_edit_video(
                 lop_id, video_row=vrow, on_done=reload_cb))
             btn_row.addWidget(btn_edit)
             btn_del = QtWidgets.QPushButton('🗑 Xoá')
             btn_del.setCursor(Qt.PointingHandCursor)
             btn_del.setStyleSheet(
-                'QPushButton { background: #fee2e2; color: #c53030; border: 1px solid #fecaca; '
-                'padding: 4px 10px; border-radius: 4px; font-size: 11px; }'
+                f'QPushButton {{ background: white; color: {COLORS["red"]}; '
+                f'border: 1px solid {COLORS["red"]}; padding: 5px 12px; border-radius: 4px; '
+                f'font-size: 11px; }} '
+                f'QPushButton:hover {{ background: {COLORS["red"]}; color: white; }}'
             )
             def _del():
                 if not msg_confirm(self, 'Xoá video',
@@ -13831,10 +13876,10 @@ class TeacherWindow(QtWidgets.QWidget):
         if is_online:
             def _open_meeting():
                 QDesktopServices.openUrl(QUrl(meeting_url))
-            extra.append(('🎥 Tham gia online', _open_meeting, '#16a34a'))
+            extra.append(('🎥 Tham gia online', _open_meeting, COLORS['green']))
         extra.append(('📹 Quản lý video',
                       lambda: self._show_class_videos_dialog(ma_lop, role='gv'),
-                      '#7c3aed'))
+                      COLORS['orange']))
 
         show_detail_dialog(
             self,
