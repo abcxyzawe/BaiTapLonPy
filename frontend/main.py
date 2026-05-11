@@ -3205,6 +3205,7 @@ PAGES = [
     ('btnReview', 'teacher_review.ui'),
     ('btnNotice', 'notifications.ui'),
     ('btnProfile', 'profile.ui'),
+    ('btnMyVideos', None),  # Bai giang - build Python, page rieng cho video khoa hoc
 ]
 
 MENU_ITEMS = [
@@ -3216,6 +3217,7 @@ MENU_ITEMS = [
     ('btnReview', 'iconReview', 'star', 'Đánh giá giảng viên'),
     ('btnNotice', 'iconNotice', 'bell', 'Thông báo'),
     ('btnProfile', 'iconProfile', 'user', 'Thông tin cá nhân'),
+    ('btnMyVideos', 'iconMyVideos', 'book-open', 'Bài giảng'),
 ]
 
 # TEACHER pages - ui_file=None nghia la build pure Python (khong load .ui)
@@ -3833,6 +3835,7 @@ class MainWindow(QtWidgets.QWidget):
                 self._fill_dashboard, self._fill_schedule, self._fill_exam,
                 self._fill_grades, self._fill_assignments, self._fill_review,
                 self._fill_notifications, self._fill_profile,
+                self._fill_my_videos,
             ]
             if fill_methods[index]:
                 fill_methods[index]()
@@ -6623,6 +6626,165 @@ class MainWindow(QtWidgets.QWidget):
 
     def _change_pass(self):
         show_change_password_dialog(self, MOCK_USER, lambda: MOCK_USER.get('id'))
+
+    # ============ TRANG 'BAI GIANG' (VIDEO KHOA HOC) - idx 8 ============
+
+    def _fill_my_videos(self):
+        """Trang 'Bai giang' HV - list cac mon HV dang ky duoi dang card,
+        moi card co nut 'Xem video' mo UI rieng cho video cua mon do."""
+        page = self.page_widgets[8]
+        if not getattr(page, '_built', False):
+            self._build_stu_videos_ui(page)
+            page._built = True
+        self._reload_stu_videos(page)
+
+    def _build_stu_videos_ui(self, page):
+        """Build UI 1 lan: header + scroll area chua cards."""
+        # Header bar
+        hb = QtWidgets.QFrame(page)
+        hb.setObjectName('headerBar')
+        hb.setGeometry(0, 0, 870, 56)
+        hb.setStyleSheet(
+            f'QFrame#headerBar {{ background: white; '
+            f'border-bottom: 1px solid {COLORS["border"]}; }}'
+        )
+        title = QtWidgets.QLabel('📹 Bài giảng khoá học', hb)
+        title.setGeometry(25, 4, 400, 24)
+        title.setStyleSheet(
+            f'color: {COLORS["text_dark"]}; font-size: 16px; font-weight: bold; '
+            f'background: transparent;'
+        )
+        sub = QtWidgets.QLabel(
+            'Chọn 1 khoá học để xem video bài giảng (GV upload link YouTube/Drive).',
+            hb
+        )
+        sub.setGeometry(25, 30, 600, 16)
+        sub.setStyleSheet(
+            f'color: {COLORS["text_light"]}; font-size: 11px; background: transparent;'
+        )
+
+        # Scroll area chua cards
+        scroll = QtWidgets.QScrollArea(page)
+        scroll.setObjectName('scrollMyCourses')
+        scroll.setGeometry(15, 70, 840, 615)
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(
+            f'QScrollArea {{ border: 1px solid {COLORS["border"]}; '
+            f'border-radius: 8px; background: {COLORS["bg_alt"]}; }}'
+        )
+        inner = QtWidgets.QWidget()
+        inner.setObjectName('coursesInner')
+        inner.setStyleSheet(f'background: {COLORS["bg_alt"]};')
+        body = QtWidgets.QVBoxLayout(inner)
+        body.setContentsMargins(12, 12, 12, 12)
+        body.setSpacing(10)
+        scroll.setWidget(inner)
+        scroll.show()
+        title.show()
+        sub.show()
+        hb.show()
+
+    def _reload_stu_videos(self, page):
+        """Load lai cards moi lan vao trang."""
+        scroll = page.findChild(QtWidgets.QScrollArea, 'scrollMyCourses')
+        if not scroll:
+            return
+        inner = scroll.widget()
+        body = inner.layout()
+        # Clear cards cu
+        while body.count():
+            it = body.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+
+        hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        classes = []
+        if DB_AVAILABLE and hv_id:
+            try:
+                rows = CourseService.get_classes_by_student(hv_id) or []
+                # Chi hien lop status paid/completed (HV co quyen xem video)
+                classes = [r for r in rows if r.get('reg_status') in ('paid', 'completed')]
+            except Exception as e:
+                print(f'[STU_VIDEOS] loi: {e}')
+
+        if not classes:
+            empty = QtWidgets.QLabel(
+                f'<div style="text-align:center; padding:60px;">'
+                f'<span style="font-size:52px;">📚</span><br><br>'
+                f'<span style="color:{COLORS["text_mid"]}; font-size:14px; font-weight:bold;">'
+                f'Bạn chưa đăng ký khoá học nào (đã thanh toán).</span><br>'
+                f'<span style="color:{COLORS["text_light"]}; font-size:11px;">'
+                f'Liên hệ Nhân viên trung tâm để đăng ký + thanh toán, sau đó quay lại đây xem video.'
+                f'</span></div>'
+            )
+            empty.setAlignment(Qt.AlignCenter)
+            empty.setStyleSheet('background: transparent; border: none;')
+            body.addWidget(empty)
+            body.addStretch()
+            return
+
+        # Render moi lop la 1 card lon
+        for cls in classes:
+            card = self._build_my_course_card(cls)
+            body.addWidget(card)
+        body.addStretch()
+
+    def _build_my_course_card(self, cls):
+        """1 card lon cho 1 lop HV dang ky - co thong tin lop + nut 'Xem video bai giang'."""
+        card = QtWidgets.QFrame()
+        card.setStyleSheet(
+            f'QFrame {{ background: {COLORS["bg_card"]}; '
+            f'border: 1px solid {COLORS["border"]}; '
+            f'border-left: 4px solid {COLORS["navy"]}; '
+            f'border-radius: 8px; }}'
+        )
+        card.setMinimumHeight(110)
+        h = QtWidgets.QHBoxLayout(card)
+        h.setContentsMargins(18, 14, 18, 14)
+        h.setSpacing(14)
+
+        # Left: thong tin lop
+        left = QtWidgets.QVBoxLayout()
+        left.setSpacing(4)
+        ma_lop = cls.get('ma_lop', '')
+        ten_mon = cls.get('ten_mon', '') or '—'
+        ten_gv = cls.get('ten_gv', '') or '—'
+        lich = cls.get('lich', '') or '—'
+        so_buoi = cls.get('so_buoi') or '—'
+
+        lbl_title = QtWidgets.QLabel(
+            f'<b style="color:{COLORS["navy"]}; font-size:15px;">{ten_mon}</b>'
+            f' &nbsp;<span style="color:{COLORS["text_light"]}; font-size:11px;">'
+            f'· Lớp {ma_lop}</span>'
+        )
+        lbl_title.setStyleSheet('background: transparent; border: none;')
+        left.addWidget(lbl_title)
+
+        lbl_meta = QtWidgets.QLabel(
+            f'<span style="color:{COLORS["text_mid"]}; font-size:12px;">'
+            f'👨‍🏫 {ten_gv}  &nbsp;·&nbsp;  📅 {lich}  &nbsp;·&nbsp;  📖 {so_buoi} buổi'
+            f'</span>'
+        )
+        lbl_meta.setStyleSheet('background: transparent; border: none;')
+        left.addWidget(lbl_meta)
+        h.addLayout(left, 1)
+
+        # Right: nut 'Xem video' lon, ro
+        btn_open = QtWidgets.QPushButton('📹  Xem video bài giảng  →')
+        btn_open.setCursor(Qt.PointingHandCursor)
+        btn_open.setMinimumWidth(220)
+        btn_open.setMinimumHeight(48)
+        btn_open.setStyleSheet(
+            f'QPushButton {{ background: {COLORS["orange"]}; color: white; '
+            f'border: none; padding: 10px 18px; border-radius: 6px; '
+            f'font-size: 13px; font-weight: bold; }} '
+            f'QPushButton:hover {{ background: {COLORS["orange_hover"]}; }}'
+        )
+        btn_open.clicked.connect(
+            lambda _ch, m=ma_lop: show_class_videos_dialog(self, m, role='hv')
+        )
+        h.addWidget(btn_open)
+        return card
 
 
 class AdminWindow(QtWidgets.QWidget):
