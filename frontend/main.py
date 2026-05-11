@@ -3307,6 +3307,14 @@ def show_class_videos_dialog(parent, lop_id, role='hv'):
     Render moi video la 1 card co tieu de + mo ta + buoi so + nut 'Xem video'
     mo URL bang browser. GV co them nut '+ Them video' o footer.
     """
+    # Guard: lop_id phai la str non-empty (truoc co caller pass None tu data
+    # API thieu lop_id -> dialog mo nhung 'Them video' POST loi 422
+    # 'lop_id: Input should be a valid string')
+    if not lop_id or not isinstance(lop_id, str):
+        msg_warn(parent, 'Lỗi',
+                 'Không xác định được mã lớp.\n'
+                 'Vui lòng đóng dialog và thử lại từ trang khác.')
+        return
     dlg = QtWidgets.QDialog(parent)
     style_dialog(dlg)
     dlg.setWindowTitle(f'Video bài giảng - Lớp {lop_id}')
@@ -3790,6 +3798,12 @@ def _build_sched_reminder_row(sched, when):
 
 def _dialog_add_edit_video(parent, lop_id, video_row=None, on_done=None):
     """Dialog GV them moi (video_row=None) hoac sua (video_row=dict)."""
+    # Guard lop_id non-empty + str (defensive sau khi user paste loi 422)
+    if not lop_id or not isinstance(lop_id, str):
+        msg_warn(parent, 'Lỗi',
+                 'Không xác định được lớp để thêm video.\n'
+                 'Vui lòng mở từ trang quản lý lớp.')
+        return
     is_edit = video_row is not None
     dlg = QtWidgets.QDialog(parent)
     style_dialog(dlg)
@@ -9710,7 +9724,7 @@ class AdminWindow(QtWidgets.QWidget):
 
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
-        if cbo_lop.currentIndex() == 0:
+        if cbo_lop.currentIndex() == 0 or not cbo_lop.currentData():
             msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
             return
         days = [c.property('day_num') for c in cbx_days if c.isChecked()]
@@ -9834,7 +9848,7 @@ class AdminWindow(QtWidgets.QWidget):
 
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
-        if cbo_lop.currentIndex() == 0:
+        if cbo_lop.currentIndex() == 0 or not cbo_lop.currentData():
             msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
             return
         if time_kt.time() <= time_bd.time():
@@ -14010,7 +14024,7 @@ class TeacherWindow(QtWidgets.QWidget):
 
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
-        if cbo_lop.currentIndex() == 0:
+        if cbo_lop.currentIndex() == 0 or not cbo_lop.currentData():
             msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
             return
         title = txt_title.text().strip()
@@ -14535,7 +14549,7 @@ class TeacherWindow(QtWidgets.QWidget):
 
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
-        if cbo_lop.currentIndex() == 0:
+        if cbo_lop.currentIndex() == 0 or not cbo_lop.currentData():
             msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
             return
         if time_kt.time() <= time_bd.time():
@@ -14997,7 +15011,7 @@ class TeacherWindow(QtWidgets.QWidget):
 
         if dlg.exec_() != QtWidgets.QDialog.Accepted:
             return
-        if cbo_lop.currentIndex() == 0:
+        if cbo_lop.currentIndex() == 0 or not cbo_lop.currentData():
             msg_warn(self, 'Thiếu', 'Hãy chọn lớp')
             return
         # Validate gio bat dau < gio ket thuc - user co the chinh tay sau khi
