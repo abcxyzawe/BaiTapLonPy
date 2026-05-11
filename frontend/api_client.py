@@ -48,6 +48,14 @@ def _post(path: str, json: Optional[dict] = None) -> Any:
     return r.json()
 
 
+def _upload(path: str, file_path: str) -> Any:
+    # timeout tang len vi upload file co the lau hon
+    with open(file_path, 'rb') as f:
+        r = _session.post(API_URL + path, files={'file': f}, timeout=(3, 30))
+    r.raise_for_status()
+    return r.json()
+
+
 def _put(path: str, json: Optional[dict] = None) -> Any:
     r = _session.put(API_URL + path, json=_serialize(json or {}), timeout=TIMEOUT)
     r.raise_for_status()
@@ -665,42 +673,14 @@ class AssignmentService:
 
     # GV
     @staticmethod
-    def create(lop_id, gv_id, tieu_de, mo_ta='', han_nop=None, diem_toi_da=10,
-               file_path=None):
+    def create(lop_id, gv_id, tieu_de, mo_ta='', han_nop=None, diem_toi_da=10, file_url=None):
         return _post('/assignments', {
             'lop_id': lop_id, 'gv_id': gv_id,
             'tieu_de': tieu_de, 'mo_ta': mo_ta,
-            'file_path': file_path,
             'han_nop': han_nop.isoformat() if han_nop else None,
             'diem_toi_da': diem_toi_da,
+            'file_url': file_url
         })
-
-    @staticmethod
-    def upload_file(local_path):
-        """GV upload file dinh kem TRUOC khi tao bai. Tra ve dict
-        {file_path, size, filename}. Local_path la duong dan tuyet doi tren may GV.
-
-        Goi truc tiep multipart/form-data qua requests session (khong qua _post
-        vi _post chi support JSON body)."""
-        with open(local_path, 'rb') as f:
-            files = {'file': (os.path.basename(local_path), f)}
-            r = _session.post(API_URL + '/assignments/upload-file',
-                              files=files, timeout=(3, 60))  # read timeout 60s cho file lon
-        r.raise_for_status()
-        return r.json()
-
-    @staticmethod
-    def download_file(file_path, dest_path):
-        """Tai file dinh kem ve local. file_path = relative tu uploads/.
-        dest_path = absolute path luu file."""
-        with _session.get(API_URL + f'/assignments/file/{file_path}',
-                          stream=True, timeout=(3, 60)) as r:
-            r.raise_for_status()
-            with open(dest_path, 'wb') as f:
-                for chunk in r.iter_content(1024 * 64):
-                    if chunk:
-                        f.write(chunk)
-        return dest_path
 
     @staticmethod
     def update(asg_id, **fields):
@@ -711,6 +691,10 @@ class AssignmentService:
             except AttributeError:
                 pass
         return _put(f'/assignments/{asg_id}', {k: v for k, v in fields.items() if v is not None})
+
+    @staticmethod
+    def upload_file(file_path):
+        return _upload('/assignments/upload', file_path)
 
     @staticmethod
     def delete(asg_id):

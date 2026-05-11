@@ -47,7 +47,8 @@ class Database:
                 cur.execute('SELECT 1')
                 cur.fetchone()
             return True
-        except Exception:
+        except Exception as e:
+            print(f"[DB ERROR] Loi ket noi that su la: {e}")
             self._connected = False
             return False
 

@@ -114,8 +114,7 @@ INSERT INTO classes (ma_lop, ma_mon, gv_id, semester_id, lich, phong, siso_max, 
 -- ==========================================================
 -- REGISTRATIONS
 -- ==========================================================
--- tat trigger siso + audit khi seed
-ALTER TABLE registrations DISABLE TRIGGER trg_reg_siso;
+ALTER TABLE registrations DISABLE TRIGGER trg_update_class_siso;
 ALTER TABLE registrations DISABLE TRIGGER trg_check_class_full;
 
 INSERT INTO registrations (id, hv_id, lop_id, nv_xu_ly, ngay_dk, trang_thai) VALUES
@@ -138,7 +137,7 @@ INSERT INTO registrations (id, hv_id, lop_id, nv_xu_ly, ngay_dk, trang_thai) VAL
 
 SELECT setval('registrations_id_seq', (SELECT MAX(id) FROM registrations));
 
-ALTER TABLE registrations ENABLE TRIGGER trg_reg_siso;
+ALTER TABLE registrations ENABLE TRIGGER trg_update_class_siso;
 ALTER TABLE registrations ENABLE TRIGGER trg_check_class_full;
 
 
