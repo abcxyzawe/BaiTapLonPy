@@ -13406,13 +13406,18 @@ class TeacherWindow(QtWidgets.QWidget):
             tbl.setRowHidden(r, not show)
 
     def _tea_dialog_new_assignment(self):
-        """Dialog tao bai tap moi - chon lop + nhap tieu de/mo ta/han nop + file dinh kem."""
+        """Dialog tao bai tap moi - chon lop + nhap tieu de/mo ta/han nop +
+        diem toi da + file dinh kem."""
+        import os
+        from PyQt5.QtCore import QDateTime
+
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle('Giao bài tập mới')
-        dlg.setFixedSize(520, 560)
+        dlg.setFixedSize(520, 600)
         form = QtWidgets.QFormLayout(dlg)
 
+        # Lop combo - load cac lop GV dang day
         cbo_lop = QtWidgets.QComboBox()
         cbo_lop.addItem('-- Chọn lớp --', None)
         gv_id = MOCK_TEACHER.get('user_id')
@@ -13424,23 +13429,60 @@ class TeacherWindow(QtWidgets.QWidget):
             except Exception as e:
                 print(f'[TEA_ASG] loi load lop: {e}')
 
+        # Tieu de + mo ta
         txt_title = QtWidgets.QLineEdit()
         txt_title.setPlaceholderText('VD: Bài tập tuần 3 - Vòng lặp')
         txt_desc = QtWidgets.QTextEdit()
         txt_desc.setPlaceholderText('Mô tả yêu cầu bài tập (có thể dán link tài liệu, ví dụ...)')
-        txt_desc.setFixedHeight(120)
+        txt_desc.setFixedHeight(110)
 
-        # File picker
-        import os
-        self._asg_upload_path = None
-        btn_file = QtWidgets.QPushButton('📎 Đính kèm tệp...')
+        # Han nop - default +7 ngay
+        dt_han = QtWidgets.QDateTimeEdit()
+        dt_han.setCalendarPopup(True)
+        dt_han.setDateTime(QDateTime.currentDateTime().addDays(7))
+        dt_han.setDisplayFormat('dd/MM/yyyy HH:mm')
+        dt_han.setMinimumDateTime(QDateTime.currentDateTime())
+
+        # Diem toi da
+        spin_diem = QtWidgets.QDoubleSpinBox()
+        spin_diem.setRange(1, 100)
+        spin_diem.setValue(10)
+        spin_diem.setSingleStep(0.5)
+        spin_diem.setSuffix(' điểm')
+
+        # File picker - state luu trong closure de tranh leak instance attr
+        picked = {'path': None}
+        btn_file = QtWidgets.QPushButton('📎 Chọn tệp...')
         btn_file.setCursor(Qt.PointingHandCursor)
+        btn_file.setStyleSheet('QPushButton { text-align: left; padding: 6px 10px; }')
+
         def _pick():
-            path, _ = QtWidgets.QFileDialog.getOpenFileName(dlg, 'Chọn tệp đính kèm', '', 'All Files (*.*)')
-            if path:
-                self._asg_upload_path = path
-                btn_file.setText(f'📎 {os.path.basename(path)}')
+            path, _ = QtWidgets.QFileDialog.getOpenFileName(
+                dlg, 'Chọn tệp đính kèm', os.path.expanduser('~'),
+                'Tệp hỗ trợ (*.png *.jpg *.jpeg *.gif *.pdf *.doc *.docx '
+                '*.xls *.xlsx *.ppt *.pptx *.txt *.zip *.rar);;Tất cả (*.*)'
+            )
+            if not path:
+                return
+            try:
+                size_mb = os.path.getsize(path) / (1024 * 1024)
+            except OSError:
+                size_mb = 0
+            if size_mb > 20:
+                msg_warn(self, 'File quá lớn',
+                         f'File {size_mb:.1f} MB vượt giới hạn 20 MB.')
+                return
+            picked['path'] = path
+            btn_file.setText(f'📎 {os.path.basename(path)} ({size_mb:.1f} MB)')
         btn_file.clicked.connect(_pick)
+
+        # Add rows DAY DU (truoc chi addRow 1 field 'file' khien dialog mat het
+        # field khac, va dt_han/spin_diem bi quen tao -> NameError luc submit)
+        form.addRow('Lớp (*):', cbo_lop)
+        form.addRow('Tiêu đề (*):', txt_title)
+        form.addRow('Mô tả:', txt_desc)
+        form.addRow('Hạn nộp:', dt_han)
+        form.addRow('Điểm tối đa:', spin_diem)
         form.addRow('Tệp đính kèm:', btn_file)
 
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
@@ -13460,17 +13502,20 @@ class TeacherWindow(QtWidgets.QWidget):
         if not (DB_AVAILABLE and AssignmentService and gv_id):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống')
             return
+        # Upload file truoc (neu co) - neu fail thi khong tao assignment de
+        # state khong lech (assignment ko file thi user phai sua lai)
+        file_url = None
+        if picked['path']:
+            try:
+                res = AssignmentService.upload_file(picked['path'])
+                file_url = res.get('file_url')
+            except Exception as e:
+                print(f'[TEA_ASG] upload loi: {e}')
+                msg_warn(self, 'Lỗi tải lên',
+                         f'Không thể tải tệp đính kèm lên server:\n{api_error_msg(e)}')
+                return
         try:
             han_dt = dt_han.dateTime().toPyDateTime()
-            file_url = None
-            if getattr(self, '_asg_upload_path', None):
-                try:
-                    res = AssignmentService.upload_file(self._asg_upload_path)
-                    file_url = res.get('file_url')
-                except Exception as e:
-                    msg_warn(self, 'Lỗi tải lên', f'Không thể tải tệp đính kèm lên server:\n{e}')
-                    return
-
             AssignmentService.create(
                 lop_id=cbo_lop.currentData(),
                 gv_id=gv_id,
@@ -13484,7 +13529,9 @@ class TeacherWindow(QtWidgets.QWidget):
             print(f'[TEA_ASG] create loi: {e}')
             msg_warn(self, 'Lỗi', f'Không tạo được:\n{api_error_msg(e)}')
             return
-        msg_info(self, 'Thành công', f'Đã giao bài "{title}" cho lớp {cbo_lop.currentData()}')
+        suffix = ' (kèm tệp)' if file_url else ''
+        msg_info(self, 'Thành công',
+                 f'Đã giao bài "{title}" cho lớp {cbo_lop.currentData()}{suffix}')
         self._reload_tea_assignments(self.page_widgets[7])
 
     def _tea_delete_assignment(self, asg_id, tieu_de):
