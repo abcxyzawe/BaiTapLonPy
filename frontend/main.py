@@ -4210,26 +4210,34 @@ class MainWindow(QtWidgets.QWidget):
         if w:
             w.setText(f"{time_greeting()}, {MOCK_USER['name']}")
 
-        # Nut '🔔 Nhac lich' co dinh goc tren phai dashboard. Mo dialog tong
-        # hop bai tap + lich thi + buoi hoc hom nay/ngay mai. Idempotent.
-        hv_id_for_btn = MOCK_USER.get('id') or MOCK_USER.get('user_id')
-        if not page.findChild(QtWidgets.QPushButton, 'btnReminders'):
-            btn_rmd = QtWidgets.QPushButton('🔔 Nhắc lịch', page)
-            btn_rmd.setObjectName('btnReminders')
-            btn_rmd.setGeometry(720, 22, 130, 36)
-            btn_rmd.setCursor(Qt.PointingHandCursor)
-            btn_rmd.setToolTip('Bài tập sắp hết hạn · Lịch thi · Buổi học hôm nay')
-            btn_rmd.setStyleSheet(
-                f'QPushButton {{ background: {COLORS["navy"]}; color: white; '
-                f'border: none; border-radius: 6px; font-size: 12px; '
-                f'font-weight: bold; padding: 0 12px; }} '
-                f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
-            )
-            btn_rmd.clicked.connect(
-                lambda: show_reminders_dialog(self, hv_id_for_btn)
-            )
-            btn_rmd.show()
-            btn_rmd.raise_()
+        # Nut '🔔 Nhac lich' o dashboard HV - TAM HIDE theo yeu cau user, se
+        # toi uu sau (12/05/2025). Code giu nguyen + functions
+        # show_reminders_dialog / _build_reminder_section / _build_*_reminder_row
+        # van con o module level - khi nao enable lai chi can uncomment block
+        # duoi day.
+        # ----------------------------------------------------------------
+        # hv_id_for_btn = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        # if not page.findChild(QtWidgets.QPushButton, 'btnReminders'):
+        #     btn_rmd = QtWidgets.QPushButton('🔔 Nhắc lịch', page)
+        #     btn_rmd.setObjectName('btnReminders')
+        #     btn_rmd.setGeometry(720, 22, 130, 36)
+        #     btn_rmd.setCursor(Qt.PointingHandCursor)
+        #     btn_rmd.setToolTip('Bài tập sắp hết hạn · Lịch thi · Buổi học hôm nay')
+        #     btn_rmd.setStyleSheet(
+        #         f'QPushButton {{ background: {COLORS["navy"]}; color: white; '
+        #         f'border: none; border-radius: 6px; font-size: 12px; '
+        #         f'font-weight: bold; padding: 0 12px; }} '
+        #         f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
+        #     )
+        #     btn_rmd.clicked.connect(
+        #         lambda: show_reminders_dialog(self, hv_id_for_btn)
+        #     )
+        #     btn_rmd.show()
+        #     btn_rmd.raise_()
+        # Hide button neu da duoc tao tu phien truoc (live reload)
+        _existing_btn_rmd = page.findChild(QtWidgets.QPushButton, 'btnReminders')
+        if _existing_btn_rmd:
+            _existing_btn_rmd.hide()
 
         # Bang khoa hoc cua HV - lay tu API thuc
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
