@@ -22,6 +22,12 @@ async def lifespan(app: FastAPI):
     from backend.database.db import db
     if db.is_connected():
         print('[API] Da ket noi PostgreSQL')
+        try:
+            db.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS den_hv_id INTEGER REFERENCES users(id) ON DELETE CASCADE;")
+            db.execute("ALTER TABLE assignments ADD COLUMN IF NOT EXISTS file_url VARCHAR(500);")
+            print('[API] Auto-patched missing column den_hv_id and file_url')
+        except Exception as e:
+            print(f'[API] Could not patch columns: {e}')
     else:
         print('[API] CANH BAO: Khong ket noi duoc DB!')
     yield
@@ -44,6 +50,14 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+# Serve uploads directory
+import os
+from fastapi.staticfiles import StaticFiles
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
 
 # Mount routers - moi service 1 router
 app.include_router(auth.router, prefix='/auth', tags=['Auth'])

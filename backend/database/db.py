@@ -15,12 +15,15 @@ class Database:
     dung .cursor() context manager de auto commit/rollback.
     """
     _instance = None
+    import threading
+    _lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._conn = None
             cls._instance._connected = False
+            cls._instance.lock = cls._lock
         return cls._instance
 
     def connect(self):
@@ -47,51 +50,47 @@ class Database:
                 cur.execute('SELECT 1')
                 cur.fetchone()
             return True
-        except Exception:
+        except Exception as e:
+            print(f"[DB ERROR] Loi ket noi that su la: {e}")
             self._connected = False
             return False
 
     @contextmanager
     def cursor(self, dict_cursor=True):
-        """context manager voi auto-commit / rollback + auto-retry 1 lan
-        khi conn bi closed/broken (vd PG restart, network blip).
+        """context manager voi auto-commit / rollback + auto-retry 1 lan..."""
+        with self.lock:
+            cur_factory = psycopg2.extras.RealDictCursor if dict_cursor else None
 
-        Phan biet 2 loai loi:
-        - OperationalError/InterfaceError ngay khi mo cursor -> conn dead -> reset + retry
-        - Loi trong block 'with' -> rollback + raise (khong retry, vi user code co the gay loi)
-        """
-        cur_factory = psycopg2.extras.RealDictCursor if dict_cursor else None
+            # Step 1: get a usable cursor (retry 1 lan neu conn dead)
+            try:
+                conn = self.connect()
+                cur = conn.cursor(cursor_factory=cur_factory)
+            except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                # Conn da chet -> reset va connect lai 1 lan
+                print(f'[DB] conn dead, retry 1x: {str(e)[:100]}')
+                self._conn = None
+                self._connected = False
+                conn = self.connect()
+                cur = conn.cursor(cursor_factory=cur_factory)
 
-        # Step 1: get a usable cursor (retry 1 lan neu conn dead)
-        try:
-            conn = self.connect()
-            cur = conn.cursor(cursor_factory=cur_factory)
-        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
-            # Conn da chet -> reset va connect lai 1 lan
-            print(f'[DB] conn dead, retry 1x: {str(e)[:100]}')
-            self._conn = None
-            self._connected = False
-            conn = self.connect()
-            cur = conn.cursor(cursor_factory=cur_factory)
-
-        # Step 2: chay user code, commit/rollback nhu cu
-        try:
-            yield cur
-            conn.commit()
-        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
-            # Conn chet giua chung -> rollback se fail, chap nhan + reset conn
-            try: conn.rollback()
-            except Exception: pass
-            self._conn = None
-            self._connected = False
-            print(f'[DB] conn lost mid-query, will reconnect next call: {str(e)[:100]}')
-            raise
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            try: cur.close()
-            except Exception: pass
+            # Step 2: chay user code, commit/rollback nhu cu
+            try:
+                yield cur
+                conn.commit()
+            except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                # Conn chet giua chung -> rollback se fail, chap nhan + reset conn
+                try: conn.rollback()
+                except Exception: pass
+                self._conn = None
+                self._connected = False
+                print(f'[DB] conn lost mid-query, will reconnect next call: {str(e)[:100]}')
+                raise
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                try: cur.close()
+                except Exception: pass
 
     def fetch_all(self, sql: str, params=None):
         with self.cursor() as cur:

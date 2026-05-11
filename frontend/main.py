@@ -4412,9 +4412,11 @@ class MainWindow(QtWidgets.QWidget):
         # (180, 0, 450, 56) overlap title 45px khien text wr de len title -> roi
         title = page.findChild(QtWidgets.QLabel, 'lblPageTitle')
         if title and not page.findChild(QtWidgets.QLabel, 'lblWeekRange'):
-            wr = QtWidgets.QLabel(page)
+            hb = page.findChild(QtWidgets.QFrame, 'headerBar')
+            wr = QtWidgets.QLabel(hb if hb else page)
             wr.setObjectName('lblWeekRange')
-            wr.setGeometry(240, 0, 480, 56)  # x=240 (sau title 225+15 gap)
+            # x=120, w=120 de nam giua title "Lich hoc" va cum "Loc lop"
+            wr.setGeometry(120, 0, 120, 56)
             wr.setStyleSheet('color: #4a5568; font-size: 13px; background: transparent;')
             wr.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             wr.show()
@@ -5557,56 +5559,63 @@ class MainWindow(QtWidgets.QWidget):
         desc.setStyleSheet('background: #f7fafc;')
         v.addWidget(desc)
 
-        # File dinh kem (neu GV co upload). HV bam de tai ve + mo bang app mac dinh OS
-        asg_file_path = full_asg.get('file_path')
-        if asg_file_path:
-            file_row = QtWidgets.QFrame()
-            file_row.setStyleSheet(
-                'QFrame { background: #eef2ff; border: 1px solid #c7d2fe; '
-                'border-radius: 6px; padding: 6px; }'
-            )
-            fh = QtWidgets.QHBoxLayout(file_row)
-            fh.setContentsMargins(8, 4, 8, 4)
-            file_name_only = asg_file_path.rsplit('/', 1)[-1]
-            # Bo timestamp prefix (1234567890123_) khi hien thi cho HV de
-            file_disp = file_name_only.split('_', 1)[1] if '_' in file_name_only else file_name_only
-            lbl_f = QtWidgets.QLabel(f'📎 <b>File đính kèm:</b> {file_disp}')
-            lbl_f.setStyleSheet('background: transparent; border: none;')
-            btn_dl = QtWidgets.QPushButton('Tải về & Mở')
-            btn_dl.setCursor(Qt.PointingHandCursor)
-            btn_dl.setStyleSheet(
-                'QPushButton { background: #4f46e5; color: white; border: none; '
-                'padding: 4px 12px; border-radius: 4px; font-weight: bold; }'
-                'QPushButton:hover { background: #4338ca; }'
-            )
-
-            def _download_and_open():
-                from PyQt5.QtGui import QDesktopServices
-                from PyQt5.QtCore import QUrl
-                import tempfile
-                try:
-                    # Save vao temp dir voi ten goc (bo prefix timestamp) de dialog
-                    # "Save As" cua OS hien ten quen thuoc cho user
-                    tmp_dir = tempfile.gettempdir()
-                    dest = os.path.join(tmp_dir, file_disp)
-                    AssignmentService.download_file(asg_file_path, dest)
-                    QDesktopServices.openUrl(QUrl.fromLocalFile(dest))
-                except Exception as ex:
-                    msg_warn(self, 'Lỗi tải file', api_error_msg(ex))
-
-            btn_dl.clicked.connect(_download_and_open)
-            fh.addWidget(lbl_f, 1)
-            fh.addWidget(btn_dl)
-            v.addWidget(file_row)
+        if full_asg.get('file_url'):
+            import os
+            from PyQt5.QtGui import QDesktopServices
+            from PyQt5.QtCore import QUrl
+            from frontend.api_client import API_URL
+            
+            btn_down = QtWidgets.QPushButton(f'📥 Tải tệp đính kèm ({os.path.basename(full_asg["file_url"])})')
+            btn_down.setStyleSheet('background: #ebf8ff; color: #3182ce; font-weight: bold; border: 1px solid #63b3ed; border-radius: 4px; padding: 6px;')
+            btn_down.setCursor(Qt.PointingHandCursor)
+            
+            # API_URL co the co /api/v1 (trong config tuong lai) hoac http://localhost:8000
+            # Neu url la '/uploads/asg_...', ta them domain vao truoc
+            base_url = API_URL
+            if base_url.endswith('/api/v1'):
+                base_url = base_url.replace('/api/v1', '')
+            
+            full_url = base_url + full_asg['file_url']
+            btn_down.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(full_url)))
+            v.addWidget(btn_down)
 
         # Bai cua HV
         v.addWidget(QtWidgets.QLabel('<b>Bài làm của bạn:</b>'))
         my_text = QtWidgets.QTextEdit()
-        my_text.setPlaceholderText('Nhập bài làm vào đây (text). Sau này có thể upload file.')
+        my_text.setPlaceholderText('Nhập bài làm vào đây (text)...')
         my_text.setFixedHeight(150)
         if my_sub and my_sub.get('noi_dung'):
             my_text.setPlainText(my_sub['noi_dung'])
         v.addWidget(my_text)
+
+        # Hien thi file da nop / Cho phep chon file nop moi
+        self._stu_upload_path = None
+        
+        # Hien thi link file da nop
+        if my_sub and my_sub.get('file_url'):
+            import os
+            from PyQt5.QtGui import QDesktopServices
+            from PyQt5.QtCore import QUrl
+            from frontend.api_client import API_URL
+            base_url = API_URL.replace('/api/v1', '') if API_URL.endswith('/api/v1') else API_URL
+            full_url = base_url + my_sub['file_url']
+            
+            btn_my_file = QtWidgets.QPushButton(f'📄 Xem file bạn đã nộp ({os.path.basename(my_sub["file_url"])})')
+            btn_my_file.setStyleSheet('background: #f0fff4; color: #22543d; font-weight: bold; border: 1px solid #9ae6b4; border-radius: 4px; padding: 6px;')
+            btn_my_file.setCursor(Qt.PointingHandCursor)
+            btn_my_file.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(full_url)))
+            v.addWidget(btn_my_file)
+        
+        btn_stu_file = QtWidgets.QPushButton('📎 Đính kèm tệp bài làm (nếu có)...')
+        btn_stu_file.setCursor(Qt.PointingHandCursor)
+        def _pick_stu():
+            path, _ = QtWidgets.QFileDialog.getOpenFileName(dlg, 'Chọn tệp bài làm', '', 'All Files (*.*)')
+            if path:
+                self._stu_upload_path = path
+                import os
+                btn_stu_file.setText(f'📎 Đã chọn: {os.path.basename(path)}')
+        btn_stu_file.clicked.connect(_pick_stu)
+        v.addWidget(btn_stu_file)
 
         # Feedback GV (neu co)
         graded = my_sub and my_sub.get('diem') is not None
@@ -5633,6 +5642,7 @@ class MainWindow(QtWidgets.QWidget):
             btn_close = btns.addButton('Đóng', QtWidgets.QDialogButtonBox.RejectRole)
             btn_close.clicked.connect(dlg.reject)
             my_text.setReadOnly(True)
+            btn_stu_file.hide()
         else:
             btn_save = btns.addButton('Nộp bài', QtWidgets.QDialogButtonBox.AcceptRole)
             btn_cancel = btns.addButton('Huỷ', QtWidgets.QDialogButtonBox.RejectRole)
@@ -5644,11 +5654,20 @@ class MainWindow(QtWidgets.QWidget):
             return
         # Submit
         noi_dung = my_text.toPlainText().strip()
-        if not noi_dung:
-            msg_warn(self, 'Trống', 'Bài làm không được để trống.')
+        if not noi_dung and not getattr(self, '_stu_upload_path', None):
+            msg_warn(self, 'Trống', 'Bạn chưa nhập bài làm text hoặc chưa chọn tệp đính kèm.')
             return
         try:
-            AssignmentService.submit(asg['id'], hv_id, noi_dung)
+            file_url = None
+            if getattr(self, '_stu_upload_path', None):
+                try:
+                    res = AssignmentService.upload_file(self._stu_upload_path)
+                    file_url = res.get('file_url')
+                except Exception as e:
+                    msg_warn(self, 'Lỗi tải lên', f'Không thể tải tệp bài làm lên server:\n{e}')
+                    return
+            
+            AssignmentService.submit(asg['id'], hv_id, noi_dung, file_url)
         except Exception as e:
             msg_warn(self, 'Lỗi nộp', api_error_msg(e))
             return
@@ -13079,78 +13098,18 @@ class TeacherWindow(QtWidgets.QWidget):
         txt_desc.setPlaceholderText('Mô tả yêu cầu bài tập (có thể dán link tài liệu, ví dụ...)')
         txt_desc.setFixedHeight(120)
 
-        # File dinh kem - container co button chon + label hien filename + button bo
-        file_row = QtWidgets.QWidget()
-        fh = QtWidgets.QHBoxLayout(file_row)
-        fh.setContentsMargins(0, 0, 0, 0)
-        fh.setSpacing(6)
-        btn_pick = QtWidgets.QPushButton('📎 Chọn file...')
-        btn_pick.setCursor(Qt.PointingHandCursor)
-        btn_pick.setStyleSheet('QPushButton { padding: 6px 10px; }')
-        lbl_file = QtWidgets.QLabel('Không có file đính kèm')
-        lbl_file.setStyleSheet('color: #718096; font-style: italic;')
-        btn_clear = QtWidgets.QPushButton('✕')
-        btn_clear.setFixedWidth(28)
-        btn_clear.setCursor(Qt.PointingHandCursor)
-        btn_clear.setToolTip('Bỏ file đính kèm')
-        btn_clear.hide()
-        fh.addWidget(btn_pick)
-        fh.addWidget(lbl_file, 1)
-        fh.addWidget(btn_clear)
-        # State: luu local path - upload khi user bam OK (tranh upload file roi
-        # huy dialog -> file rac tren server)
-        picked = {'path': None}
-
-        def _pick_file():
-            allow_str = ('Tệp hỗ trợ (*.png *.jpg *.jpeg *.gif *.pdf '
-                         '*.doc *.docx *.xls *.xlsx *.ppt *.pptx *.txt *.zip *.rar);;'
-                         'Tất cả (*.*)')
-            path, _ = QtWidgets.QFileDialog.getOpenFileName(
-                self, 'Chọn file đính kèm cho bài tập',
-                os.path.expanduser('~'), allow_str
-            )
-            if not path:
-                return
-            try:
-                size_mb = os.path.getsize(path) / (1024 * 1024)
-            except OSError:
-                size_mb = 0
-            if size_mb > 20:
-                msg_warn(self, 'File quá lớn',
-                         f'File {size_mb:.1f} MB vượt giới hạn 20 MB.')
-                return
-            picked['path'] = path
-            lbl_file.setText(f'{os.path.basename(path)}  ({size_mb:.1f} MB)')
-            lbl_file.setStyleSheet('color: #2d3748;')
-            btn_clear.show()
-
-        def _clear_file():
-            picked['path'] = None
-            lbl_file.setText('Không có file đính kèm')
-            lbl_file.setStyleSheet('color: #718096; font-style: italic;')
-            btn_clear.hide()
-
-        btn_pick.clicked.connect(_pick_file)
-        btn_clear.clicked.connect(_clear_file)
-
-        dt_han = QtWidgets.QDateTimeEdit()
-        dt_han.setCalendarPopup(True)
-        from PyQt5.QtCore import QDateTime
-        dt_han.setDateTime(QDateTime.currentDateTime().addDays(7))
-        dt_han.setDisplayFormat('dd/MM/yyyy HH:mm')
-
-        spin_diem = QtWidgets.QDoubleSpinBox()
-        spin_diem.setRange(1, 100)
-        spin_diem.setValue(10)
-        spin_diem.setSingleStep(0.5)
-        spin_diem.setSuffix(' điểm')
-
-        form.addRow('Lớp (*):', cbo_lop)
-        form.addRow('Tiêu đề (*):', txt_title)
-        form.addRow('Mô tả:', txt_desc)
-        form.addRow('File đính kèm:', file_row)
-        form.addRow('Hạn nộp:', dt_han)
-        form.addRow('Điểm tối đa:', spin_diem)
+        # File picker
+        import os
+        self._asg_upload_path = None
+        btn_file = QtWidgets.QPushButton('📎 Đính kèm tệp...')
+        btn_file.setCursor(Qt.PointingHandCursor)
+        def _pick():
+            path, _ = QtWidgets.QFileDialog.getOpenFileName(dlg, 'Chọn tệp đính kèm', '', 'All Files (*.*)')
+            if path:
+                self._asg_upload_path = path
+                btn_file.setText(f'📎 {os.path.basename(path)}')
+        btn_file.clicked.connect(_pick)
+        form.addRow('Tệp đính kèm:', btn_file)
 
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
@@ -13169,27 +13128,25 @@ class TeacherWindow(QtWidgets.QWidget):
         if not (DB_AVAILABLE and AssignmentService and gv_id):
             msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống')
             return
-        # Upload file truoc (neu co) -> lay file_path roi tao assignment.
-        # Neu upload fail thi dung luon, khong tao assignment de tranh state lech.
-        file_path_val = None
-        if picked['path']:
-            try:
-                up_res = AssignmentService.upload_file(picked['path'])
-                file_path_val = up_res.get('file_path')
-            except Exception as e:
-                print(f'[TEA_ASG] upload loi: {e}')
-                msg_warn(self, 'Lỗi upload file', api_error_msg(e))
-                return
         try:
             han_dt = dt_han.dateTime().toPyDateTime()
+            file_url = None
+            if getattr(self, '_asg_upload_path', None):
+                try:
+                    res = AssignmentService.upload_file(self._asg_upload_path)
+                    file_url = res.get('file_url')
+                except Exception as e:
+                    msg_warn(self, 'Lỗi tải lên', f'Không thể tải tệp đính kèm lên server:\n{e}')
+                    return
+
             AssignmentService.create(
                 lop_id=cbo_lop.currentData(),
                 gv_id=gv_id,
                 tieu_de=title,
                 mo_ta=txt_desc.toPlainText(),
-                file_path=file_path_val,
                 han_nop=han_dt,
                 diem_toi_da=float(spin_diem.value()),
+                file_url=file_url,
             )
         except Exception as e:
             print(f'[TEA_ASG] create loi: {e}')
@@ -13385,6 +13342,21 @@ class TeacherWindow(QtWidgets.QWidget):
         sub_view.setFixedHeight(160)
         sub_view.setStyleSheet('background: #f7fafc; color: #2d3748; border: 1px solid #e2e8f0; border-radius: 6px;')
         body_v.addWidget(sub_view)
+
+        # File dinh kem cua HV
+        if sub.get('file_url'):
+            import os
+            from PyQt5.QtGui import QDesktopServices
+            from PyQt5.QtCore import QUrl
+            from frontend.api_client import API_URL
+            base_url = API_URL.replace('/api/v1', '') if API_URL.endswith('/api/v1') else API_URL
+            full_url = base_url + sub['file_url']
+            
+            btn_stu_file = QtWidgets.QPushButton(f'📥 Tải bài làm đính kèm ({os.path.basename(sub["file_url"])})')
+            btn_stu_file.setStyleSheet('background: #ebf8ff; color: #3182ce; font-weight: bold; border: 1px solid #63b3ed; border-radius: 4px; padding: 6px;')
+            btn_stu_file.setCursor(Qt.PointingHandCursor)
+            btn_stu_file.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(full_url)))
+            body_v.addWidget(btn_stu_file)
 
         # Diem + nhan xet
         form = QtWidgets.QFormLayout()
@@ -15290,6 +15262,30 @@ class EmployeeWindow(QtWidgets.QWidget):
         txt = page.findChild(QtWidgets.QLineEdit, 'txtSearchPay')
         if txt:
             safe_connect(txt.textChanged, lambda t: table_filter(tbl, t, cols=[0, 1]))
+
+        # Hien thi thong tin HV duoc chon sang panel ben phai
+        def _on_pay_select():
+            rows = tbl.selectionModel().selectedRows()
+            lbl_stu = page.findChild(QtWidgets.QLabel, 'valPayStudent')
+            lbl_cls = page.findChild(QtWidgets.QLabel, 'valPayClass')
+            lbl_amt = page.findChild(QtWidgets.QLabel, 'valPayAmount')
+            if not rows:
+                if lbl_stu: lbl_stu.setText('—')
+                if lbl_cls: lbl_cls.setText('—')
+                if lbl_amt: lbl_amt.setText('— đ')
+                return
+            
+            r = rows[0].row()
+            ten = tbl.item(r, 1).text() if tbl.item(r, 1) else '—'
+            lop = tbl.item(r, 2).text() if tbl.item(r, 2) else '—'
+            gia = tbl.item(r, 3).text() if tbl.item(r, 3) else '0'
+            
+            if lbl_stu: lbl_stu.setText(ten)
+            if lbl_cls: lbl_cls.setText(lop)
+            if lbl_amt: lbl_amt.setText(f'<b style="color:{COLORS["gold"]}; font-size:16px;">{gia} đ</b>')
+
+        safe_connect(tbl.itemSelectionChanged, _on_pay_select)
+        _on_pay_select()  # trigger lan dau de reset label
 
     def _emp_confirm_pay(self, tbl):
         rows = tbl.selectionModel().selectedRows() if tbl else []
