@@ -3505,6 +3505,289 @@ def _build_video_card(parent, vrow, lop_id, role, reload_cb):
     return card
 
 
+def show_reminders_dialog(parent, hv_id):
+    """Dialog 'Nhac lich' tong hop cho HV: bai tap sap het han + lich thi sap toi
+    + buoi hoc hom nay/ngay mai. Layout 3 section."""
+    from datetime import date as _date, datetime as _dt, timedelta as _td
+
+    dlg = QtWidgets.QDialog(parent)
+    style_dialog(dlg)
+    dlg.setWindowTitle('Nhắc lịch của tôi')
+    dlg.setFixedSize(620, 640)
+    v = QtWidgets.QVBoxLayout(dlg)
+    v.setContentsMargins(18, 16, 18, 16)
+    v.setSpacing(12)
+
+    # Header
+    today_d = _date.today()
+    tmr_d = today_d + _td(days=1)
+    head = QtWidgets.QLabel(
+        f'<b style="color:{COLORS["navy"]}; font-size:15px;">🔔 Nhắc lịch sắp tới</b>'
+        f'<br><span style="color:{COLORS["text_mid"]}; font-size:11px;">'
+        f'Hôm nay {today_d.strftime("%d/%m/%Y")} · Tổng hợp bài tập + lịch thi + buổi học '
+        f'(7 ngày tới).</span>'
+    )
+    head.setStyleSheet(
+        f'color: {COLORS["text_dark"]}; padding: 10px 14px; '
+        f'background: {COLORS["bg_alt"]}; '
+        f'border: 1px solid {COLORS["border"]}; '
+        f'border-left: 3px solid {COLORS["navy"]}; '
+        f'border-radius: 6px;'
+    )
+    head.setWordWrap(True)
+    v.addWidget(head)
+
+    scroll = QtWidgets.QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setStyleSheet(
+        f'QScrollArea {{ border: 1px solid {COLORS["border"]}; '
+        f'border-radius: 6px; background: white; }}'
+    )
+    inner = QtWidgets.QWidget()
+    inner.setStyleSheet('background: white;')
+    body = QtWidgets.QVBoxLayout(inner)
+    body.setContentsMargins(14, 14, 14, 14)
+    body.setSpacing(16)
+
+    # === SECTION 1: BAI TAP ===
+    asg_rows = []
+    if DB_AVAILABLE and hv_id and AssignmentService:
+        try:
+            all_asg = AssignmentService.get_pending(hv_id) or []
+            now = _dt.now()
+            for r in all_asg:
+                if r.get('submission_id') is not None or r.get('diem') is not None:
+                    continue
+                han = r.get('han_nop')
+                han_dt = parse_iso_datetime(han) if han else None
+                if han_dt is None:
+                    asg_rows.append((r, 999, 'no_deadline'))
+                    continue
+                days = (han_dt - now).total_seconds() / 86400
+                if days < 0:
+                    asg_rows.append((r, int(days), 'overdue'))
+                elif days <= 3:
+                    asg_rows.append((r, days, 'urgent'))
+                elif days <= 7:
+                    asg_rows.append((r, days, 'soon'))
+            order = {'overdue': 0, 'urgent': 1, 'soon': 2, 'no_deadline': 3}
+            asg_rows.sort(key=lambda x: (order[x[2]],
+                                            x[1] if isinstance(x[1], (int, float)) else 999))
+        except Exception as e:
+            print(f'[REMIND_ASG] loi: {e}')
+
+    sec_asg, sec_asg_body = _build_reminder_section('📝 Bài tập cần làm', COLORS['orange'])
+    if asg_rows:
+        for asg, days, status in asg_rows[:10]:
+            sec_asg_body.addWidget(_build_asg_reminder_row(asg, days, status))
+    else:
+        sec_asg_body.addWidget(_build_empty_row('Không có bài tập cần làm 🎉'))
+    body.addWidget(sec_asg)
+
+    # === SECTION 2: LICH THI ===
+    exam_rows = []
+    if DB_AVAILABLE and hv_id and ExamService:
+        try:
+            all_exams = ExamService.get_for_student(hv_id) or []
+            for r in all_exams:
+                ngay_d = parse_iso_date(r.get('ngay_thi') or r.get('ngay', ''))
+                if not ngay_d:
+                    continue
+                days_left = (ngay_d - today_d).days
+                if 0 <= days_left <= 7:
+                    exam_rows.append((r, days_left))
+            exam_rows.sort(key=lambda x: x[1])
+        except Exception as e:
+            print(f'[REMIND_EXAM] loi: {e}')
+
+    sec_exam, sec_exam_body = _build_reminder_section('📚 Lịch thi 7 ngày tới', COLORS['red'])
+    if exam_rows:
+        for exam, days in exam_rows[:10]:
+            sec_exam_body.addWidget(_build_exam_reminder_row(exam, days))
+    else:
+        sec_exam_body.addWidget(_build_empty_row('Không có lịch thi nào trong 7 ngày tới ✓'))
+    body.addWidget(sec_exam)
+
+    # === SECTION 3: BUOI HOC HOM NAY / NGAY MAI ===
+    sched_today_tmr = []
+    if DB_AVAILABLE and hv_id and ScheduleService:
+        try:
+            monday = today_d - _td(days=today_d.weekday())
+            week = ScheduleService.get_for_student_week(hv_id, monday.isoformat()) or []
+            for s in week:
+                ngay = parse_iso_date(s.get('ngay', ''))
+                if not ngay:
+                    continue
+                if ngay == today_d:
+                    sched_today_tmr.append((s, 'today'))
+                elif ngay == tmr_d:
+                    sched_today_tmr.append((s, 'tomorrow'))
+            sched_today_tmr.sort(key=lambda x: (0 if x[1] == 'today' else 1,
+                                                  str(x[0].get('gio_bat_dau', ''))))
+        except Exception as e:
+            print(f'[REMIND_SCHED] loi: {e}')
+
+    sec_sched, sec_sched_body = _build_reminder_section('📅 Buổi học hôm nay / ngày mai',
+                                                          COLORS['navy'])
+    if sched_today_tmr:
+        for sched, when in sched_today_tmr:
+            sec_sched_body.addWidget(_build_sched_reminder_row(sched, when))
+    else:
+        sec_sched_body.addWidget(_build_empty_row('Không có buổi học hôm nay/ngày mai'))
+    body.addWidget(sec_sched)
+    body.addStretch()
+
+    scroll.setWidget(inner)
+    v.addWidget(scroll, 1)
+
+    # Footer
+    ft = QtWidgets.QHBoxLayout()
+    ft.addStretch()
+    btn_close = QtWidgets.QPushButton('Đóng')
+    btn_close.setCursor(Qt.PointingHandCursor)
+    btn_close.setStyleSheet(
+        f'QPushButton {{ background: {COLORS["bg"]}; color: {COLORS["text_mid"]}; '
+        f'border: 1px solid {COLORS["border"]}; padding: 8px 18px; '
+        f'border-radius: 6px; font-size: 12px; }} '
+        f'QPushButton:hover {{ background: #e2e8f0; }}'
+    )
+    btn_close.clicked.connect(dlg.accept)
+    ft.addWidget(btn_close)
+    v.addLayout(ft)
+
+    dlg.exec_()
+
+
+def _build_reminder_section(title, accent_color):
+    """Tra ve tuple (section_frame, body_layout) - body_layout de caller addWidget."""
+    sec = QtWidgets.QFrame()
+    sec.setStyleSheet(
+        f'QFrame {{ background: white; border: 1px solid {COLORS["border"]}; '
+        f'border-left: 3px solid {accent_color}; border-radius: 6px; }}'
+    )
+    sv = QtWidgets.QVBoxLayout(sec)
+    sv.setContentsMargins(12, 10, 12, 10)
+    sv.setSpacing(6)
+    lbl = QtWidgets.QLabel(
+        f'<b style="color:{accent_color}; font-size:13px;">{title}</b>'
+    )
+    lbl.setStyleSheet('background: transparent; border: none;')
+    sv.addWidget(lbl)
+    body = QtWidgets.QVBoxLayout()
+    body.setSpacing(4)
+    sv.addLayout(body)
+    return sec, body
+
+
+def _build_empty_row(text):
+    lbl = QtWidgets.QLabel(text)
+    lbl.setStyleSheet(
+        f'color: {COLORS["text_light"]}; padding: 8px 4px; '
+        f'font-size: 11px; font-style: italic; '
+        f'background: transparent; border: none;'
+    )
+    return lbl
+
+
+def _build_asg_reminder_row(asg, days, status):
+    row = QtWidgets.QFrame()
+    if status == 'overdue':
+        bg, fg = '#fee2e2', COLORS['red']
+        label = f'QUÁ HẠN {abs(int(days))}d'
+    elif status == 'urgent':
+        bg, fg = '#fef3c7', '#9a3412'
+        label = f'còn {int(days * 24)}h' if days < 1 else f'còn {int(days)}d'
+    elif status == 'soon':
+        bg, fg = '#fefce8', '#a16207'
+        label = f'còn {int(days)}d'
+    else:
+        bg, fg = COLORS['bg_alt'], COLORS['text_mid']
+        label = 'không hạn'
+    row.setStyleSheet(f'QFrame {{ background: {bg}; border-radius: 4px; }}')
+    h = QtWidgets.QHBoxLayout(row)
+    h.setContentsMargins(8, 6, 8, 6)
+    h.setSpacing(8)
+    title = QtWidgets.QLabel(
+        f'<span style="color:{COLORS["text_dark"]}; font-size:12px;"><b>'
+        f'{asg.get("tieu_de", "")}</b></span>'
+        f' &nbsp;<span style="color:{COLORS["text_light"]}; font-size:10px;">'
+        f'· {asg.get("ten_mon", "")} · {asg.get("lop_id", "")}</span>'
+    )
+    title.setStyleSheet('background: transparent; border: none;')
+    h.addWidget(title, 1)
+    badge = QtWidgets.QLabel(label)
+    badge.setStyleSheet(
+        f'color: {fg}; font-size: 10px; font-weight: bold; '
+        f'background: transparent; border: none;'
+    )
+    h.addWidget(badge)
+    return row
+
+
+def _build_exam_reminder_row(exam, days_left):
+    row = QtWidgets.QFrame()
+    if days_left == 0:
+        bg, fg, day_label = '#fef3c7', '#9a3412', 'HÔM NAY'
+    elif days_left <= 3:
+        bg, fg, day_label = '#fee2e2', '#991b1b', f'còn {days_left}d'
+    else:
+        bg, fg, day_label = '#fefce8', '#a16207', f'còn {days_left}d'
+    row.setStyleSheet(f'QFrame {{ background: {bg}; border-radius: 4px; }}')
+    h = QtWidgets.QHBoxLayout(row)
+    h.setContentsMargins(8, 6, 8, 6)
+    h.setSpacing(8)
+    ngay_d = parse_iso_date(exam.get('ngay_thi') or exam.get('ngay', ''))
+    ngay_str = ngay_d.strftime('%d/%m') if ngay_d else '?'
+    gio_bd = str(exam.get('gio_bat_dau', ''))[:5]
+    title = QtWidgets.QLabel(
+        f'<span style="color:{COLORS["text_dark"]}; font-size:12px;"><b>'
+        f'{exam.get("ten_mon", "Lịch thi")}</b></span>'
+        f' &nbsp;<span style="color:{COLORS["text_light"]}; font-size:10px;">'
+        f'· {ngay_str} · {gio_bd or "—"} · {exam.get("lop_id", "")}</span>'
+    )
+    title.setStyleSheet('background: transparent; border: none;')
+    h.addWidget(title, 1)
+    badge = QtWidgets.QLabel(day_label)
+    badge.setStyleSheet(
+        f'color: {fg}; font-size: 10px; font-weight: bold; '
+        f'background: transparent; border: none;'
+    )
+    h.addWidget(badge)
+    return row
+
+
+def _build_sched_reminder_row(sched, when):
+    row = QtWidgets.QFrame()
+    if when == 'today':
+        bg, fg, day_label = '#f0f7ff', COLORS['navy'], 'HÔM NAY'
+    else:
+        bg, fg, day_label = COLORS['bg_alt'], COLORS['text_mid'], 'NGÀY MAI'
+    row.setStyleSheet(f'QFrame {{ background: {bg}; border-radius: 4px; }}')
+    h = QtWidgets.QHBoxLayout(row)
+    h.setContentsMargins(8, 6, 8, 6)
+    h.setSpacing(8)
+    gio_bd = str(sched.get('gio_bat_dau', ''))[:5]
+    gio_kt = str(sched.get('gio_ket_thuc', ''))[:5]
+    phong = sched.get('phong', '') or '—'
+    is_online = bool((sched.get('meeting_url') or '').strip())
+    loc = '🎥 ONLINE' if is_online else f'P.{phong}'
+    title = QtWidgets.QLabel(
+        f'<span style="color:{COLORS["text_dark"]}; font-size:12px;"><b>'
+        f'{sched.get("ten_mon", "Buổi học")}</b></span>'
+        f' &nbsp;<span style="color:{COLORS["text_light"]}; font-size:10px;">'
+        f'· {gio_bd}-{gio_kt} · {loc} · {sched.get("lop_id", "")}</span>'
+    )
+    title.setStyleSheet('background: transparent; border: none;')
+    h.addWidget(title, 1)
+    badge = QtWidgets.QLabel(day_label)
+    badge.setStyleSheet(
+        f'color: {fg}; font-size: 10px; font-weight: bold; '
+        f'background: transparent; border: none;'
+    )
+    h.addWidget(badge)
+    return row
+
+
 def _dialog_add_edit_video(parent, lop_id, video_row=None, on_done=None):
     """Dialog GV them moi (video_row=None) hoac sua (video_row=dict)."""
     is_edit = video_row is not None
@@ -3912,6 +4195,27 @@ class MainWindow(QtWidgets.QWidget):
         w = page.findChild(QtWidgets.QLabel, 'lblWelcome')
         if w:
             w.setText(f"{time_greeting()}, {MOCK_USER['name']}")
+
+        # Nut '🔔 Nhac lich' co dinh goc tren phai dashboard. Mo dialog tong
+        # hop bai tap + lich thi + buoi hoc hom nay/ngay mai. Idempotent.
+        hv_id_for_btn = MOCK_USER.get('id') or MOCK_USER.get('user_id')
+        if not page.findChild(QtWidgets.QPushButton, 'btnReminders'):
+            btn_rmd = QtWidgets.QPushButton('🔔 Nhắc lịch', page)
+            btn_rmd.setObjectName('btnReminders')
+            btn_rmd.setGeometry(720, 22, 130, 36)
+            btn_rmd.setCursor(Qt.PointingHandCursor)
+            btn_rmd.setToolTip('Bài tập sắp hết hạn · Lịch thi · Buổi học hôm nay')
+            btn_rmd.setStyleSheet(
+                f'QPushButton {{ background: {COLORS["navy"]}; color: white; '
+                f'border: none; border-radius: 6px; font-size: 12px; '
+                f'font-weight: bold; padding: 0 12px; }} '
+                f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
+            )
+            btn_rmd.clicked.connect(
+                lambda: show_reminders_dialog(self, hv_id_for_btn)
+            )
+            btn_rmd.show()
+            btn_rmd.raise_()
 
         # Bang khoa hoc cua HV - lay tu API thuc
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
@@ -6730,60 +7034,113 @@ class MainWindow(QtWidgets.QWidget):
         body.addStretch()
 
     def _build_my_course_card(self, cls):
-        """1 card lon cho 1 lop HV dang ky - co thong tin lop + nut 'Xem video bai giang'."""
-        card = QtWidgets.QFrame()
-        card.setStyleSheet(
-            f'QFrame {{ background: {COLORS["bg_card"]}; '
-            f'border: 1px solid {COLORS["border"]}; '
-            f'border-left: 4px solid {COLORS["navy"]}; '
-            f'border-radius: 8px; }}'
-        )
-        card.setMinimumHeight(110)
-        h = QtWidgets.QHBoxLayout(card)
-        h.setContentsMargins(18, 14, 18, 14)
-        h.setSpacing(14)
-
-        # Left: thong tin lop
-        left = QtWidgets.QVBoxLayout()
-        left.setSpacing(4)
+        """1 card cho 1 lop HV dang ky. Layout 3 phan:
+        [Avatar 2 chu mau navy] [Info: ten + meta] [Badge so video + nut 'Xem']
+        Card height 86px, gon hon va clean hon."""
         ma_lop = cls.get('ma_lop', '')
         ten_mon = cls.get('ten_mon', '') or '—'
         ten_gv = cls.get('ten_gv', '') or '—'
         lich = cls.get('lich', '') or '—'
         so_buoi = cls.get('so_buoi') or '—'
 
+        # Count video cua lop nay - de hien badge "N video"
+        n_videos = 0
+        if DB_AVAILABLE:
+            try:
+                vids = ClassVideoService.get_by_class(ma_lop) or []
+                n_videos = len(vids)
+            except Exception:
+                n_videos = 0
+
+        card = QtWidgets.QFrame()
+        # Style co hover effect - nang nhe + dam border khi hover
+        card.setStyleSheet(
+            f'QFrame {{ background: {COLORS["bg_card"]}; '
+            f'border: 1px solid {COLORS["border"]}; '
+            f'border-radius: 8px; }} '
+            f'QFrame:hover {{ border: 1px solid {COLORS["navy"]}; '
+            f'background: #fafbfc; }}'
+        )
+        card.setMinimumHeight(86)
+        card.setMaximumHeight(86)
+        h = QtWidgets.QHBoxLayout(card)
+        h.setContentsMargins(14, 12, 14, 12)
+        h.setSpacing(14)
+
+        # 1. Avatar 56x56 - 2 chu cai dau cua ma_lop, bg navy nhat
+        ini = (ma_lop[:2] if ma_lop else '?').upper()
+        avatar = QtWidgets.QLabel(ini)
+        avatar.setFixedSize(56, 56)
+        avatar.setAlignment(Qt.AlignCenter)
+        avatar.setStyleSheet(
+            f'QLabel {{ background: rgba(0,32,96,0.08); '
+            f'color: {COLORS["navy"]}; '
+            f'border-radius: 28px; '
+            f'font-size: 16px; font-weight: bold; '
+            f'border: none; }}'
+        )
+        h.addWidget(avatar)
+
+        # 2. Info center (stretch)
+        info = QtWidgets.QVBoxLayout()
+        info.setSpacing(3)
+        info.setContentsMargins(0, 2, 0, 2)
         lbl_title = QtWidgets.QLabel(
-            f'<b style="color:{COLORS["navy"]}; font-size:15px;">{ten_mon}</b>'
+            f'<span style="color:{COLORS["text_dark"]}; '
+            f'font-size:14px; font-weight:bold;">{ten_mon}</span>'
             f' &nbsp;<span style="color:{COLORS["text_light"]}; font-size:11px;">'
-            f'· Lớp {ma_lop}</span>'
+            f'· {ma_lop}</span>'
         )
         lbl_title.setStyleSheet('background: transparent; border: none;')
-        left.addWidget(lbl_title)
-
+        info.addWidget(lbl_title)
         lbl_meta = QtWidgets.QLabel(
-            f'<span style="color:{COLORS["text_mid"]}; font-size:12px;">'
-            f'👨‍🏫 {ten_gv}  &nbsp;·&nbsp;  📅 {lich}  &nbsp;·&nbsp;  📖 {so_buoi} buổi'
+            f'<span style="color:{COLORS["text_mid"]}; font-size:11px;">'
+            f'GV {ten_gv}  ·  {lich}  ·  {so_buoi} buổi'
             f'</span>'
         )
         lbl_meta.setStyleSheet('background: transparent; border: none;')
-        left.addWidget(lbl_meta)
-        h.addLayout(left, 1)
+        info.addWidget(lbl_meta)
+        h.addLayout(info, 1)
 
-        # Right: nut 'Xem video' lon, ro
-        btn_open = QtWidgets.QPushButton('📹  Xem video bài giảng  →')
+        # 3. Badge so video + button 'Xem'
+        right = QtWidgets.QVBoxLayout()
+        right.setSpacing(4)
+        right.setAlignment(Qt.AlignVCenter)
+        # Badge so video
+        if n_videos > 0:
+            badge = QtWidgets.QLabel(f'📹 {n_videos} video')
+            badge.setStyleSheet(
+                f'background: rgba(192,86,33,0.1); '
+                f'color: {COLORS["orange"]}; '
+                f'padding: 2px 8px; border-radius: 10px; '
+                f'font-size: 10px; font-weight: bold; '
+                f'border: none;'
+            )
+            badge.setAlignment(Qt.AlignCenter)
+        else:
+            badge = QtWidgets.QLabel('Chưa có video')
+            badge.setStyleSheet(
+                f'color: {COLORS["text_light"]}; '
+                f'font-size: 10px; font-style: italic; '
+                f'background: transparent; border: none;'
+            )
+            badge.setAlignment(Qt.AlignCenter)
+        right.addWidget(badge)
+        # Button 'Xem'
+        btn_open = QtWidgets.QPushButton('Xem  →')
         btn_open.setCursor(Qt.PointingHandCursor)
-        btn_open.setMinimumWidth(220)
-        btn_open.setMinimumHeight(48)
+        btn_open.setFixedSize(130, 32)
         btn_open.setStyleSheet(
-            f'QPushButton {{ background: {COLORS["orange"]}; color: white; '
-            f'border: none; padding: 10px 18px; border-radius: 6px; '
-            f'font-size: 13px; font-weight: bold; }} '
-            f'QPushButton:hover {{ background: {COLORS["orange_hover"]}; }}'
+            f'QPushButton {{ background: {COLORS["navy"]}; color: white; '
+            f'border: none; padding: 0 12px; border-radius: 6px; '
+            f'font-size: 12px; font-weight: bold; }} '
+            f'QPushButton:hover {{ background: {COLORS["navy_hover"]}; }}'
         )
         btn_open.clicked.connect(
             lambda _ch, m=ma_lop: show_class_videos_dialog(self, m, role='hv')
         )
-        h.addWidget(btn_open)
+        right.addWidget(btn_open)
+        h.addLayout(right)
         return card
 
 
