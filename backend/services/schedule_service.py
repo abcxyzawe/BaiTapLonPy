@@ -109,7 +109,8 @@ class ScheduleService:
     @staticmethod
     def create(lop_id: str, ngay: date, gio_bat_dau, gio_ket_thuc,
                phong: str = None, buoi_so: int = None, noi_dung: str = None,
-               thu: int = None, trang_thai: str = 'scheduled'):
+               thu: int = None, trang_thai: str = 'scheduled',
+               meeting_url: str = None):
         # Auto compute thu (2-8) tu ngay neu khong truyen
         if thu is None and hasattr(ngay, 'weekday'):
             thu = ngay.weekday() + 2  # Mon=2..Sun=8
@@ -120,10 +121,10 @@ class ScheduleService:
                 phong = row.get('phong')
         row = db.execute_returning(
             """INSERT INTO schedules
-               (lop_id, ngay, thu, gio_bat_dau, gio_ket_thuc, phong, buoi_so, noi_dung, trang_thai)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+               (lop_id, ngay, thu, gio_bat_dau, gio_ket_thuc, phong, buoi_so, noi_dung, trang_thai, meeting_url)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                RETURNING id""",
-            (lop_id, ngay, thu, gio_bat_dau, gio_ket_thuc, phong, buoi_so, noi_dung, trang_thai)
+            (lop_id, ngay, thu, gio_bat_dau, gio_ket_thuc, phong, buoi_so, noi_dung, trang_thai, meeting_url)
         )
         return row['id'] if row else None
 
@@ -136,7 +137,7 @@ class ScheduleService:
         """Update schedule. Cho phep update: ngay, gio_bat_dau, gio_ket_thuc,
         phong, buoi_so, noi_dung, thu, trang_thai. Tu re-compute thu tu ngay."""
         allowed = {'ngay', 'gio_bat_dau', 'gio_ket_thuc', 'phong',
-                   'buoi_so', 'noi_dung', 'thu', 'trang_thai'}
+                   'buoi_so', 'noi_dung', 'thu', 'trang_thai', 'meeting_url'}
         # Auto re-compute thu khi ngay change
         if 'ngay' in fields and fields['ngay'] and 'thu' not in fields:
             try:

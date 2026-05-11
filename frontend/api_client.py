@@ -530,12 +530,19 @@ class ScheduleService:
 
     @staticmethod
     def create(lop_id, ngay, gio_bat_dau, gio_ket_thuc, phong=None, buoi_so=None,
-               noi_dung=None, thu=None, trang_thai='scheduled'):
+               noi_dung=None, thu=None, trang_thai='scheduled', meeting_url=None):
         return _post('/schedules', {
             'lop_id': lop_id, 'ngay': ngay, 'gio_bat_dau': gio_bat_dau,
             'gio_ket_thuc': gio_ket_thuc, 'phong': phong, 'buoi_so': buoi_so,
-            'noi_dung': noi_dung, 'thu': thu, 'trang_thai': trang_thai
+            'noi_dung': noi_dung, 'thu': thu, 'trang_thai': trang_thai,
+            'meeting_url': meeting_url,
         })
+
+    @staticmethod
+    def update(sched_id, **fields):
+        """PUT /schedules/{id} - update field truyen vao. lop_id se bi backend
+        ignore (khong cho doi lop)."""
+        return _put(f'/schedules/{sched_id}', {k: v for k, v in fields.items() if v is not None})
 
     @staticmethod
     def delete(sched_id): return _delete(f'/schedules/{sched_id}')
@@ -741,3 +748,42 @@ class AssignmentService:
         return _post(f'/submissions/{sub_id}/grade', {
             'diem': diem, 'nhan_xet': nhan_xet
         })
+
+
+class ClassVideoService:
+    """Thu vien video bai giang cua lop - GV upload link, HV xem lai."""
+
+    @staticmethod
+    def create(lop_id, gv_id, tieu_de, video_url, mo_ta=None, buoi_so=None):
+        return _post('/videos', {
+            'lop_id': lop_id, 'gv_id': gv_id,
+            'tieu_de': tieu_de, 'video_url': video_url,
+            'mo_ta': mo_ta, 'buoi_so': buoi_so,
+        })
+
+    @staticmethod
+    def update(video_id, **fields):
+        return _put(f'/videos/{video_id}', {k: v for k, v in fields.items() if v is not None})
+
+    @staticmethod
+    def delete(video_id):
+        return _delete(f'/videos/{video_id}')
+
+    @staticmethod
+    def get(video_id):
+        return _get(f'/videos/{video_id}')
+
+    @staticmethod
+    def get_by_class(lop_id):
+        """List video cua 1 lop - HV/GV cung dung."""
+        return _get(f'/videos/class/{lop_id}')
+
+    @staticmethod
+    def get_by_teacher(gv_id):
+        """GV: list tat ca video minh da upload."""
+        return _get(f'/videos/teacher/{gv_id}')
+
+    @staticmethod
+    def get_for_student(hv_id, lop_id=None):
+        """HV: list video cac lop minh dang ky. Optional filter 1 lop."""
+        return _get(f'/videos/student/{hv_id}', lop_id=lop_id)

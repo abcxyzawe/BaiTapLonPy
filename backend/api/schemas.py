@@ -240,6 +240,7 @@ class ScheduleCreate(BaseModel):
     noi_dung: Optional[str] = Field(None, max_length=500)
     thu: Optional[int] = Field(None, ge=2, le=8)
     trang_thai: ScheduleStatus = 'scheduled'  # scheduled|completed|cancelled|postponed
+    meeting_url: Optional[str] = Field(None, max_length=500)  # Zoom/Meet/Jitsi neu day online
 
     @model_validator(mode='after')
     def _check_time_order(self):
@@ -356,3 +357,20 @@ class SubmissionCreate(BaseModel):
 class SubmissionGrade(BaseModel):
     diem: float = Field(..., ge=0, le=100)
     nhan_xet: Optional[str] = Field('', max_length=2000)
+
+
+# ===== Class Videos =====
+class ClassVideoCreate(BaseModel):
+    lop_id: str = Field(..., min_length=1, max_length=30)
+    gv_id: int = Field(..., gt=0)
+    tieu_de: str = Field(..., min_length=1, max_length=200)
+    video_url: str = Field(..., min_length=8, max_length=500)
+    mo_ta: Optional[str] = Field(None, max_length=2000)
+    buoi_so: Optional[int] = Field(None, ge=1, le=200)
+
+
+class ClassVideoUpdate(BaseModel):
+    tieu_de: Optional[str] = Field(None, min_length=1, max_length=200)
+    video_url: Optional[str] = Field(None, min_length=8, max_length=500)
+    mo_ta: Optional[str] = Field(None, max_length=2000)
+    buoi_so: Optional[int] = Field(None, ge=1, le=200)

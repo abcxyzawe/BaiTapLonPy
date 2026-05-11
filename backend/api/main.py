@@ -12,7 +12,8 @@ from fastapi.responses import JSONResponse
 
 from backend.api.routers import (
     assignments, attendance, audit, auth, courses, curriculum, exams, grades,
-    notifications, registrations, schedules, semesters, stats, submissions, users
+    notifications, registrations, schedules, semesters, stats, submissions, users,
+    videos
 )
 
 
@@ -25,7 +26,24 @@ async def lifespan(app: FastAPI):
         try:
             db.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS den_hv_id INTEGER REFERENCES users(id) ON DELETE CASCADE;")
             db.execute("ALTER TABLE assignments ADD COLUMN IF NOT EXISTS file_url VARCHAR(500);")
-            print('[API] Auto-patched missing column den_hv_id and file_url')
+            db.execute("ALTER TABLE assignments ADD COLUMN IF NOT EXISTS file_path VARCHAR(500);")
+            db.execute("ALTER TABLE schedules ADD COLUMN IF NOT EXISTS meeting_url VARCHAR(500);")
+            # class_videos: GV upload link YouTube/Drive bai giang cho HV xem lai
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS class_videos (
+                    id          SERIAL PRIMARY KEY,
+                    lop_id      VARCHAR(30) NOT NULL REFERENCES classes(ma_lop) ON DELETE CASCADE,
+                    gv_id       INTEGER NOT NULL REFERENCES teachers(user_id) ON DELETE CASCADE,
+                    tieu_de     VARCHAR(200) NOT NULL,
+                    video_url   VARCHAR(500) NOT NULL,
+                    mo_ta       TEXT,
+                    buoi_so     INTEGER,
+                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            db.execute("CREATE INDEX IF NOT EXISTS idx_cv_lop ON class_videos(lop_id);")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_cv_gv ON class_videos(gv_id);")
+            print('[API] Auto-patched: file_url + file_path + meeting_url + class_videos table')
         except Exception as e:
             print(f'[API] Could not patch columns: {e}')
     else:
@@ -75,6 +93,7 @@ app.include_router(attendance.router, prefix='/attendance', tags=['Attendance'])
 app.include_router(audit.router, prefix='/audit', tags=['Audit'])
 app.include_router(assignments.router, prefix='/assignments', tags=['Assignments'])
 app.include_router(submissions.router, prefix='/submissions', tags=['Submissions'])
+app.include_router(videos.router, prefix='/videos', tags=['Class Videos'])
 
 
 # ===== Global exception handlers =====

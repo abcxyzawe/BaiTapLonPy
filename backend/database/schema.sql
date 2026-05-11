@@ -286,6 +286,7 @@ CREATE TABLE schedules (
     phong           VARCHAR(20),
     buoi_so         INTEGER,                                 -- buoi thu may trong khoa
     noi_dung        VARCHAR(200),                            -- chu de buoi hoc
+    meeting_url     VARCHAR(500),                            -- link Zoom/Meet/Jitsi neu buoi day online
     trang_thai      VARCHAR(20) DEFAULT 'scheduled'
                     CHECK (trang_thai IN ('scheduled', 'completed', 'cancelled', 'postponed')),
     ghi_chu         TEXT,
@@ -382,6 +383,26 @@ CREATE TABLE submissions (
 CREATE INDEX idx_sub_asg ON submissions(assignment_id);
 CREATE INDEX idx_sub_hv ON submissions(hv_id);
 CREATE INDEX idx_sub_diem ON submissions(diem);
+
+
+-- ==========================================================
+-- 21. CLASS_VIDEOS (thu vien video bai giang cua lop) - MOI
+-- ==========================================================
+-- GV upload link YouTube/Drive/Vimeo de HV xem lai bai giang.
+-- Khong luu video file (storage tot kem) -> chi luu URL link.
+CREATE TABLE class_videos (
+    id          SERIAL PRIMARY KEY,
+    lop_id      VARCHAR(30) NOT NULL REFERENCES classes(ma_lop) ON DELETE CASCADE,
+    gv_id       INTEGER NOT NULL REFERENCES teachers(user_id) ON DELETE CASCADE,
+    tieu_de     VARCHAR(200) NOT NULL,
+    video_url   VARCHAR(500) NOT NULL,    -- YouTube/Drive/Vimeo/... share link
+    mo_ta       TEXT,
+    buoi_so     INTEGER,                  -- thuoc buoi nao trong khoa (optional)
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_cv_lop ON class_videos(lop_id);
+CREATE INDEX idx_cv_gv ON class_videos(gv_id);
 
 
 -- ==========================================================

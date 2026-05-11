@@ -19,7 +19,7 @@ try:
                             EmployeeService, ReviewService, StatsService,
                             SemesterService, CurriculumService, ScheduleService,
                             ExamService, AttendanceService, AuditService,
-                            AssignmentService, is_alive)
+                            AssignmentService, ClassVideoService, is_alive)
     # Class shim cho code cu - frontend doi khi dung db.fetch_one truc tiep
     # (deprecated path - cac call nay da duoc thay bang API tuong ung)
     class _ApiDb:
@@ -1903,8 +1903,13 @@ def style_dialog(dlg):
     )
 
 
-def show_detail_dialog(parent, title, fields, avatar_text=None, subtitle=None):
-    """Dialog chi tiet co header navy + avatar + danh sach field dep"""
+def show_detail_dialog(parent, title, fields, avatar_text=None, subtitle=None,
+                        extra_buttons=None):
+    """Dialog chi tiet co header navy + avatar + danh sach field dep.
+
+    extra_buttons: list of tuple (text, callback, color_hex). Render TRUOC nut
+    Dong. Khong truyen = chi co nut Dong (backward compat).
+    """
     # mau EAUT tu module-level COLORS
     navy = '#002060'
     navy_hover = '#1a3a6c'
@@ -1988,13 +1993,30 @@ def show_detail_dialog(parent, title, fields, avatar_text=None, subtitle=None):
     body.setWidget(inner)
     lay.addWidget(body, 1)
 
-    # footer nut dong
+    # footer nut dong (+ extra buttons truoc neu co)
     footer = QtWidgets.QFrame()
     footer.setFixedHeight(60)
     footer.setStyleSheet(f'QFrame {{ background: #f7fafc; border-top: 1px solid {border}; }}')
     fl = QtWidgets.QHBoxLayout(footer)
     fl.setContentsMargins(20, 10, 20, 10)
     fl.setAlignment(Qt.AlignRight)
+    # Render extra buttons (vd 'Tham gia online' khi sched co meeting_url)
+    if extra_buttons:
+        for tup in extra_buttons:
+            try:
+                eb_text, eb_cb, eb_color = tup
+            except (TypeError, ValueError):
+                continue
+            eb = QtWidgets.QPushButton(eb_text)
+            eb.setCursor(Qt.PointingHandCursor)
+            eb.setMinimumHeight(36)
+            eb.setStyleSheet(
+                f'QPushButton {{ background: {eb_color}; color: white; border: none; '
+                f'padding: 6px 16px; border-radius: 6px; font-size: 12px; font-weight: bold; }} '
+                f'QPushButton:hover {{ background: {eb_color}; opacity: 0.85; }}'
+            )
+            eb.clicked.connect(eb_cb)
+            fl.addWidget(eb)
     btn = QtWidgets.QPushButton('Đóng')
     btn.setFixedSize(110, 36)
     btn.setCursor(Qt.PointingHandCursor)
@@ -3873,13 +3895,24 @@ class MainWindow(QtWidgets.QWidget):
                  'cancelled': 'Đã huỷ', 'postponed': 'Đã dời lịch'}
         st_label = st_vn.get(trang_thai, trang_thai)
 
+        meeting_url = (sched_row.get('meeting_url') or '').strip()
+        # Hinh thuc: ONLINE neu co meeting_url, OFFLINE neu khong
+        is_online = bool(meeting_url)
+        hinh_thuc = '🎥 ONLINE' if is_online else '🏫 Tại phòng'
+
         fields = [
             ('NGÀY HỌC', ngay_str),
             ('THỜI GIAN', gio_str),
-            ('PHÒNG', phong),
+            ('HÌNH THỨC', hinh_thuc),
+        ]
+        if is_online:
+            fields.append(('LINK ONLINE', meeting_url))
+        else:
+            fields.append(('PHÒNG', phong))
+        fields.extend([
             ('LỚP', ma_lop),
             ('KHÓA HỌC', ten_mon),
-        ]
+        ])
         if role == 'hv':
             fields.append(('GIẢNG VIÊN', ten_gv))
         if buoi_so:
@@ -3888,13 +3921,267 @@ class MainWindow(QtWidgets.QWidget):
             fields.append(('NỘI DUNG BUỔI', nd))
         fields.append(('TRẠNG THÁI', st_label))
 
+        # Nut 'Tham gia online' (neu co meeting_url) + nut 'Video bai giang' (mo
+        # dialog list video cua lop). HV co the xem ngay tu session detail.
+        from PyQt5.QtGui import QDesktopServices
+        from PyQt5.QtCore import QUrl
+        extra = []
+        if is_online:
+            def _open_meeting():
+                QDesktopServices.openUrl(QUrl(meeting_url))
+            extra.append(('🎥 Tham gia online', _open_meeting, '#16a34a'))
+        extra.append(('📹 Video bài giảng',
+                      lambda: self._show_class_videos_dialog(ma_lop, role='hv'),
+                      '#7c3aed'))
+
         show_detail_dialog(
             self,
             title=f'Chi tiết buổi học · {ma_lop}',
             fields=fields,
             avatar_text=ma_lop[:2],
             subtitle=ten_mon,
+            extra_buttons=extra,
         )
+
+    def _show_class_videos_dialog(self, lop_id, role='hv'):
+        """Dialog list video bai giang cua 1 lop. HV chi xem; GV them/sua/xoa.
+
+        Render moi video la 1 card co tieu de + mo ta + buoi so + nut 'Xem video'
+        mo URL bang browser. GV co them nut '+ Them video' o footer.
+        """
+        from PyQt5.QtGui import QDesktopServices
+        from PyQt5.QtCore import QUrl
+
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle(f'Video bài giảng - Lớp {lop_id}')
+        dlg.setFixedSize(640, 580)
+        v = QtWidgets.QVBoxLayout(dlg)
+        v.setContentsMargins(16, 12, 16, 12)
+
+        head = QtWidgets.QLabel(f'<b>Lớp {lop_id}</b> · '
+                                 'GV upload link YouTube/Drive/Vimeo, click "Xem" để mở trên trình duyệt.')
+        head.setStyleSheet('color: #4a5568; padding: 6px; background: #f7fafc; '
+                           'border: 1px solid #e2e8f0; border-radius: 6px;')
+        head.setWordWrap(True)
+        v.addWidget(head)
+
+        # Scroll body chua cac card video
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet('QScrollArea { border: 1px solid #e2e8f0; border-radius: 6px; background: white; }')
+        inner = QtWidgets.QWidget()
+        body = QtWidgets.QVBoxLayout(inner)
+        body.setContentsMargins(8, 8, 8, 8)
+        body.setSpacing(8)
+
+        def _load_videos():
+            # Clear cac card cu khi reload
+            while body.count():
+                it = body.takeAt(0)
+                if it.widget():
+                    it.widget().deleteLater()
+            try:
+                videos = ClassVideoService.get_by_class(lop_id) or []
+            except Exception as e:
+                err = QtWidgets.QLabel(f'Lỗi tải danh sách video: {api_error_msg(e)}')
+                err.setStyleSheet('color: #c53030; padding: 12px;')
+                body.addWidget(err)
+                return
+            if not videos:
+                empty = QtWidgets.QLabel(
+                    '<div style="text-align:center; padding:30px;">'
+                    '<span style="font-size:32px;">📹</span><br>'
+                    '<span style="color:#718096;">Chưa có video bài giảng nào.</span>'
+                    + ('<br><span style="color:#a0aec0; font-size:11px;">'
+                       'Bấm "+ Thêm video" để upload link YouTube/Drive.</span>'
+                       if role == 'gv' else '')
+                    + '</div>'
+                )
+                empty.setAlignment(Qt.AlignCenter)
+                body.addWidget(empty)
+                body.addStretch()
+                return
+            for vrow in videos:
+                card = self._build_video_card(vrow, lop_id, role, _load_videos)
+                body.addWidget(card)
+            body.addStretch()
+
+        scroll.setWidget(inner)
+        v.addWidget(scroll, 1)
+
+        # Footer
+        ft = QtWidgets.QHBoxLayout()
+        if role == 'gv':
+            btn_add = QtWidgets.QPushButton('+ Thêm video')
+            btn_add.setCursor(Qt.PointingHandCursor)
+            btn_add.setStyleSheet(
+                'QPushButton { background: #7c3aed; color: white; border: none; '
+                'padding: 8px 16px; border-radius: 6px; font-weight: bold; } '
+                'QPushButton:hover { background: #6d28d9; }'
+            )
+            btn_add.clicked.connect(lambda: self._dialog_add_edit_video(
+                lop_id, video_row=None, on_done=_load_videos))
+            ft.addWidget(btn_add)
+        ft.addStretch()
+        btn_close = QtWidgets.QPushButton('Đóng')
+        btn_close.setCursor(Qt.PointingHandCursor)
+        btn_close.setStyleSheet('QPushButton { padding: 8px 18px; }')
+        btn_close.clicked.connect(dlg.accept)
+        ft.addWidget(btn_close)
+        v.addLayout(ft)
+
+        _load_videos()
+        dlg.exec_()
+
+    def _build_video_card(self, vrow, lop_id, role, reload_cb):
+        """Render 1 card video trong dialog list. role='gv' -> co them Sua/Xoa."""
+        from PyQt5.QtGui import QDesktopServices
+        from PyQt5.QtCore import QUrl
+        card = QtWidgets.QFrame()
+        card.setStyleSheet(
+            'QFrame { background: white; border: 1px solid #e2e8f0; '
+            'border-radius: 8px; padding: 4px; }'
+        )
+        h = QtWidgets.QVBoxLayout(card)
+        h.setContentsMargins(10, 8, 10, 8)
+        h.setSpacing(4)
+        # Tieu de + buoi so
+        title_line = f'<b style="color:#1a1a2e; font-size:13px;">📹 {vrow.get("tieu_de", "")}</b>'
+        bs = vrow.get('buoi_so')
+        if bs:
+            title_line += f' <span style="color:#7c3aed; font-size:11px;">· Buổi {bs}</span>'
+        lbl_t = QtWidgets.QLabel(title_line)
+        lbl_t.setStyleSheet('border: none; background: transparent;')
+        h.addWidget(lbl_t)
+        # GV name + created_at
+        gv_name = vrow.get('ten_gv', '') or '—'
+        created = fmt_date(vrow.get('created_at'), fmt='%d/%m/%Y')
+        meta = QtWidgets.QLabel(
+            f'<span style="color:#718096; font-size:10px;">GV: {gv_name} · Đăng: {created}</span>'
+        )
+        meta.setStyleSheet('border: none; background: transparent;')
+        h.addWidget(meta)
+        # Mo ta
+        mo_ta = (vrow.get('mo_ta') or '').strip()
+        if mo_ta:
+            lbl_d = QtWidgets.QLabel(mo_ta)
+            lbl_d.setStyleSheet('color: #4a5568; font-size: 11px; border: none; background: transparent;')
+            lbl_d.setWordWrap(True)
+            h.addWidget(lbl_d)
+        # Buttons
+        btn_row = QtWidgets.QHBoxLayout()
+        url = vrow.get('video_url') or ''
+        btn_view = QtWidgets.QPushButton('▶ Xem video')
+        btn_view.setCursor(Qt.PointingHandCursor)
+        btn_view.setStyleSheet(
+            'QPushButton { background: #2563eb; color: white; border: none; '
+            'padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; } '
+            'QPushButton:hover { background: #1d4ed8; }'
+        )
+        btn_view.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
+        btn_row.addWidget(btn_view)
+        btn_row.addStretch()
+        if role == 'gv':
+            video_id = vrow.get('id')
+            btn_edit = QtWidgets.QPushButton('✎ Sửa')
+            btn_edit.setCursor(Qt.PointingHandCursor)
+            btn_edit.setStyleSheet('QPushButton { padding: 4px 10px; font-size: 11px; }')
+            btn_edit.clicked.connect(lambda: self._dialog_add_edit_video(
+                lop_id, video_row=vrow, on_done=reload_cb))
+            btn_row.addWidget(btn_edit)
+            btn_del = QtWidgets.QPushButton('🗑 Xoá')
+            btn_del.setCursor(Qt.PointingHandCursor)
+            btn_del.setStyleSheet(
+                'QPushButton { background: #fee2e2; color: #c53030; border: 1px solid #fecaca; '
+                'padding: 4px 10px; border-radius: 4px; font-size: 11px; }'
+            )
+            def _del():
+                if not msg_confirm(self, 'Xoá video',
+                                    f'Xoá video "{vrow.get("tieu_de", "")}"?\n'
+                                    'Thao tác không thể hoàn tác.'):
+                    return
+                try:
+                    ClassVideoService.delete(video_id)
+                    msg_info(self, 'Đã xoá', 'Đã xoá video.')
+                    reload_cb()
+                except Exception as e:
+                    msg_warn(self, 'Lỗi xoá', api_error_msg(e))
+            btn_del.clicked.connect(_del)
+            btn_row.addWidget(btn_del)
+        h.addLayout(btn_row)
+        return card
+
+    def _dialog_add_edit_video(self, lop_id, video_row=None, on_done=None):
+        """Dialog GV them moi (video_row=None) hoac sua (video_row=dict)."""
+        is_edit = video_row is not None
+        dlg = QtWidgets.QDialog(self)
+        style_dialog(dlg)
+        dlg.setWindowTitle('Sửa video' if is_edit else 'Thêm video bài giảng')
+        dlg.setFixedSize(480, 380)
+        form = QtWidgets.QFormLayout(dlg)
+
+        txt_title = QtWidgets.QLineEdit((video_row or {}).get('tieu_de', ''))
+        txt_title.setPlaceholderText('VD: Buổi 3 - Vòng lặp for/while')
+
+        txt_url = QtWidgets.QLineEdit((video_row or {}).get('video_url', ''))
+        txt_url.setPlaceholderText('VD: https://www.youtube.com/watch?v=... hoặc Drive share link')
+
+        txt_desc = QtWidgets.QTextEdit()
+        txt_desc.setPlainText((video_row or {}).get('mo_ta', '') or '')
+        txt_desc.setFixedHeight(80)
+        txt_desc.setPlaceholderText('Mô tả ngắn về nội dung video (optional)')
+
+        spin_buoi = QtWidgets.QSpinBox()
+        spin_buoi.setRange(0, 200)
+        spin_buoi.setSpecialValueText('— (không xác định)')
+        spin_buoi.setPrefix('Buổi #')
+        spin_buoi.setValue(int((video_row or {}).get('buoi_so') or 0))
+
+        form.addRow('Tiêu đề (*):', txt_title)
+        form.addRow('Link video (*):', txt_url)
+        form.addRow('Mô tả:', txt_desc)
+        form.addRow('Buổi số:', spin_buoi)
+
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+        txt_title.setFocus()
+
+        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        title_v = txt_title.text().strip()
+        url_v = txt_url.text().strip()
+        if not title_v or not url_v:
+            msg_warn(self, 'Thiếu', 'Tiêu đề và link video không được trống.')
+            return
+        if not (url_v.startswith('http://') or url_v.startswith('https://')):
+            msg_warn(self, 'Sai link', 'Link phải bắt đầu bằng http:// hoặc https://')
+            return
+        bs_v = spin_buoi.value() or None
+        gv_id = MOCK_TEACHER.get('user_id')
+        if not (DB_AVAILABLE and gv_id):
+            msg_warn(self, 'Lỗi', 'Chưa kết nối được hệ thống.')
+            return
+        try:
+            if is_edit:
+                ClassVideoService.update(
+                    video_row['id'], tieu_de=title_v, video_url=url_v,
+                    mo_ta=txt_desc.toPlainText().strip() or None, buoi_so=bs_v,
+                )
+                msg_info(self, 'Đã lưu', f'Đã cập nhật video "{title_v}".')
+            else:
+                ClassVideoService.create(
+                    lop_id=lop_id, gv_id=gv_id,
+                    tieu_de=title_v, video_url=url_v,
+                    mo_ta=txt_desc.toPlainText().strip() or None, buoi_so=bs_v,
+                )
+                msg_info(self, 'Đã thêm', f'Đã thêm video "{title_v}" cho lớp {lop_id}.')
+        except Exception as e:
+            msg_warn(self, 'Lỗi', api_error_msg(e))
+            return
+        if on_done:
+            on_done()
 
     def _render_today_banner_hv(self, page, hv_id):
         """Render banner 'Lich hoc hom nay' giua 3 stat cards va tableFrame.
@@ -13512,19 +13799,42 @@ class TeacherWindow(QtWidgets.QWidget):
                  'cancelled': 'Đã huỷ', 'postponed': 'Đã dời lịch'}
         st_label = st_vn.get(trang_thai, trang_thai)
 
+        meeting_url = (sched_row.get('meeting_url') or '').strip()
+        is_online = bool(meeting_url)
+        hinh_thuc = '🎥 ONLINE' if is_online else '🏫 Tại phòng'
+
         fields = [
             ('NGÀY DẠY', ngay_str),
             ('THỜI GIAN', gio_str),
-            ('PHÒNG', phong),
+            ('HÌNH THỨC', hinh_thuc),
+        ]
+        if is_online:
+            fields.append(('LINK ONLINE', meeting_url))
+        else:
+            fields.append(('PHÒNG', phong))
+        fields.extend([
             ('LỚP', ma_lop),
             ('KHÓA HỌC', ten_mon),
             ('SĨ SỐ', ss_str),
-        ]
+        ])
         if buoi_so:
             fields.append(('BUỔI SỐ', f'Buổi {buoi_so}'))
         if nd:
             fields.append(('NỘI DUNG BUỔI', nd))
         fields.append(('TRẠNG THÁI', st_label))
+
+        # Nut 'Tham gia online' (neu co meeting_url) + 'Quan ly video' (cho GV
+        # them/sua/xoa video bai giang cua lop)
+        from PyQt5.QtGui import QDesktopServices
+        from PyQt5.QtCore import QUrl
+        extra = []
+        if is_online:
+            def _open_meeting():
+                QDesktopServices.openUrl(QUrl(meeting_url))
+            extra.append(('🎥 Tham gia online', _open_meeting, '#16a34a'))
+        extra.append(('📹 Quản lý video',
+                      lambda: self._show_class_videos_dialog(ma_lop, role='gv'),
+                      '#7c3aed'))
 
         show_detail_dialog(
             self,
@@ -13532,6 +13842,7 @@ class TeacherWindow(QtWidgets.QWidget):
             fields=fields,
             avatar_text=ma_lop[:2],
             subtitle=ten_mon,
+            extra_buttons=extra,
         )
 
     def _tea_dialog_new_schedule(self):
@@ -13539,7 +13850,7 @@ class TeacherWindow(QtWidgets.QWidget):
         dlg = QtWidgets.QDialog(self)
         style_dialog(dlg)
         dlg.setWindowTitle('Tạo buổi học mới')
-        dlg.setFixedSize(480, 460)
+        dlg.setFixedSize(500, 510)
         form = QtWidgets.QFormLayout(dlg)
 
         # Lop combo
@@ -13592,6 +13903,12 @@ class TeacherWindow(QtWidgets.QWidget):
         txt_nd.setPlaceholderText('Nội dung buổi học (chương/bài/chủ đề)')
         txt_nd.setFixedHeight(80)
 
+        # Link day online (Zoom/Meet/Jitsi) - de trong = buoi offline tai phong
+        # vat ly. Co URL = buoi online + HV thay nut 'Tham gia' tren card.
+        txt_meet = QtWidgets.QLineEdit()
+        txt_meet.setPlaceholderText('Để trống = buổi offline. VD: https://meet.google.com/abc-defg-hij')
+        txt_meet.setClearButtonEnabled(True)
+
         form.addRow('Lớp (*):', cbo_lop)
         form.addRow('Ngày (*):', dt_ngay)
         form.addRow('Giờ bắt đầu:', time_bd)
@@ -13599,6 +13916,7 @@ class TeacherWindow(QtWidgets.QWidget):
         form.addRow('Phòng:', txt_phong)
         form.addRow('Buổi số:', spin_buoi)
         form.addRow('Nội dung:', txt_nd)
+        form.addRow('🎥 Link online:', txt_meet)
 
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
@@ -13632,6 +13950,14 @@ class TeacherWindow(QtWidgets.QWidget):
             gv_id=MOCK_TEACHER.get('user_id')
         ):
             return
+        meet_url_val = txt_meet.text().strip() or None
+        # Validate URL format don gian - co http(s) prefix
+        if meet_url_val and not (meet_url_val.startswith('http://') or
+                                  meet_url_val.startswith('https://')):
+            msg_warn(self, 'Sai link',
+                     'Link online phải bắt đầu bằng http:// hoặc https://\n'
+                     'VD: https://meet.google.com/abc-defg-hij')
+            return
         try:
             ScheduleService.create(
                 lop_id=cbo_lop.currentData(),
@@ -13641,14 +13967,16 @@ class TeacherWindow(QtWidgets.QWidget):
                 phong=txt_phong.text().strip() or None,
                 buoi_so=spin_buoi.value(),
                 noi_dung=txt_nd.toPlainText().strip() or None,
+                meeting_url=meet_url_val,
             )
         except Exception as e:
             print(f'[TEA_SCHED] create loi: {e}')
             msg_warn(self, 'Lỗi tạo', api_error_msg(e))
             return
+        mode_suffix = ' [ONLINE]' if meet_url_val else ''
         msg_info(self, 'Thành công',
                  f'Đã tạo buổi học cho {cbo_lop.currentData()} '
-                 f'ngày {dt_ngay.date().toString("dd/MM/yyyy")}')
+                 f'ngày {dt_ngay.date().toString("dd/MM/yyyy")}{mode_suffix}')
         # Reload tuan hien tai de thay buoi moi
         self.pages_filled[1] = False
         self._fill_tea_schedule()

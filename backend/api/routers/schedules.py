@@ -52,7 +52,8 @@ def create(req: ScheduleCreate):
     sid = ScheduleService.create(
         req.lop_id, req.ngay, req.gio_bat_dau, req.gio_ket_thuc,
         phong=req.phong, buoi_so=req.buoi_so, noi_dung=req.noi_dung,
-        thu=req.thu, trang_thai=req.trang_thai
+        thu=req.thu, trang_thai=req.trang_thai,
+        meeting_url=req.meeting_url
     )
     return {'id': sid, 'status': 'created'}
 
