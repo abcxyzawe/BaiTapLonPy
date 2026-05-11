@@ -48,6 +48,14 @@ def _post(path: str, json: Optional[dict] = None) -> Any:
     return r.json()
 
 
+def _upload(path: str, file_path: str) -> Any:
+    # timeout tang len vi upload file co the lau hon
+    with open(file_path, 'rb') as f:
+        r = _session.post(API_URL + path, files={'file': f}, timeout=(3, 30))
+    r.raise_for_status()
+    return r.json()
+
+
 def _put(path: str, json: Optional[dict] = None) -> Any:
     r = _session.put(API_URL + path, json=_serialize(json or {}), timeout=TIMEOUT)
     r.raise_for_status()
@@ -665,12 +673,13 @@ class AssignmentService:
 
     # GV
     @staticmethod
-    def create(lop_id, gv_id, tieu_de, mo_ta='', han_nop=None, diem_toi_da=10):
+    def create(lop_id, gv_id, tieu_de, mo_ta='', han_nop=None, diem_toi_da=10, file_url=None):
         return _post('/assignments', {
             'lop_id': lop_id, 'gv_id': gv_id,
             'tieu_de': tieu_de, 'mo_ta': mo_ta,
             'han_nop': han_nop.isoformat() if han_nop else None,
             'diem_toi_da': diem_toi_da,
+            'file_url': file_url
         })
 
     @staticmethod
@@ -682,6 +691,10 @@ class AssignmentService:
             except AttributeError:
                 pass
         return _put(f'/assignments/{asg_id}', {k: v for k, v in fields.items() if v is not None})
+
+    @staticmethod
+    def upload_file(file_path):
+        return _upload('/assignments/upload', file_path)
 
     @staticmethod
     def delete(asg_id):

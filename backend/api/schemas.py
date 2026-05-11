@@ -335,6 +335,7 @@ class AssignmentCreate(BaseModel):
     mo_ta: Optional[str] = Field(None, max_length=5000)
     han_nop: Optional[_dt] = None
     diem_toi_da: float = Field(10, gt=0, le=100)
+    file_url: Optional[str] = Field(None, max_length=500)
 
 
 class AssignmentUpdate(BaseModel):
@@ -342,6 +343,7 @@ class AssignmentUpdate(BaseModel):
     mo_ta: Optional[str] = Field(None, max_length=5000)
     han_nop: Optional[_dt] = None
     diem_toi_da: Optional[float] = Field(None, gt=0, le=100)
+    file_url: Optional[str] = Field(None, max_length=500)
 
 
 class SubmissionCreate(BaseModel):

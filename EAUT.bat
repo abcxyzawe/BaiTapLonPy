@@ -41,7 +41,7 @@ if errorlevel 1 (
 )
 echo    Docker OK
 echo    Khoi dong PostgreSQL container...
-docker compose up -d postgres >nul 2>&1
+docker compose up -d postgres
 if errorlevel 1 (
     echo    [LOI] Khong start duoc PostgreSQL container.
     pause

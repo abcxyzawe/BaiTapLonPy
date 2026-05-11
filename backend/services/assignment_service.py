@@ -9,13 +9,13 @@ class AssignmentService:
 
     @staticmethod
     def create(lop_id: str, gv_id: int, tieu_de: str, mo_ta: str = '',
-               han_nop=None, diem_toi_da: float = 10) -> int:
+               han_nop=None, diem_toi_da: float = 10, file_url: str = None) -> int:
         """GV tao bai tap moi cho lop. Tra ve assignment_id."""
         row = db.execute_returning(
-            """INSERT INTO assignments (lop_id, gv_id, tieu_de, mo_ta, han_nop, diem_toi_da)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+            """INSERT INTO assignments (lop_id, gv_id, tieu_de, mo_ta, han_nop, diem_toi_da, file_url)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                  RETURNING id""",
-            (lop_id, gv_id, tieu_de, mo_ta, han_nop, diem_toi_da)
+            (lop_id, gv_id, tieu_de, mo_ta, han_nop, diem_toi_da, file_url)
         )
         return row['id']
 
@@ -24,7 +24,7 @@ class AssignmentService:
         """GV sua bai tap. Tra ve rowcount - 0 = bai tap khong ton tai
         (router can dung de phan biet 404 vs 200 ok). Truoc luon return True
         khien API tra 200 ok du record bi xoa truoc do."""
-        allowed = {'tieu_de', 'mo_ta', 'han_nop', 'diem_toi_da'}
+        allowed = {'tieu_de', 'mo_ta', 'han_nop', 'diem_toi_da', 'file_url'}
         sets = []
         vals = []
         for k, v in fields.items():
@@ -65,7 +65,7 @@ class AssignmentService:
         """Tat ca bai tap GV da giao (tat ca lop), kem so HV nop."""
         sql = """
             SELECT a.id, a.lop_id, a.tieu_de, a.han_nop,
-                   a.diem_toi_da, a.created_at,
+                   a.diem_toi_da, a.created_at, a.file_url,
                    co.ten_mon,
                    (SELECT COUNT(*) FROM submissions s WHERE s.assignment_id = a.id) AS so_nop,
                    (SELECT COUNT(*) FROM submissions s WHERE s.assignment_id = a.id AND s.diem IS NOT NULL) AS so_cham
@@ -82,7 +82,7 @@ class AssignmentService:
         """Tat ca bai tap cua 1 lop (cho HV xem)."""
         sql = """
             SELECT a.id, a.tieu_de, a.mo_ta, a.han_nop,
-                   a.diem_toi_da, a.created_at,
+                   a.diem_toi_da, a.created_at, a.file_url,
                    u.full_name AS ten_gv
               FROM assignments a
               JOIN users u ON u.id = a.gv_id
@@ -137,7 +137,7 @@ class AssignmentService:
               JOIN users u ON u.id = s.user_id
               JOIN registrations r ON r.hv_id = s.user_id
                                   AND r.lop_id = (SELECT lop_id FROM assignments WHERE id = %s)
-                                  AND r.trang_thai IN ('paid', 'completed')
+                                  AND r.trang_thai IN ('pending_payment', 'paid', 'completed')
          LEFT JOIN submissions sub ON sub.assignment_id = %s AND sub.hv_id = s.user_id
              ORDER BY u.full_name
         """
@@ -179,7 +179,7 @@ class AssignmentService:
         khien HV moi DK chua TT khong thay bai tap nao -> banner "0 bai tap"
         sai, dashboard thieu data."""
         sql = """
-            SELECT a.id, a.tieu_de, a.lop_id, a.han_nop, a.diem_toi_da,
+            SELECT a.id, a.tieu_de, a.lop_id, a.han_nop, a.diem_toi_da, a.file_url,
                    co.ten_mon,
                    sub.id AS submission_id, sub.diem
               FROM assignments a

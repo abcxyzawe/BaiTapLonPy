@@ -17,7 +17,10 @@ Endpoints:
     GET    /submissions/student/{hv_id}   lich su nop bai
     GET    /assignments/student/{hv_id}/pending  bai can lam
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, File, UploadFile
+import shutil
+import os
+import uuid
 
 from backend.api.schemas import (
     AssignmentCreate, AssignmentUpdate,
@@ -35,9 +38,26 @@ def create_assignment(req: AssignmentCreate):
     asg_id = AssignmentService.create(
         lop_id=req.lop_id, gv_id=req.gv_id,
         tieu_de=req.tieu_de, mo_ta=req.mo_ta or '',
-        han_nop=req.han_nop, diem_toi_da=req.diem_toi_da
+        han_nop=req.han_nop, diem_toi_da=req.diem_toi_da,
+        file_url=req.file_url
     )
     return {'id': asg_id, 'status': 'created'}
+
+
+@router.post('/upload')
+def upload_assignment_file(file: UploadFile = File(...)):
+    """Upload file dinh kem bai tap, tra ve URL de luu vao DB."""
+    try:
+        upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'uploads')
+        os.makedirs(upload_dir, exist_ok=True)
+        ext = os.path.splitext(file.filename)[1]
+        new_name = f"asg_{uuid.uuid4().hex}{ext}"
+        file_path = os.path.join(upload_dir, new_name)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        return {"file_url": f"/uploads/{new_name}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
 
 
 @router.put('/{asg_id}')
