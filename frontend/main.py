@@ -1,10 +1,14 @@
-import sys, os
+import sys, os, csv
 # them root vao path de import backend
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt5 import QtWidgets, uic, QtCore
 from PyQt5.QtGui import QPixmap, QIcon, QColor, QFont, QDoubleValidator
 from PyQt5.QtCore import Qt, QDate, QLocale
+try:
+    from PyQt5.QtChart import QChart, QChartView, QBarSet, QBarSeries, QBarCategoryAxis, QValueAxis
+except ImportError:
+    print('[WARN] PyQt5.QtChart not found - grade distribution will be table-based')
 from theme_helper import (load_theme, setup_sidebar_icons, setup_stat_icons,
                           apply_eaut_overrides, COLORS, SIDEBAR_ACTIVE, SIDEBAR_NORMAL)
 
@@ -10140,6 +10144,10 @@ class AdminWindow(QtWidgets.QWidget):
             cbo.setCurrentIndex(default_idx)
             cbo.blockSignals(False)
             safe_connect(cbo.currentIndexChanged, self._render_admin_stats)
+            
+            btn_exp = page.findChild(QtWidgets.QPushButton, 'btnExportStats')
+            if btn_exp:
+                safe_connect(btn_exp.clicked, self._handle_export_stats)
         # Render initial voi sem hien tai (khong phai sem cu nhat = idx 0)
         self._render_admin_stats(default_idx)
 
@@ -10151,7 +10159,7 @@ class AdminWindow(QtWidgets.QWidget):
             sem_id = self._stats_sem_ids[idx]
 
         # Default empty
-        ds = {'chart': [], 'dept': [], 'class': []}
+        ds = {'chart': [], 'dept': [], 'class': [], 'grade': {}, 'top_students': []}
         if DB_AVAILABLE and sem_id:
             try:
                 stat = StatsService.stats_by_semester(sem_id) or {}
@@ -10171,6 +10179,11 @@ class AdminWindow(QtWidgets.QWidget):
                                 f"{float(c['gpa']):.1f}" if c.get('gpa') else '—',
                                 fmt_vnd(c.get('doanh_thu'), suffix='')]
                                for c in stat.get('class_stats', [])]
+                ds['grade'] = {r['xep_loai']: r['so_luong'] for r in stat.get('grade_dist', [])}
+                ds['top_students'] = [[r.get('full_name', '?'),
+                                        r.get('msv', '?'),
+                                        f"{float(r.get('gpa') or 0):.2f}"]
+                                       for r in stat.get('top_students', [])]
             except Exception as e:
                 print(f'[ADM_STATS] semester {sem_id} loi: {e}')
 
@@ -10219,7 +10232,19 @@ class AdminWindow(QtWidgets.QWidget):
                     item = QtWidgets.QTableWidgetItem(val)
                     item.setTextAlignment(Qt.AlignCenter if c > 0 else Qt.AlignLeft | Qt.AlignVCenter)
                     tbl3.setItem(r, c, item)
-            _render_table_with_empty(tbl3, ds['class'], fill_cls, [200, 80, 120])
+            _render_table_with_empty(tbl3, ds['class'], fill_cls, [140, 60, 60])
+
+        tbl4 = page.findChild(QtWidgets.QTableWidget, 'tblTopStudents')
+        if tbl4:
+            def fill_top(r, row):
+                for c, val in enumerate(row):
+                    item = QtWidgets.QTableWidgetItem(val)
+                    item.setTextAlignment(Qt.AlignCenter if c > 0 else Qt.AlignLeft | Qt.AlignVCenter)
+                    if c == 2: # GPA column
+                        item.setForeground(QColor(COLORS['navy']))
+                        item.setFont(QFont('Segoe UI', 10, QFont.Bold))
+                    tbl4.setItem(r, c, item)
+            _render_table_with_empty(tbl4, ds['top_students'], fill_top, [120, 80])
 
         # update stat cards neu co
         if ds['chart']:
@@ -10231,6 +10256,193 @@ class AdminWindow(QtWidgets.QWidget):
                 wlbl = page.findChild(QtWidgets.QLabel, attr)
                 if wlbl:
                     wlbl.setText(val)
+
+        # Render grade distribution chart
+        gc = page.findChild(QtWidgets.QFrame, 'gradeChartContainer')
+        if gc:
+            self._render_grade_chart(gc, ds['grade'])
+            
+        # Cache for export
+        self._last_stats_ds = ds
+        self._last_stats_sem_name = "—"
+        cbo = page.findChild(QtWidgets.QComboBox, 'cboStatSemester')
+        if cbo and idx < cbo.count():
+            self._last_stats_sem_name = cbo.itemText(idx)
+
+    def _render_grade_chart(self, container, data):
+        """Helper render pho diem (A, B, C, D, F) dung QtChart hoac fallback simple bars."""
+        # Clean old charts
+        while container.layout() and container.layout().count():
+            it = container.layout().takeAt(0)
+            if it.widget(): it.widget().deleteLater()
+        if not container.layout():
+            QtWidgets.QVBoxLayout(container).setContentsMargins(0, 0, 0, 0)
+        
+        if not data or sum(data.values()) == 0:
+            lbl = QtWidgets.QLabel('Chưa có dữ liệu điểm', container)
+            lbl.setAlignment(Qt.AlignCenter)
+            lbl.setStyleSheet('color: #a0aec0; font-style: italic;')
+            container.layout().addWidget(lbl)
+            return
+
+        categories = ['A', 'B', 'C', 'D', 'F']
+        values = [data.get(k, 0) for k in categories]
+
+        # Check if QtChart is available (imported in global scope)
+        if 'QChartView' in globals():
+            try:
+                set0 = QBarSet('Số lượng')
+                set0.append(values)
+                # Color bars (Navy for EAUT style)
+                set0.setColor(QColor(COLORS['navy']))
+                
+                series = QBarSeries()
+                series.append(set0)
+                
+                chart = QChart()
+                chart.addSeries(series)
+                chart.setTitle('Phân bổ điểm chữ')
+                chart.setAnimationOptions(QChart.SeriesAnimations)
+                
+                axisX = QBarCategoryAxis()
+                axisX.append(categories)
+                chart.addAxis(axisX, Qt.AlignBottom)
+                series.attachAxis(axisX)
+                
+                axisY = QValueAxis()
+                axisY.setRange(0, max(values) + 1)
+                axisY.setLabelFormat('%d')
+                chart.addAxis(axisY, Qt.AlignLeft)
+                series.attachAxis(axisY)
+                
+                chart.legend().setVisible(False)
+                chart.setMargins(QtCore.QMargins(5, 5, 5, 5))
+                
+                view = QChartView(chart)
+                view.setRenderHint(QtWidgets.QPainter.Antialiasing)
+                container.layout().addWidget(view)
+                return
+            except Exception as e:
+                print(f'[ADM_STATS] QtChart render loi: {e}')
+
+        # Fallback: Simple CSS-based bars if QtChart fails or not installed
+        scroll = QtWidgets.QScrollArea(container)
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet('border: none; background: transparent;')
+        inner = QtWidgets.QWidget()
+        inner.setStyleSheet('background: transparent;')
+        iv = QtWidgets.QVBoxLayout(inner)
+        iv.setSpacing(10)
+        
+        max_val = max(values) or 1
+        colors = {'A': COLORS['green'], 'B': COLORS['navy'], 'C': COLORS['gold'], 'D': COLORS['orange'], 'F': COLORS['red']}
+        
+        for cat, val in zip(categories, values):
+            row = QtWidgets.QHBoxLayout()
+            lbl_cat = QtWidgets.QLabel(cat)
+            lbl_cat.setFixedWidth(20)
+            lbl_cat.setStyleSheet('font-weight: bold; color: #4a5568;')
+            row.addWidget(lbl_cat)
+            
+            bar_bg = QtWidgets.QFrame()
+            bar_bg.setFixedHeight(16)
+            bar_bg.setStyleSheet('background: #edf2f7; border-radius: 8px;')
+            bar_lay = QtWidgets.QHBoxLayout(bar_bg)
+            bar_lay.setContentsMargins(0, 0, 0, 0)
+            
+            pct = int(val / max_val * 100)
+            if pct > 0:
+                bar = QtWidgets.QFrame()
+                bar.setFixedWidth(int(pct * 1.8)) # scaled to fit
+                bar.setStyleSheet(f'background: {colors.get(cat, COLORS["navy"])}; border-radius: 8px;')
+                bar_lay.addWidget(bar, 0, Qt.AlignLeft)
+            
+            bar_lay.addStretch()
+            row.addWidget(bar_bg, 1)
+            
+            lbl_val = QtWidgets.QLabel(str(val))
+            lbl_val.setFixedWidth(30)
+            lbl_val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            lbl_val.setStyleSheet('color: #1a1a2e; font-size: 11px;')
+            row.addWidget(lbl_val)
+            
+            iv.addLayout(row)
+        
+        iv.addStretch()
+        scroll.setWidget(inner)
+        container.layout().addWidget(scroll)
+
+    def _handle_export_stats(self):
+        """Xuat bao cao thong ke hoc ky ra file CSV (Excel mo duoc)."""
+        if not hasattr(self, '_last_stats_ds') or not self._last_stats_ds:
+            msg_warn(self, 'Lỗi', 'Không có dữ liệu để xuất. Hãy chọn một học kỳ trước.')
+            return
+            
+        sem_name = getattr(self, '_last_stats_sem_name', 'Hoc_ky')
+        # Clean sem name for filename
+        import re
+        safe_name = re.sub(r'[^\w\s-]', '', sem_name).replace(' ', '_')
+        default_name = f"Bao_cao_thong_ke_{safe_name}.csv"
+        
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Lưu báo cáo thống kê", default_name, "CSV Files (*.csv)"
+        )
+        if not path:
+            return
+            
+        ds = self._last_stats_ds
+        try:
+            with open(path, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f)
+                
+                # Header
+                writer.writerow(['BÁO CÁO THỐNG KÊ HỌC KỲ'])
+                writer.writerow(['Học kỳ:', sem_name])
+                writer.writerow(['Ngày xuất:', QDate.currentDate().toString('dd/MM/yyyy')])
+                writer.writerow([])
+                
+                # 1. Si so theo mon
+                writer.writerow(['1. THỐNG KÊ SĨ SỐ THEO MÔN HỌC'])
+                writer.writerow(['Môn học', 'Đã đăng ký', 'Tối đa', 'Tỷ lệ lấp đầy (%)'])
+                for m in ds['chart']:
+                    # m is (ten_mon, cur, mx)
+                    pct = round(m[1] * 100 / max(m[2], 1))
+                    writer.writerow([m[0], m[1], m[2], f"{pct}%"])
+                writer.writerow([])
+                
+                # 2. Pho diem
+                writer.writerow(['2. PHỔ ĐIỂM HỌC KỲ'])
+                writer.writerow(['Mức điểm', 'Số lượng'])
+                for k in ['A', 'B', 'C', 'D', 'F']:
+                    writer.writerow([f"Điểm {k}", ds['grade'].get(k, 0)])
+                writer.writerow([])
+                
+                # 3. Phan bo khoa
+                writer.writerow(['3. PHÂN BỔ HỌC VIÊN THEO KHOA'])
+                writer.writerow(['Khoa', 'Số học viên', 'Tỷ lệ (%)'])
+                for d in ds['dept']:
+                    # d is [khoa, so_hv, pct_str]
+                    writer.writerow(d)
+                writer.writerow([])
+                
+                # 4. Thong ke lop
+                writer.writerow(['4. THÔNG KÊ CHI TIẾT THEO LỚP'])
+                writer.writerow(['Mã lớp', 'Sĩ số', 'GPA trung bình', 'Doanh thu (VNĐ)'])
+                for c in ds['class']:
+                    # c is [ma_lop, siso, gpa, revenue_str]
+                    writer.writerow(c)
+                writer.writerow([])
+                
+                # 5. Sinh vien xuat sac
+                writer.writerow(['5. DANH SÁCH SINH VIÊN XUẤT SẮC (TOP GPA)'])
+                writer.writerow(['Họ tên', 'Mã sinh viên', 'GPA'])
+                for s in ds['top_students']:
+                    writer.writerow(s)
+                    
+            msg_info(self, 'Thành công', f'Đã xuất báo cáo ra file:\n{path}')
+        except Exception as e:
+            print(f'[ADM_STATS] Export loi: {e}')
+            msg_warn(self, 'Lỗi xuất file', f'Không thể ghi file:\n{str(e)}')
 
     def _fill_admin_classes(self):
         page = self.page_widgets[2]

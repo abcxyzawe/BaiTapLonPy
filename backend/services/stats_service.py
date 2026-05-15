@@ -25,6 +25,51 @@ class StatsService:
         )
 
     @staticmethod
+    def grade_distribution(semester_id: str):
+        """Thong ke phan bo diem (A, B, C, D, F) cho 1 hoc ky.
+        Output: list of {'xep_loai': 'A'|'B'|'C'|'D'|'F', 'so_luong': int}
+        """
+        sql = """
+            SELECT 
+                CASE 
+                    WHEN g.tong_ket >= 8.5 THEN 'A'
+                    WHEN g.tong_ket >= 7.0 THEN 'B'
+                    WHEN g.tong_ket >= 5.5 THEN 'C'
+                    WHEN g.tong_ket >= 4.0 THEN 'D'
+                    ELSE 'F'
+                END AS xep_loai,
+                COUNT(*) AS so_luong
+            FROM grades g
+            JOIN classes c ON c.ma_lop = g.lop_id
+            WHERE c.semester_id = %s
+            GROUP BY 1
+            ORDER BY 1
+        """
+        return db.fetch_all(sql, (semester_id,))
+
+    @staticmethod
+    def top_students_by_semester(semester_id: str, limit: int = 10):
+        """Top sinh vien co GPA cao nhat trong hoc ky"""
+        sql = """
+            SELECT 
+                s.user_id, 
+                u.full_name,
+                s.msv,
+                ROUND(AVG(g.tong_ket)::numeric, 2) AS gpa,
+                COUNT(g.lop_id) AS so_mon
+            FROM grades g
+            JOIN students s ON s.user_id = g.hv_id
+            JOIN users u ON u.id = s.user_id
+            JOIN classes c ON c.ma_lop = g.lop_id
+            WHERE c.semester_id = %s
+            GROUP BY s.user_id, u.full_name, s.msv
+            HAVING COUNT(g.lop_id) > 0
+            ORDER BY gpa DESC, so_mon DESC
+            LIMIT %s
+        """
+        return db.fetch_all(sql, (semester_id, limit))
+
+    @staticmethod
     def stats_by_semester(semester_id: str):
         """Thong ke chi tiet cho 1 hoc ky (chart/dept/class data)"""
         # chart data: lop cua HK do + siso
@@ -62,7 +107,17 @@ class StatsService:
                 ORDER BY gpa DESC""",
             (semester_id,)
         )
-        return dict(chart=chart, dept=dept, class_stats=cls)
+        # top students
+        students = StatsService.top_students_by_semester(semester_id, limit=5)
+        dist = StatsService.grade_distribution(semester_id)
+        
+        return dict(
+            chart=chart, 
+            dept=dept, 
+            class_stats=cls, 
+            grade_dist=dist,
+            top_students=students
+        )
 
     @staticmethod
     def top_classes(limit: int = 5):
