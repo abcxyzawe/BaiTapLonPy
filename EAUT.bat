@@ -54,7 +54,7 @@ if errorlevel 1 (
     timeout /t 1 /nobreak >nul
     goto wait_db
 )
-echo    PostgreSQL ready: localhost:5432
+echo    PostgreSQL ready: localhost:5433
 echo.
 
 REM === [4/5] Khoi dong backend (cua so rieng) ===
