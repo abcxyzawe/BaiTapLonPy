@@ -73,6 +73,40 @@ class NotificationService:
                     VALUES (%s, %s, %s, %s, %s, %s)""",
             (tu_id, den_lop, den_hv_id, tieu_de, noi_dung, loai)
         )
+        # Gui email thong bao (background thread, khong block). Bao boc try
+        # rieng - loi email KHONG duoc lam fail viec tao notification.
+        try:
+            NotificationService._send_notification_email(
+                tu_id, tieu_de, noi_dung, den_lop, den_hv_id)
+        except Exception as e:
+            print(f'[NOTIF_EMAIL] Bo qua loi gui email: {e}')
+
+    @staticmethod
+    def _send_notification_email(tu_id, tieu_de, noi_dung, den_lop, den_hv_id):
+        """Helper: lookup nguoi nhan + render email + gui async.
+        Recipient theo quy tac: den_hv_id -> 1 HV; den_lop -> HV lop do;
+        ca 2 None -> broadcast tat ca HV."""
+        from backend.services.email_service import (
+            send_bulk_async, get_class_student_emails, get_all_student_emails,
+            get_one_student_email, render_notification_email, is_configured)
+        if not is_configured():
+            return  # chua config SMTP -> skip som, khong query DB thua
+        # Nguoi gui
+        sender = db.fetch_one(
+            "SELECT full_name, role FROM users WHERE id = %s", (tu_id,))
+        sender_name = sender['full_name'] if sender else 'Hệ thống'
+        sender_role = sender['role'] if sender else ''
+        # Nguoi nhan theo do uu tien: den_hv_id > den_lop > broadcast
+        if den_hv_id:
+            recipients = get_one_student_email(den_hv_id)
+        elif den_lop:
+            recipients = get_class_student_emails(den_lop)
+        else:
+            recipients = get_all_student_emails()
+        if not recipients:
+            return
+        html = render_notification_email(tieu_de, noi_dung, sender_name, sender_role)
+        send_bulk_async(recipients, f'[EAUT] {tieu_de}', html)
 
     @staticmethod
     def get_recent(limit: int = 10):

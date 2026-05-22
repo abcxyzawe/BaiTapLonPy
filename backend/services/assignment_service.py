@@ -17,7 +17,39 @@ class AssignmentService:
                  RETURNING id""",
             (lop_id, gv_id, tieu_de, mo_ta, han_nop, diem_toi_da, file_url)
         )
+        # Gui email thong bao bai tap moi cho HV lop (background, khong block).
+        # Loi email KHONG duoc lam fail viec tao bai tap.
+        try:
+            AssignmentService._send_assignment_email(
+                lop_id, tieu_de, mo_ta, han_nop)
+        except Exception as e:
+            print(f'[ASG_EMAIL] Bo qua loi gui email: {e}')
         return row['id']
+
+    @staticmethod
+    def _send_assignment_email(lop_id, tieu_de, mo_ta, han_nop):
+        """Helper: lookup HV lop + ten mon/GV -> render email -> gui async."""
+        from backend.services.email_service import (
+            send_bulk_async, get_class_student_emails,
+            render_assignment_email, is_configured)
+        if not is_configured():
+            return
+        recipients = get_class_student_emails(lop_id)
+        if not recipients:
+            return
+        # Lookup ten mon + ten GV cho noi dung email
+        info = db.fetch_one(
+            """SELECT co.ten_mon, u.full_name AS ten_gv
+                 FROM classes c
+                 JOIN courses co ON co.ma_mon = c.ma_mon
+            LEFT JOIN users u ON u.id = c.gv_id
+                WHERE c.ma_lop = %s""",
+            (lop_id,)
+        )
+        ten_mon = info['ten_mon'] if info else ''
+        ten_gv = info['ten_gv'] if info else ''
+        html = render_assignment_email(tieu_de, mo_ta, han_nop, lop_id, ten_mon, ten_gv)
+        send_bulk_async(recipients, f'[EAUT] Bài tập mới: {tieu_de}', html)
 
     @staticmethod
     def update(assignment_id: int, **fields):
