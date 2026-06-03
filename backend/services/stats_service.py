@@ -286,7 +286,7 @@ class StatsService:
         row = db.fetch_one("""
             SELECT
               (SELECT COUNT(*) FROM classes WHERE gv_id = %s) AS so_lop,
-              (SELECT COALESCE(SUM(siso_hien_tai), 0) FROM classes WHERE gv_id = %s) AS tong_hv,
+              (SELECT COUNT(DISTINCT r.hv_id) FROM registrations r JOIN classes c ON c.ma_lop = r.lop_id WHERE c.gv_id = %s AND r.trang_thai IN ('paid', 'completed')) AS tong_hv,
               (SELECT COALESCE(AVG(diem), 0) FROM reviews WHERE gv_id = %s) AS diem_tb,
               (SELECT COUNT(*) FROM schedules sc JOIN classes c ON c.ma_lop = sc.lop_id
                 WHERE c.gv_id = %s
