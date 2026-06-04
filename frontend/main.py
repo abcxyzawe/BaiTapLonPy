@@ -4253,29 +4253,44 @@ class MainWindow(QtWidgets.QWidget):
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
         data = []
         n_paid = 0          # so lop da thanh toan
-        total_buoi = 0      # tong so buoi cua tat ca lop da TT
-        attended = 0        # so buoi da diem danh (present|late)
+        total_buoi = 0      # tong so buoi cua tat ca lop da TT (theo classes.so_buoi)
+        attended = 0        # so buoi da diem danh thuc te (present|late)
         # Counter cho payment alert banner
         n_pending_pay = 0
         total_pending_fee = 0
         if DB_AVAILABLE and hv_id:
             try:
+                from backend.database.db import db as _db
+                # 1 query lay chinh xac: tong buoi + da diem danh + chua hoc
+                stat_rows = _db.fetch_all(
+                    """SELECT c.ma_lop, c.so_buoi AS tong_buoi,
+                              COUNT(a.id) FILTER (WHERE a.trang_thai IN ('present','late')) AS da_dd,
+                              r.trang_thai AS reg_status
+                         FROM registrations r
+                         JOIN classes c ON c.ma_lop = r.lop_id
+                    LEFT JOIN schedules sc ON sc.lop_id = c.ma_lop
+                    LEFT JOIN attendance a ON a.schedule_id = sc.id AND a.hv_id = r.hv_id
+                        WHERE r.hv_id = %s
+                          AND r.trang_thai IN ('pending_payment','paid','completed')
+                        GROUP BY c.ma_lop, c.so_buoi, r.trang_thai
+                    """, (hv_id,)
+                ) or []
+                # Build lookup: ma_lop -> (tong_buoi, da_dd)
+                _buoi_map = {
+                    row['ma_lop']: (int(row['tong_buoi'] or 0), int(row['da_dd'] or 0))
+                    for row in stat_rows
+                }
                 rows = CourseService.get_classes_by_student(hv_id) or []
                 for r in rows:
                     st = r.get('reg_status', r.get('trang_thai', 'paid'))
                     st_vn = {'paid': 'Đã thanh toán', 'pending_payment': 'Chờ thanh toán',
                              'completed': 'Hoàn thành', 'cancelled': 'Đã hủy'}.get(st, st)
-                    so_buoi_lop = int(r.get('so_buoi') or 0)
+                    ma_lop = r.get('ma_lop', '')
+                    so_buoi_lop, da_dd_lop = _buoi_map.get(ma_lop, (int(r.get('so_buoi') or 0), 0))
                     if st in ('paid', 'completed'):
                         n_paid += 1
                         total_buoi += so_buoi_lop
-                        # diem danh thuc te qua API attendance
-                        try:
-                            summary = AttendanceService.attendance_rate(hv_id, r.get('ma_lop', '')) or 0.0
-                            # rate * so_buoi / 100 = so buoi attended (uoc luong)
-                            attended += round(summary * so_buoi_lop / 100)
-                        except Exception:
-                            pass
+                        attended += da_dd_lop
                     elif st == 'pending_payment':
                         n_pending_pay += 1
                         try:
@@ -4283,7 +4298,7 @@ class MainWindow(QtWidgets.QWidget):
                         except (TypeError, ValueError):
                             pass
                     data.append([
-                        r.get('ma_lop', ''), r.get('ten_mon', ''),
+                        ma_lop, r.get('ten_mon', ''),
                         str(so_buoi_lop) if so_buoi_lop else '—',
                         r.get('ten_gv', '') or '—', r.get('lich', '') or '—', st_vn
                     ])
@@ -4293,6 +4308,7 @@ class MainWindow(QtWidgets.QWidget):
         self._stu_pending_pay = (n_pending_pay, total_pending_fee)
 
         remaining_buoi = max(0, total_buoi - attended)
+
 
         # Lich hoc hom nay - render banner dynamic
         self._render_today_banner_hv(page, hv_id)

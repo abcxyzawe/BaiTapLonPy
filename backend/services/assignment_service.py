@@ -150,12 +150,48 @@ class AssignmentService:
         """GV cham diem + gop y. Tra ve rowcount - 0 = sub khong ton tai
         (router check de tra 404, truoc voi UPDATE silent ignore khien GV
         nghi da cham nhung that ra khong update gi)."""
-        return db.execute(
+        affected = db.execute(
             """UPDATE submissions
                   SET diem = %s, nhan_xet = %s, cham_luc = CURRENT_TIMESTAMP
                 WHERE id = %s""",
             (diem, nhan_xet, submission_id)
         ) or 0
+        if affected > 0:
+            try:
+                AssignmentService._send_grade_email(submission_id, diem, nhan_xet)
+            except Exception as e:
+                print(f'[ASG_EMAIL] Bo qua loi gui email cham bai: {e}')
+        return affected
+
+    @staticmethod
+    def _send_grade_email(submission_id, diem, nhan_xet):
+        """Helper: Gui email cho 1 HV khi GV cham diem."""
+        from backend.services.email_service import (
+            send_bulk_async, get_one_student_email,
+            render_grade_email, is_configured)
+        if not is_configured():
+            return
+            
+        info = db.fetch_one(
+            """SELECT sub.hv_id, a.tieu_de, a.diem_toi_da, co.ten_mon
+                 FROM submissions sub
+                 JOIN assignments a ON a.id = sub.assignment_id
+                 JOIN classes c ON c.ma_lop = a.lop_id
+                 JOIN courses co ON co.ma_mon = c.ma_mon
+                WHERE sub.id = %s""",
+            (submission_id,)
+        )
+        if not info:
+            return
+            
+        recipients = get_one_student_email(info['hv_id'])
+        if not recipients:
+            return
+            
+        html = render_grade_email(
+            info['tieu_de'], diem, info['diem_toi_da'], nhan_xet, info['ten_mon']
+        )
+        send_bulk_async(recipients, f'[EAUT] Kết quả bài tập: {info["tieu_de"]}', html)
 
     @staticmethod
     def get_submissions_by_assignment(assignment_id: int):
