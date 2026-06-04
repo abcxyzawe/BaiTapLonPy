@@ -15792,12 +15792,12 @@ class EmployeeWindow(QtWidgets.QWidget):
         if DB_AVAILABLE and emp_id:
             try:
                 stat = StatsService.employee_today(emp_id) or {}
+                # UI labels: lblEmpStat1=DK homay, lblEmpStat2=Da TT, lblEmpStat3=Cho TT, lblEmpStat4=Doanh thu
                 for attr, key, fmt in [
-                    ('lblStatRegToday', 'today_reg', str),
-                    ('lblStatPaidToday', 'today_paid', str),
-                    ('lblStatRevenueToday', 'today_revenue',
-                     lambda v: fmt_vnd(v)),
-                    ('lblStatPending', 'pending', str),
+                    ('lblEmpStat1', 'today_reg', str),
+                    ('lblEmpStat2', 'today_paid', str),
+                    ('lblEmpStat3', 'pending', str),
+                    ('lblEmpStat4', 'today_revenue', lambda v: fmt_vnd(v)),
                 ]:
                     wlbl = page.findChild(QtWidgets.QLabel, attr)
                     if wlbl:
