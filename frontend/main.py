@@ -2474,6 +2474,10 @@ def show_class_full_schedule_dialog(parent, lop_id, ten_mon, schedules, role='hv
     tbl.setStyleSheet(
         f'QTableWidget {{ background: white; border: 1px solid {border}; border-radius: 6px; '
         f'gridline-color: #edf2f7; alternate-background-color: #fafbfc; font-size: 12px; }} '
+        f'QTableWidget::item:selected { background: #f0f4f8; color: #1a1a2e; } f'
+
+        f'QTableWidget:focus { outline: none; } f'
+
         f'QHeaderView::section {{ background: {navy}; color: white; padding: 6px; '
         f'border: none; font-weight: bold; font-size: 11px; }}'
     )
@@ -2487,6 +2491,8 @@ def show_class_full_schedule_dialog(parent, lop_id, ten_mon, schedules, role='hv
         tbl.setSpan(0, 0, 1, 7)
         tbl.setRowHeight(0, 60)
     else:
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(rows))
         days_vn_short = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
         # Map khop voi DB CHECK schema.sql: 'scheduled'/'completed'/'cancelled'/'postponed'
@@ -4247,29 +4253,44 @@ class MainWindow(QtWidgets.QWidget):
         hv_id = MOCK_USER.get('id') or MOCK_USER.get('user_id')
         data = []
         n_paid = 0          # so lop da thanh toan
-        total_buoi = 0      # tong so buoi cua tat ca lop da TT
-        attended = 0        # so buoi da diem danh (present|late)
+        total_buoi = 0      # tong so buoi cua tat ca lop da TT (theo classes.so_buoi)
+        attended = 0        # so buoi da diem danh thuc te (present|late)
         # Counter cho payment alert banner
         n_pending_pay = 0
         total_pending_fee = 0
         if DB_AVAILABLE and hv_id:
             try:
+                from backend.database.db import db as _db
+                # 1 query lay chinh xac: tong buoi + da diem danh + chua hoc
+                stat_rows = _db.fetch_all(
+                    """SELECT c.ma_lop, c.so_buoi AS tong_buoi,
+                              COUNT(a.id) FILTER (WHERE a.trang_thai IN ('present','late')) AS da_dd,
+                              r.trang_thai AS reg_status
+                         FROM registrations r
+                         JOIN classes c ON c.ma_lop = r.lop_id
+                    LEFT JOIN schedules sc ON sc.lop_id = c.ma_lop
+                    LEFT JOIN attendance a ON a.schedule_id = sc.id AND a.hv_id = r.hv_id
+                        WHERE r.hv_id = %s
+                          AND r.trang_thai IN ('pending_payment','paid','completed')
+                        GROUP BY c.ma_lop, c.so_buoi, r.trang_thai
+                    """, (hv_id,)
+                ) or []
+                # Build lookup: ma_lop -> (tong_buoi, da_dd)
+                _buoi_map = {
+                    row['ma_lop']: (int(row['tong_buoi'] or 0), int(row['da_dd'] or 0))
+                    for row in stat_rows
+                }
                 rows = CourseService.get_classes_by_student(hv_id) or []
                 for r in rows:
                     st = r.get('reg_status', r.get('trang_thai', 'paid'))
                     st_vn = {'paid': 'Đã thanh toán', 'pending_payment': 'Chờ thanh toán',
                              'completed': 'Hoàn thành', 'cancelled': 'Đã hủy'}.get(st, st)
-                    so_buoi_lop = int(r.get('so_buoi') or 0)
+                    ma_lop = r.get('ma_lop', '')
+                    so_buoi_lop, da_dd_lop = _buoi_map.get(ma_lop, (int(r.get('so_buoi') or 0), 0))
                     if st in ('paid', 'completed'):
                         n_paid += 1
                         total_buoi += so_buoi_lop
-                        # diem danh thuc te qua API attendance
-                        try:
-                            summary = AttendanceService.attendance_rate(hv_id, r.get('ma_lop', '')) or 0.0
-                            # rate * so_buoi / 100 = so buoi attended (uoc luong)
-                            attended += round(summary * so_buoi_lop / 100)
-                        except Exception:
-                            pass
+                        attended += da_dd_lop
                     elif st == 'pending_payment':
                         n_pending_pay += 1
                         try:
@@ -4277,7 +4298,7 @@ class MainWindow(QtWidgets.QWidget):
                         except (TypeError, ValueError):
                             pass
                     data.append([
-                        r.get('ma_lop', ''), r.get('ten_mon', ''),
+                        ma_lop, r.get('ten_mon', ''),
                         str(so_buoi_lop) if so_buoi_lop else '—',
                         r.get('ten_gv', '') or '—', r.get('lich', '') or '—', st_vn
                     ])
@@ -4287,6 +4308,7 @@ class MainWindow(QtWidgets.QWidget):
         self._stu_pending_pay = (n_pending_pay, total_pending_fee)
 
         remaining_buoi = max(0, total_buoi - attended)
+
 
         # Lich hoc hom nay - render banner dynamic
         self._render_today_banner_hv(page, hv_id)
@@ -4325,6 +4347,8 @@ class MainWindow(QtWidgets.QWidget):
                         '📧 Email: admin@eaut.edu.vn\n\n'
                         'Nhân viên sẽ thực hiện đăng ký giúp bạn.'))
             else:
+                tbl.clearSpans()
+                tbl.setRowCount(0)
                 tbl.setRowCount(len(data))
                 for r, row in enumerate(data):
                     for c, val in enumerate(row):
@@ -5050,6 +5074,8 @@ class MainWindow(QtWidgets.QWidget):
         tbl.setGeometry(0, 0, 615, 618)
 
         hours = ['7:00','8:00','9:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00']
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(hours))
         tbl.verticalHeader().setVisible(False)
         days_vn = ['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7']
@@ -5462,6 +5488,8 @@ class MainWindow(QtWidgets.QWidget):
                 cta_text='📅 Xem lịch học',
                 cta_callback=lambda: self._on_nav(1))
         else:
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(data))
             from datetime import date as _date
             today = _date.today()
@@ -5963,6 +5991,8 @@ class MainWindow(QtWidgets.QWidget):
                 cta_text='📚 Xem lớp đã đăng ký',
                 cta_callback=lambda: self._on_nav(0))
         else:
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(all_rows))
             for r, row in enumerate(all_rows):
                 # Row 58px dong nhat voi standard cua app
@@ -6052,13 +6082,19 @@ class MainWindow(QtWidgets.QWidget):
         tbl.setStyleSheet(
             'QTableWidget { background: white; border: 1px solid #d2d6dc; '
             'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
+            'QTableWidget::item:selected { background: #f0f4f8; color: #1a1a2e; } '
+
+            'QTableWidget:focus { outline: none; } '
+
             'QHeaderView::section { background: #f7fafc; color: #4a5568; '
             'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
             'font-family: "Segoe UI", "Inter", sans-serif; '
             'font-weight: bold; font-size: 11px; }'
         )
         tbl.horizontalHeader().setMinimumHeight(46)
+        hb.show()
         tbl.show()
+
 
     def _reload_stu_assignments(self, page):
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblStuAssignments')
@@ -6081,6 +6117,8 @@ class MainWindow(QtWidgets.QWidget):
         else:
             from datetime import datetime
             now = datetime.now()
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(rows))
             for r, row in enumerate(rows):
                 tbl.setRowHeight(r, 58)
@@ -6374,6 +6412,8 @@ class MainWindow(QtWidgets.QWidget):
                     cta_text='📚 Xem khóa học',
                     cta_callback=lambda: self._on_nav(0))
             else:
+                tbl.clearSpans()
+                tbl.setRowCount(0)
                 tbl.setRowCount(len(data))
                 for r, row in enumerate(data):
                     for c, val in enumerate(row):
@@ -7543,6 +7583,8 @@ class AdminWindow(QtWidgets.QWidget):
             if not data:
                 set_table_empty_state(tbl, 'Chưa có dữ liệu')
             else:
+                tbl.clearSpans()
+                tbl.setRowCount(0)
                 tbl.setRowCount(len(data))
                 tbl.clearSpans()
                 for r, (name, cur, mx) in enumerate(data):
@@ -7576,6 +7618,8 @@ class AdminWindow(QtWidgets.QWidget):
         tbl2 = page.findChild(QtWidgets.QTableWidget, 'tblRecent')
         if tbl2:
             data = recent_data if recent_data else []
+            tbl2.clearSpans()
+            tbl2.setRowCount(0)
             tbl2.setRowCount(len(data) if data else 1)
             if not data:
                 ph2 = QtWidgets.QTableWidgetItem('Chưa có dữ liệu')
@@ -7609,6 +7653,8 @@ class AdminWindow(QtWidgets.QWidget):
             if not data:
                 set_table_empty_state(tbl3, 'Chưa có dữ liệu')
             else:
+                tbl3.clearSpans()
+                tbl3.setRowCount(0)
                 tbl3.setRowCount(len(data))
                 for r, row in enumerate(data):
                     for c, val in enumerate(row):
@@ -7970,6 +8016,8 @@ class AdminWindow(QtWidgets.QWidget):
             data = []  # khong co data -> empty table
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdminCourses')
         if tbl:
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(data))
             for r, row in enumerate(data):
                 # row[7] = mo_ta (cho tooltip)
@@ -8448,6 +8496,8 @@ class AdminWindow(QtWidgets.QWidget):
             data = []
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAdminStudents')
         if tbl:
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(data))
             for r, row in enumerate(data):
                 for c, val in enumerate(row):
@@ -8873,6 +8923,8 @@ class AdminWindow(QtWidgets.QWidget):
             ]
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblSemesters')
         if tbl:
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(data))
             for r, row in enumerate(data):
                 for c in range(5):
@@ -9093,6 +9145,8 @@ class AdminWindow(QtWidgets.QWidget):
             tbl.setColumnCount(9)
             tbl.setHorizontalHeaderItem(7, QtWidgets.QTableWidgetItem('Trạng thái'))
             tbl.setHorizontalHeaderItem(8, QtWidgets.QTableWidgetItem('Thao tác'))
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(data))
             type_colors = {'Cơ bản': COLORS['navy'], 'Nâng cao': COLORS['green'], 'Định hướng': COLORS['gold']}
             for r, row in enumerate(data):
@@ -9441,16 +9495,41 @@ class AdminWindow(QtWidgets.QWidget):
 
     def _build_admin_schedule_ui(self, page):
         """Build UI 1 lan: header + filter + table + nut tao."""
-        # Header bar
+        # Table xay truoc de hb/fb de len tren
+        tbl = QtWidgets.QTableWidget(page)
+        tbl.setObjectName('tblAdmSched')
+        tbl.setGeometry(15, 118, 990, 574)
+        tbl.setColumnCount(8)
+        tbl.setHorizontalHeaderLabels(['#', 'Lớp', 'Khóa học', 'Ngày', 'Thứ',
+                                       'Giờ học', 'Phòng', 'Thao tác'])
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        tbl.setStyleSheet(
+            'QTableWidget { background: white; border: 1px solid #d2d6dc; '
+            'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
+            'QTableWidget::item:selected { background: #f0f4f8; color: #1a1a2e; } '
+            'QTableWidget:focus { outline: none; } '
+            'QHeaderView::section { background: #f7fafc; color: #4a5568; '
+            'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
+            'font-family: "Segoe UI", "Inter", sans-serif; '
+            'font-weight: bold; font-size: 11px; }'
+        )
+        tbl.horizontalHeader().setMinimumHeight(46)
+        tbl.show()
+
+        # Header bar - tao sau tbl nen nam tren tbl trong z-order
         hb = QtWidgets.QFrame(page)
         hb.setObjectName('headerBar')
         hb.setGeometry(0, 0, 1020, 56)
-        hb.setStyleSheet('QFrame#headerBar { background: white; border-bottom: 1px solid #d2d6dc; }')
+        hb.setStyleSheet('background: white; border-bottom: 1px solid #d2d6dc;')
+        hb.show()
+
         title = QtWidgets.QLabel('Quản lý lịch học', hb)
         title.setGeometry(25, 0, 400, 56)
         title.setStyleSheet('color: #1a1a2e; font-size: 17px; font-weight: bold; background: transparent;')
+        title.show()
 
-        # Nut Tao theo lich tuan (batch)
         btn_batch = QtWidgets.QPushButton('📅 Tạo theo tuần', hb)
         btn_batch.setObjectName('btnAdmBatchSched')
         btn_batch.setGeometry(700, 12, 150, 32)
@@ -9461,6 +9540,7 @@ class AdminWindow(QtWidgets.QWidget):
             f'QPushButton:hover {{ background: {COLORS["navy"]}; color: white; }}'
         )
         btn_batch.clicked.connect(self._admin_dialog_batch_schedule)
+        btn_batch.show()
 
         btn_new = QtWidgets.QPushButton('+ Tạo buổi', hb)
         btn_new.setObjectName('btnAdmNewSched')
@@ -9472,28 +9552,32 @@ class AdminWindow(QtWidgets.QWidget):
             'QPushButton:hover { background: #001a50; }'
         )
         btn_new.clicked.connect(self._admin_dialog_new_schedule)
+        btn_new.show()
 
-        # Filter bar - sat hon header de bot empty space (truoc gap 14px qua nhieu)
+        # Filter bar
         fb = QtWidgets.QFrame(page)
         fb.setObjectName('filterBar')
         fb.setGeometry(15, 62, 990, 44)
-        fb.setStyleSheet('QFrame#filterBar { background: white; border: 1px solid #d2d6dc; border-radius: 8px; }')
+        fb.setStyleSheet('background: white; border: 1px solid #d2d6dc; border-radius: 8px;')
+        fb.show()
 
         lbl_lop = QtWidgets.QLabel('Lọc theo lớp:', fb)
         lbl_lop.setGeometry(15, 11, 90, 22)
         lbl_lop.setStyleSheet('color: #4a5568; font-size: 12px; background: transparent;')
+        lbl_lop.show()
 
         cbo_lop = QtWidgets.QComboBox(fb)
         cbo_lop.setObjectName('cboAdmSchedLop')
         cbo_lop.setGeometry(110, 8, 200, 28)
         cbo_lop.setStyleSheet('QComboBox { background: white; border: 1px solid #d2d6dc; border-radius: 4px; padding: 2px 6px; font-size: 12px; }')
+        cbo_lop.show()
 
         lbl_count = QtWidgets.QLabel('', fb)
         lbl_count.setObjectName('lblSchedCount')
         lbl_count.setGeometry(330, 11, 350, 22)
         lbl_count.setStyleSheet('color: #718096; font-size: 11px; background: transparent;')
+        lbl_count.show()
 
-        # Search box loc theo ma lop / ten mon / phong / ngay
         txt_s = QtWidgets.QLineEdit(fb)
         txt_s.setObjectName('txtAdmSchedSearch')
         txt_s.setGeometry(700, 8, 275, 28)
@@ -9502,34 +9586,10 @@ class AdminWindow(QtWidgets.QWidget):
         txt_s.setStyleSheet('QLineEdit { background: white; border: 1px solid #d2d6dc; '
                              'border-radius: 4px; padding: 2px 8px; font-size: 12px; } '
                              'QLineEdit:focus { border-color: #002060; }')
-
-        # Table - gap 12px sau filter de header table khong dinh sat filter bar
-        tbl = QtWidgets.QTableWidget(page)
-        tbl.setObjectName('tblAdmSched')
-        tbl.setGeometry(15, 118, 990, 574)
-        tbl.setColumnCount(8)
-        tbl.setHorizontalHeaderLabels(['#', 'Lớp', 'Khóa học', 'Ngày', 'Thứ',
-                                       'Giờ học', 'Phòng', 'Thao tác'])
-        tbl.verticalHeader().setVisible(False)
-        tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        # Header padding tang 14px (tu 8) de chu khong dinh sat mep tren / canh
-        # font Segoe UI nho hon mot chut + letter-spacing nhe cho de doc
-        tbl.setStyleSheet(
-            'QTableWidget { background: white; border: 1px solid #d2d6dc; '
-            'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
-            'QHeaderView::section { background: #f7fafc; color: #4a5568; '
-            'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
-            'font-family: "Segoe UI", "Inter", sans-serif; '
-            'font-weight: bold; font-size: 11px; }'
-        )
-        # Tang chieu cao header de them lasting hon
-        tbl.horizontalHeader().setMinimumHeight(46)
-        tbl.show()
+        txt_s.show()
 
         # Wire combo filter
         cbo_lop.currentIndexChanged.connect(lambda: self._reload_admin_schedule(page))
-        # Wire search box: filter visible rows ngay bang table_filter (khong cần reload)
         txt_s.textChanged.connect(
             lambda s, _t=tbl: table_filter(_t, s, cols=[1, 2, 3, 6])
         )
@@ -9585,6 +9645,8 @@ class AdminWindow(QtWidgets.QWidget):
                 cta_text='+ Tạo buổi học',
                 cta_callback=self._admin_dialog_new_schedule)
         else:
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(rows))
             for r, row in enumerate(rows):
                 # Row 44 de cum nut Sua/Xoa (24+padding) khong bi crop chu co dau tieng Viet
@@ -10010,6 +10072,8 @@ class AdminWindow(QtWidgets.QWidget):
         }
         tbl = page.findChild(QtWidgets.QTableWidget, 'tblAudit')
         if tbl:
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(data))
             for r, row in enumerate(data):
                 for c, val in enumerate(row):
@@ -10192,6 +10256,8 @@ class AdminWindow(QtWidgets.QWidget):
             if not data:
                 set_table_empty_state(tbl, 'Chưa có dữ liệu')
             else:
+                tbl.clearSpans()
+                tbl.setRowCount(0)
                 tbl.setRowCount(len(data))
                 for r, row in enumerate(data):
                     fill_func(r, row)
@@ -10468,6 +10534,8 @@ class AdminWindow(QtWidgets.QWidget):
                 print(f'[ADM_CLS] DB loi: {e}')
         if not classes_src:
             classes_src = []
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(classes_src))
         for r, cls in enumerate(classes_src):
             ma, mmon, tmon, gv, lich, phong, smax, siso, gia, *_ = cls
@@ -10994,6 +11062,8 @@ class AdminWindow(QtWidgets.QWidget):
                 ['GV007', 'Nguyễn Thị E', 'Toán', 'Phó giáo sư', '0901234573', 1, 4.8],
                 ['GV008', 'Lê Văn M', 'Toán', 'Tiến sĩ', '0901234574', 1, 4.0],
             ]
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             for c, val in enumerate(row[:5]):
@@ -11244,6 +11314,8 @@ class AdminWindow(QtWidgets.QWidget):
                 ['NV004', 'Nguyễn Hoài Linh', 'Quản lý', '0987654324', 'linh@eaut.edu.vn', 'Đang làm'],
                 ['NV005', 'Vũ Thanh Tùng', 'Nhân viên thu ngân', '0987654325', 'tungvt@eaut.edu.vn', 'Nghỉ phép'],
             ]
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             for c, val in enumerate(row[:5]):
@@ -11861,6 +11933,8 @@ class TeacherWindow(QtWidgets.QWidget):
 
     def _render_attend_table(self, tbl, hvs, existing):
         """Render bang diem danh - moi row gom combo trang thai + giờ vào + ghi chú"""
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(hvs))
         for r, (hv_id, msv, ten) in enumerate(hvs):
             tbl.setRowHeight(r, 38)
@@ -12212,6 +12286,8 @@ class TeacherWindow(QtWidgets.QWidget):
                     cta_text='📅 Xem lịch dạy tuần',
                     cta_callback=lambda: self._on_nav(1))
             else:
+                tbl.clearSpans()
+                tbl.setRowCount(0)
                 tbl.setRowCount(len(data))
                 # Status -> background color
                 bg_map = {'now': '#dcfce7',    # green 100
@@ -12282,6 +12358,8 @@ class TeacherWindow(QtWidgets.QWidget):
             if not data:
                 set_table_empty_state(tbl2, 'Chưa có hoạt động')
             else:
+                tbl2.clearSpans()
+                tbl2.setRowCount(0)
                 tbl2.setRowCount(len(data))
                 for r, (t, c) in enumerate(data):
                     ti = QtWidgets.QTableWidgetItem(t)
@@ -12541,6 +12619,8 @@ class TeacherWindow(QtWidgets.QWidget):
             return
         tbl.setGeometry(0, 0, 615, 618)
         hours = ['7:00','8:00','9:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00']
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(hours))
         tbl.verticalHeader().setVisible(False)
         days_vn = ['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7']
@@ -12885,6 +12965,8 @@ class TeacherWindow(QtWidgets.QWidget):
             # Khong co DB - loc theo ten GV hien tai
             gv_name = MOCK_TEACHER.get('name', '')
             my_classes = [c for c in MOCK_CLASSES if c[3] == gv_name]
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(my_classes))
         for r, cls in enumerate(my_classes):
             ma, mmon, tmon, gv, lich, phong, smax, siso, gia, *_ = cls
@@ -12990,6 +13072,8 @@ class TeacherWindow(QtWidgets.QWidget):
                 print(f'[TEA_STU] DB loi: {e}')
         if not data:
             data = []
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             # Row 44px - du cho chu trang thai (khong pill nua)
@@ -13694,6 +13778,8 @@ class TeacherWindow(QtWidgets.QWidget):
         # bi trigger sai khi chua fill xong toan bo row. try/finally de release du loi
         self._grades_recalc_lock = True
         try:
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(data))
             # Clear cellWidgets cu (xep loai cot 7) tranh leak khi re-render
             for r in range(tbl.rowCount()):
@@ -14031,12 +14117,17 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.setStyleSheet(
             'QTableWidget { background: white; border: 1px solid #d2d6dc; '
             'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
+            'QTableWidget::item:selected { background: #f0f4f8; color: #1a1a2e; } '
+
+            'QTableWidget:focus { outline: none; } '
+
             'QHeaderView::section { background: #f7fafc; color: #4a5568; '
             'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
             'font-family: "Segoe UI", "Inter", sans-serif; '
             'font-weight: bold; font-size: 11px; }'
         )
         tbl.horizontalHeader().setMinimumHeight(46)
+        hb.show()
         tbl.show()
 
     def _reload_tea_assignments(self, page):
@@ -14084,6 +14175,8 @@ class TeacherWindow(QtWidgets.QWidget):
             # setSpan(0, 0, 1, columnCount) merge cells -> neu khong clear,
             # hang du lieu moi van bi span -> cellWidget col 6 hien thi sai vi tri)
             tbl.clearSpans()
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(rows))
             for r, row in enumerate(rows):
                 tbl.setRowHeight(r, 58)  # row cao 58px (truoc 44) - thoang hon
@@ -14357,6 +14450,10 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.setStyleSheet(
             'QTableWidget { background: white; border: 1px solid #d2d6dc; '
             'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
+            'QTableWidget::item:selected { background: #f0f4f8; color: #1a1a2e; } '
+
+            'QTableWidget:focus { outline: none; } '
+
             'QHeaderView::section { background: #f7fafc; color: #4a5568; '
             'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
             'font-family: "Segoe UI", "Inter", sans-serif; '
@@ -14387,6 +14484,8 @@ class TeacherWindow(QtWidgets.QWidget):
             lbl_desc.setText(asg.get('mo_ta', '') or '<i style="color:#a0aec0;">(không có mô tả)</i>')
             # ClearSpans phong truong hop reload sau empty state
             tbl.clearSpans()
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(subs))
             for r, s in enumerate(subs):
                 tbl.setRowHeight(r, 58)
@@ -14908,12 +15007,17 @@ class TeacherWindow(QtWidgets.QWidget):
         tbl.setStyleSheet(
             'QTableWidget { background: white; border: 1px solid #d2d6dc; '
             'border-radius: 6px; gridline-color: #edf2f7; font-size: 12px; } '
+            'QTableWidget::item:selected { background: #f0f4f8; color: #1a1a2e; } '
+
+            'QTableWidget:focus { outline: none; } '
+
             'QHeaderView::section { background: #f7fafc; color: #4a5568; '
             'padding: 14px 10px; border: none; border-bottom: 1px solid #d2d6dc; '
             'font-family: "Segoe UI", "Inter", sans-serif; '
             'font-weight: bold; font-size: 11px; }'
         )
         tbl.horizontalHeader().setMinimumHeight(46)
+        hb.show()
         tbl.show()
 
     def _reload_tea_exams(self, page):
@@ -14973,6 +15077,8 @@ class TeacherWindow(QtWidgets.QWidget):
             # Clear span tu empty state truoc do (neu co) - tranh cellWidget
             # action o cot cuoi bi displaced khi span 0,0 1,N van con
             tbl.clearSpans()
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(rows))
             for r, row in enumerate(rows):
                 ngay = fmt_date(row.get('ngay_thi'))
@@ -15686,12 +15792,12 @@ class EmployeeWindow(QtWidgets.QWidget):
         if DB_AVAILABLE and emp_id:
             try:
                 stat = StatsService.employee_today(emp_id) or {}
+                # UI labels: lblEmpStat1=DK homay, lblEmpStat2=Da TT, lblEmpStat3=Cho TT, lblEmpStat4=Doanh thu
                 for attr, key, fmt in [
-                    ('lblStatRegToday', 'today_reg', str),
-                    ('lblStatPaidToday', 'today_paid', str),
-                    ('lblStatRevenueToday', 'today_revenue',
-                     lambda v: fmt_vnd(v)),
-                    ('lblStatPending', 'pending', str),
+                    ('lblEmpStat1', 'today_reg', str),
+                    ('lblEmpStat2', 'today_paid', str),
+                    ('lblEmpStat3', 'pending', str),
+                    ('lblEmpStat4', 'today_revenue', lambda v: fmt_vnd(v)),
                 ]:
                     wlbl = page.findChild(QtWidgets.QLabel, attr)
                     if wlbl:
@@ -15721,6 +15827,8 @@ class EmployeeWindow(QtWidgets.QWidget):
                     cta_text='+ Đăng ký mới cho HV',
                     cta_callback=lambda: self._on_nav(1))
             else:
+                tbl.clearSpans()
+                tbl.setRowCount(0)
                 tbl.setRowCount(len(data))
                 for r, (n, cls, st) in enumerate(data):
                     tbl.setItem(r, 0, QtWidgets.QTableWidgetItem(n))
@@ -15751,6 +15859,8 @@ class EmployeeWindow(QtWidgets.QWidget):
             if not data:
                 set_table_empty_state(tbl2, 'Chưa có hoạt động')
             else:
+                tbl2.clearSpans()
+                tbl2.setRowCount(0)
                 tbl2.setRowCount(len(data))
                 for r, (t, c) in enumerate(data):
                     ti = QtWidgets.QTableWidgetItem(t)
@@ -16236,6 +16346,8 @@ class EmployeeWindow(QtWidgets.QWidget):
                 ['DK009', '15/04/2026', 'Đinh Văn Khánh', 'IT001-A', '2.500.000', 'Đã thanh toán'],
                 ['DK010', '15/04/2026', 'Lâm Thị Nga', 'IT002-B', '1.800.000', 'Đã hủy'],
             ]
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             # Row 44px - du cho chu trang thai (khong pill nua)
@@ -16406,6 +16518,8 @@ class EmployeeWindow(QtWidgets.QWidget):
                 ['DK011', 'Phạm Minh Hòa', 'IT003-A', '2.000.000'],
                 ['DK012', 'Ngô Thị Kim', 'MA001-B', '1.200.000'],
             ]
+        tbl.clearSpans()
+        tbl.setRowCount(0)
         tbl.setRowCount(len(data))
         for r, row in enumerate(data):
             for c, val in enumerate(row):
@@ -17088,6 +17202,8 @@ class EmployeeWindow(QtWidgets.QWidget):
         if not cls_list:
             set_table_empty_state(tbl, 'Chưa có dữ liệu')
         else:
+            tbl.clearSpans()
+            tbl.setRowCount(0)
             tbl.setRowCount(len(cls_list))
             for r, cls in enumerate(cls_list):
                 ma, mmon, tmon, gv, lich, phong, smax, siso, gia, *_ = cls

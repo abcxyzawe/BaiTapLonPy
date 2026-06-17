@@ -157,6 +157,33 @@ def render_assignment_email(tieu_de, mo_ta, han_nop, lop_id, ten_mon, ten_gv) ->
     return _wrap_html('Thông báo bài tập', inner)
 
 
+def render_grade_email(tieu_de, diem, diem_toi_da, nhan_xet, ten_mon) -> str:
+    """Template email thong bao co diem bai tap moi cham."""
+    nhan_xet_html = (nhan_xet or '').replace('\n', '<br>') or '<i>(Không có nhận xét)</i>'
+    inner = f"""\
+      <div style="font-size:15px; font-weight:bold; color:green; margin-bottom:4px;">
+        ✅ Đã chấm bài tập
+      </div>
+      <div style="font-size:17px; font-weight:bold; color:#1a1a2e; margin-bottom:14px;">
+        {tieu_de}
+      </div>
+      <table style="width:100%; font-size:13px; color:#4a5568; border-collapse:collapse;">
+        <tr><td style="padding:5px 0; width:110px;"><b>Môn học:</b></td>
+            <td>{ten_mon or '—'}</td></tr>
+        <tr><td style="padding:5px 0; color:green;"><b>Điểm số:</b></td>
+            <td style="color:green; font-weight:bold; font-size:15px;">{diem} / {diem_toi_da}</td></tr>
+      </table>
+      <div style="margin-top:14px; padding:12px; background:#f7fafc;
+                  border-left:3px solid green; border-radius:4px;
+                  font-size:13px; color:#1a1a2e;">
+        <b>Lời nhận xét từ Giảng viên:</b><br>{nhan_xet_html}
+      </div>
+      <div style="margin-top:16px; font-size:12px; color:#718096;">
+        Đăng nhập ứng dụng EAUT → trang <b>Bài tập</b> để xem chi tiết bài làm của bạn.
+      </div>"""
+    return _wrap_html('Thông báo kết quả bài tập', inner)
+
+
 def render_notification_email(tieu_de, noi_dung, ten_nguoi_gui, vai_tro) -> str:
     """Template email cho thong bao tu GV/Admin."""
     role_vn = {'teacher': 'Giảng viên', 'admin': 'Quản trị viên',
